@@ -1,0 +1,26 @@
+{
+  "name": "geneexpert-mcp",
+  "version": "0.1.0",
+  "description": "Multi-agent MCP server for bioinformatics with Claude, GPT-4, and Gemini collaboration",
+  "main": "src/mcp/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/mcp/server.js",
+    "dev": "node --watch src/mcp/server.js",
+    "test": "node src/mcp/test.js"
+  },
+  "keywords": [
+    "mcp",
+    "bioinformatics",
+    "rna-seq",
+    "multi-agent",
+    "llm"
+  ],
+  "author": "Halima Akhter",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {}
+}
