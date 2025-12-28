@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/mcp/server.js",
     "dev": "node --watch src/mcp/server.js",
-    "test": "node src/mcp/test.js"
+    "test": "node src/mcp/test.js",
+    "test:apis": "node src/utils/test_llm_apis.js"
   },
   "keywords": [
     "mcp",
@@ -20,6 +21,9 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@google/generative-ai": "^0.21.0",
+    "openai": "^4.77.0",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {}
