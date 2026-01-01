@@ -15,6 +15,7 @@ import { planPipeline } from './planner.js';
 import { createCoordinator } from '../coordinator/orchestrator.js';
 import { Logger } from '../utils/logger.js';
 import { PipelineAgent } from '../agents/pipeline_agent.js';
+import { MCPClaudeAgent } from '../agents/mcp_claude_agent.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -39,6 +40,7 @@ export async function executeAnalysis(config) {
   // Step 3: Initialize Coordinator, agents, and logger
   const coordinator = createCoordinator({ verbose: config.verbose });
   const pipelineAgent = new PipelineAgent({ verbose: config.verbose });
+  const mcpAgent = new MCPClaudeAgent({ verbose: config.verbose }); // MCP-enabled Claude!
   const logger = new Logger(config.output, 'geneexpert_analysis');
 
   // Create session context
@@ -54,7 +56,8 @@ export async function executeAnalysis(config) {
       logFC: null
     },
     logger, // Add logger to session
-    pipelineAgent // Add Pipeline Agent to session
+    pipelineAgent, // Add Pipeline Agent to session
+    mcpAgent // Add MCP Claude Agent for decision points
   };
 
   // Step 4: Execute pipeline (Coordinator orchestrates each step)
@@ -221,25 +224,57 @@ async function decideThresholds(session, coordinator) {
 }
 
 /**
- * Multi-agent debate: QC review
+ * Multi-agent debate: QC review - USES MCP!
  */
 async function reviewQC(session, coordinator) {
-  // For now, simulate QC review
-  // In full implementation, this would:
-  // 1. Generate PCA/MDS plots
-  // 2. Show plots to agents
-  // 3. Agents discuss outliers, batch effects
-  // 4. Vote on sample removal
+  console.log('[Coordinator] QC Review - MCP Agent will analyze actual outputs');
 
+  // Build context with actual file paths
+  const bamDir = path.join(session.config.output, 'bam_files');
+  const countsDir = path.join(session.config.output, 'counts');
+  const countFiles = fs.existsSync(countsDir)
+    ? fs.readdirSync(countsDir).filter(f => f.endsWith('.count.txt'))
+    : [];
+
+  const mcpContext = {
+    outputDir: session.config.output,
+    bamDir: bamDir,
+    countsFile: countFiles.length > 0 ? path.join(countsDir, countFiles[0]) : null,
+    sampleSize: session.dataInfo.samples.length,
+    comparison: session.config.comparison
+  };
+
+  // Claude reads ACTUAL outputs via MCP and analyzes
+  const mcpPrompt = `Review the QC results for this RNA-seq analysis.
+
+Use MCP tools to:
+1. read_bam_summary - Check alignment statistics (mapping rates, total reads)
+2. read_count_summary - Check count matrix (total counts, gene numbers)
+
+Then analyze:
+- Are mapping rates acceptable? (>70% is good, <50% is concerning)
+- Are total counts reasonable?
+- Any obvious quality issues?
+- Should we proceed to DE analysis or investigate further?
+
+Provide a clear recommendation.`;
+
+  console.log('[MCP Claude Agent] Reading actual QC outputs...');
+
+  const mcpResult = await session.mcpAgent.callWithTools(mcpPrompt, mcpContext);
+
+  console.log('[MCP Claude Agent] Analysis complete');
+  console.log(`Tool calls made: ${mcpResult.toolCalls.length}`);
+
+  // Now get opinions from other agents (GPT-4, Gemini) with Claude's findings
   const result = await coordinator.reviewQCPlots(
     {
-      pca_plot: 'pca_plot.pdf',
-      mds_plot: 'mds_plot.pdf',
-      density_plot: 'density_plot.pdf',
+      mcp_analysis: mcpResult.content,
+      tool_calls: mcpResult.toolCalls,
       observations: [
-        'Samples cluster by treatment group',
-        `PC1 explains 45% variance`,
-        'No obvious outliers detected'
+        `MCP Claude Agent analyzed actual outputs`,
+        `Samples: ${session.dataInfo.samples.length}`,
+        `See MCP agent's detailed analysis below`
       ]
     },
     {
@@ -248,6 +283,9 @@ async function reviewQC(session, coordinator) {
       replicates: Math.floor(session.dataInfo.samples.length / 2)
     }
   );
+
+  // Add MCP analysis to result
+  result.mcpAnalysis = mcpResult;
 
   return result;
 }

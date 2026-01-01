@@ -722,6 +722,250 @@ export const tools = [
         }]
       };
     }
+  },
+
+  // ============================================
+  // ANALYSIS TOOLS - For agents to READ outputs
+  // ============================================
+
+  {
+    name: 'read_bam_summary',
+    description: 'Read BAM alignment statistics from log files. Returns mapping rates, aligned reads, etc.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        bam_directory: {
+          type: 'string',
+          description: 'Directory containing BAM files and .log files'
+        }
+      },
+      required: ['bam_directory']
+    },
+    handler: async (args) => {
+      try {
+        const fs = await import('fs');
+        const logFiles = fs.readdirSync(args.bam_directory).filter(f => f.endsWith('.log'));
+
+        let summary = '=== BAM Alignment Summary ===\n\n';
+
+        for (const logFile of logFiles) {
+          const logPath = path.join(args.bam_directory, logFile);
+          const logContent = fs.readFileSync(logPath, 'utf-8');
+
+          // Extract key statistics from Subread log
+          const totalReads = logContent.match(/Total reads\s*:\s*(\d+)/)?.[1];
+          const mappedReads = logContent.match(/Mapped reads\s*:\s*(\d+)/)?.[1];
+          const mappingRate = logContent.match(/Successfully assigned\s*:\s*([\d.]+)%/)?.[1];
+
+          summary += `Sample: ${logFile.replace('.log', '')}\n`;
+          summary += `  Total reads: ${totalReads || 'N/A'}\n`;
+          summary += `  Mapped reads: ${mappedReads || 'N/A'}\n`;
+          summary += `  Mapping rate: ${mappingRate || 'N/A'}%\n`;
+          summary += `  Status: ${mappingRate && parseFloat(mappingRate) > 70 ? '✓ Good' : '⚠️ Low mapping rate!'}\n\n`;
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: summary
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Failed to read BAM summary: ${error.message}`
+          }]
+        };
+      }
+    }
+  },
+
+  {
+    name: 'read_count_summary',
+    description: 'Read count matrix and provide summary statistics (total genes, counts distribution, etc.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        count_file: {
+          type: 'string',
+          description: 'Path to count matrix file'
+        }
+      },
+      required: ['count_file']
+    },
+    handler: async (args) => {
+      try {
+        const fs = await import('fs');
+        const content = fs.readFileSync(args.count_file, 'utf-8');
+        const lines = content.trim().split('\n');
+
+        const header = lines[0].split(/\s+/);
+        const samples = header.slice(2); // Skip ID and Length columns
+        const nGenes = lines.length - 1;
+
+        let summary = '=== Count Matrix Summary ===\n\n';
+        summary += `File: ${path.basename(args.count_file)}\n`;
+        summary += `Genes: ${nGenes}\n`;
+        summary += `Samples: ${samples.length}\n`;
+        summary += `Sample names: ${samples.join(', ')}\n\n`;
+
+        // Calculate total counts per sample
+        summary += 'Total counts per sample:\n';
+        for (let i = 0; i < samples.length; i++) {
+          let totalCounts = 0;
+          for (let j = 1; j < lines.length; j++) {
+            const cols = lines[j].split(/\s+/);
+            totalCounts += parseInt(cols[i + 2]) || 0;
+          }
+          summary += `  ${samples[i]}: ${totalCounts.toLocaleString()}\n`;
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: summary
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Failed to read count matrix: ${error.message}`
+          }]
+        };
+      }
+    }
+  },
+
+  {
+    name: 'read_file',
+    description: 'Read any text file content. Use this to inspect R script outputs, log files, or results.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'Path to file to read'
+        },
+        max_lines: {
+          type: 'number',
+          description: 'Maximum number of lines to read (default: 100)',
+          default: 100
+        }
+      },
+      required: ['file_path']
+    },
+    handler: async (args) => {
+      try {
+        const fs = await import('fs');
+        const content = fs.readFileSync(args.file_path, 'utf-8');
+        const lines = content.split('\n');
+        const maxLines = args.max_lines || 100;
+
+        const output = lines.slice(0, maxLines).join('\n');
+        const truncated = lines.length > maxLines;
+
+        return {
+          content: [{
+            type: 'text',
+            text: `=== File: ${path.basename(args.file_path)} ===\n\n${output}${truncated ? `\n\n... (${lines.length - maxLines} more lines truncated)` : ''}`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Failed to read file: ${error.message}`
+          }]
+        };
+      }
+    }
+  },
+
+  {
+    name: 'write_custom_script',
+    description: 'Write a custom R or bash script. Use this when standard pipeline needs adaptation (batch correction, special QC, etc.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        script_path: {
+          type: 'string',
+          description: 'Where to save the script (e.g., /tmp/custom_batch_correction.R)'
+        },
+        script_content: {
+          type: 'string',
+          description: 'The complete script content'
+        },
+        description: {
+          type: 'string',
+          description: 'What this custom script does'
+        }
+      },
+      required: ['script_path', 'script_content', 'description']
+    },
+    handler: async (args) => {
+      try {
+        const fs = await import('fs');
+        fs.writeFileSync(args.script_path, args.script_content, 'utf-8');
+        fs.chmodSync(args.script_path, '755'); // Make executable
+
+        return {
+          content: [{
+            type: 'text',
+            text: `✓ Custom script created: ${args.script_path}\n\nDescription: ${args.description}\n\nScript is ready to execute.`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Failed to write custom script: ${error.message}`
+          }]
+        };
+      }
+    }
+  },
+
+  {
+    name: 'execute_custom_script',
+    description: 'Execute a custom script that was written to handle edge cases',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        script_path: {
+          type: 'string',
+          description: 'Path to custom script'
+        },
+        args: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Script arguments',
+          default: []
+        },
+        working_dir: {
+          type: 'string',
+          description: 'Working directory',
+          default: '/tmp'
+        }
+      },
+      required: ['script_path']
+    },
+    handler: async (args) => {
+      const scriptArgs = args.args || [];
+      const result = await executeScript(args.script_path, scriptArgs, {
+        workingDir: args.working_dir || '/tmp'
+      });
+
+      return {
+        content: [{
+          type: 'text',
+          text: result.success
+            ? `✓ Custom script executed successfully!\n\n${result.stdout}`
+            : `✗ Custom script failed: ${result.error}\n${result.stderr}`
+        }]
+      };
+    }
   }
 ];
 
