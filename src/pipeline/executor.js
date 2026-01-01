@@ -14,6 +14,7 @@ import { detectInputData } from './data_detector.js';
 import { planPipeline } from './planner.js';
 import { createCoordinator } from '../coordinator/orchestrator.js';
 import { Logger } from '../utils/logger.js';
+import { PipelineAgent } from '../agents/pipeline_agent.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -37,6 +38,7 @@ export async function executeAnalysis(config) {
 
   // Step 3: Initialize Coordinator, agents, and logger
   const coordinator = createCoordinator({ verbose: config.verbose });
+  const pipelineAgent = new PipelineAgent({ verbose: config.verbose });
   const logger = new Logger(config.output, 'geneexpert_analysis');
 
   // Create session context
@@ -51,7 +53,8 @@ export async function executeAnalysis(config) {
       fdr: null,
       logFC: null
     },
-    logger // Add logger to session
+    logger, // Add logger to session
+    pipelineAgent // Add Pipeline Agent to session
   };
 
   // Step 4: Execute pipeline (Coordinator orchestrates each step)
@@ -105,25 +108,31 @@ async function executeToolStep(step, session) {
   // Log to file
   session.logger.log(`[Coordinator] → Pipeline Agent: Execute ${step.tool || step.name}`);
 
-  // For now, we'll simulate execution (actual Pipeline Agent will be built next)
-  // This is where the Coordinator would call the Pipeline Agent to execute via MCP
+  try {
+    // REAL EXECUTION - Call Pipeline Agent!
+    const result = await session.pipelineAgent.execute(step, session);
 
-  // Simulate execution delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+    // Log tool execution
+    session.logger.logToolExecution(step.name, step.tool || step.name, result.status, {
+      description: step.description,
+      outputs: result.outputs,
+      duration: `${new Date(result.endTime) - new Date(result.startTime)}ms`
+    });
 
-  // Simulate success
-  console.log(`[Pipeline Agent] ✓ ${step.name} complete`);
+    // Store output
+    session.outputs[step.name] = result;
 
-  // Log tool execution
-  session.logger.logToolExecution(step.name, step.tool || step.name, 'success', {
-    description: step.description
-  });
+    return result;
 
-  // Store output (placeholder)
-  session.outputs[step.name] = {
-    status: 'success',
-    timestamp: new Date().toISOString()
-  };
+  } catch (error) {
+    // Log failure
+    session.logger.logToolExecution(step.name, step.tool || step.name, 'failed', {
+      description: step.description,
+      error: error.message
+    });
+
+    throw error;
+  }
 }
 
 /**

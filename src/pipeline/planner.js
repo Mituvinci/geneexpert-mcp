@@ -47,53 +47,64 @@ export function planPipeline(dataInfo, config) {
  */
 function planFromFASTQ(dataInfo, config) {
   return [
-    // Step 1: Quality Control
+    // Step 1: Quality Control (Optional - can skip if user wants)
     {
       name: 'FastQC',
       description: 'Quality control on raw reads',
       tool: 'fastqc',
+      script: 'fastqc', // System tool
       inputs: dataInfo.files,
       requiresDebate: false,
-      agent: 'pipeline'
+      agent: 'pipeline',
+      optional: true
     },
 
-    // Step 2: Alignment
+    // Step 2: Alignment (using fastq2bam from /data/scripts)
     {
-      name: `Alignment (${config.aligner.toUpperCase()})`,
-      description: 'Align reads to reference genome',
-      tool: config.aligner, // 'star' or 'hisat2'
+      name: 'Alignment (Subread)',
+      description: 'Align reads to reference genome using Subread',
+      tool: 'fastq2bam',
+      script: '/data/scripts/fastq2bam', // User's script!
       inputs: dataInfo.samples,
       requiresDebate: false,
       agent: 'pipeline',
-      requiresGenome: true
+      params: {
+        genome: config.organism === 'mouse' ? 'mm10' : 'hg38',
+        readType: dataInfo.pairedEnd ? 'paired' : 'single'
+      }
     },
 
-    // Step 3: Quantification
+    // Step 3: Quantification (using featurecounts.R from /data/scripts)
     {
       name: 'featureCounts',
-      description: 'Count reads per gene',
+      description: 'Count reads per gene using featureCounts',
       tool: 'featurecounts',
+      script: '/data/scripts/featurecounts.R', // User's script!
       inputs: 'alignment_outputs', // BAM files from step 2
       requiresDebate: false,
       agent: 'pipeline',
-      requiresGTF: true
+      params: {
+        annotation: config.organism === 'mouse' ? 'mm10' : 'hg38'
+      }
     },
 
-    // Step 4: Filtering
+    // Step 4: Filtering (using filterIDS.R from /data/scripts)
     {
       name: 'Filter Low Counts',
       description: 'Remove lowly expressed genes',
       tool: 'filterIDS',
+      script: '/data/scripts/filterIDS.R', // User's script!
       inputs: 'count_matrix',
       requiresDebate: false,
       agent: 'pipeline'
     },
 
-    // Step 5: Normalization
+    // Step 5: Normalization (using RPKM.R from /data/scripts)
     {
       name: 'RPKM Normalization',
       description: 'Normalize expression values',
       tool: 'rpkm',
+      script: '/data/scripts/RPKM.R', // User's script!
       inputs: 'filtered_counts',
       requiresDebate: false,
       agent: 'pipeline'
@@ -121,11 +132,12 @@ function planFromFASTQ(dataInfo, config) {
       decisionType: 'threshold'
     },
 
-    // Step 6: Differential Expression
+    // Step 6: Differential Expression (using simpleEdger3.R from /data/scripts)
     {
-      name: `DE Analysis (${config.deTool})`,
-      description: 'Identify differentially expressed genes',
-      tool: config.deTool, // 'edger' or 'deseq2'
+      name: 'DE Analysis (edgeR)',
+      description: 'Identify differentially expressed genes using edgeR',
+      tool: 'edger',
+      script: '/data/scripts/simpleEdger3.R', // User's script!
       inputs: 'filtered_counts',
       requiresDebate: false,
       agent: 'pipeline',
