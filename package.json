@@ -4,11 +4,16 @@
   "description": "Multi-agent MCP server for bioinformatics with Claude, GPT-4, and Gemini collaboration",
   "main": "src/mcp/server.js",
   "type": "module",
+  "bin": {
+    "geneexpert": "./bin/geneexpert.js"
+  },
   "scripts": {
     "start": "node src/mcp/server.js",
     "dev": "node --watch src/mcp/server.js",
     "test": "node src/mcp/test.js",
-    "test:apis": "node src/utils/test_llm_apis.js"
+    "test:apis": "node src/utils/test_llm_apis.js",
+    "test:coordinator": "node src/coordinator/test_coordinator.js",
+    "analyze": "node bin/geneexpert.js analyze"
   },
   "keywords": [
     "mcp",
@@ -24,7 +29,8 @@
     "@anthropic-ai/sdk": "^0.32.0",
     "@google/generative-ai": "^0.21.0",
     "openai": "^4.77.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "commander": "^12.0.0"
   },
   "devDependencies": {}
 }
