@@ -51,8 +51,7 @@ class Logger {
 
     fs.appendFileSync(this.logFile, logLine);
 
-    // Also print to console
-    console.log(message);
+    // Don't print to console - console.log is already overridden in executor.js
   }
 
   /**

@@ -24,7 +24,8 @@ const anthropic = new Anthropic({
 export class MCPClaudeAgent {
   constructor(config = {}) {
     this.config = config;
-    this.model = config.model || 'claude-3-5-sonnet-20241022'; // Sonnet for tool use
+    // Use Claude 3.5 Sonnet (latest) or fall back to Haiku if not available
+    this.model = config.model || 'claude-3-5-sonnet-20241022'; // Latest Sonnet for tool use
     this.verbose = config.verbose || false;
   }
 
@@ -92,13 +93,31 @@ ${JSON.stringify(context, null, 2)}`;
     this.log(`Available tools: ${anthropicTools.map(t => t.name).join(', ')}`);
 
     try {
-      const response = await anthropic.messages.create({
-        model: this.model,
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages,
-        tools: anthropicTools
-      });
+      let response;
+      try {
+        response = await anthropic.messages.create({
+          model: this.model,
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages,
+          tools: anthropicTools
+        });
+      } catch (modelError) {
+        // If Sonnet not available, fall back to Haiku
+        if (modelError.status === 404 && this.model.includes('sonnet')) {
+          this.log('[MCP Claude Agent] Sonnet not available, falling back to Haiku...');
+          this.model = 'claude-3-haiku-20240307';
+          response = await anthropic.messages.create({
+            model: this.model,
+            max_tokens: 4096,
+            system: systemPrompt,
+            messages,
+            tools: anthropicTools
+          });
+        } else {
+          throw modelError;
+        }
+      }
 
       // Handle tool calls if Claude wants to use MCP tools
       const toolCalls = [];

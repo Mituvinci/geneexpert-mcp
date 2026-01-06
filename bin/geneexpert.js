@@ -32,6 +32,8 @@ program
   .requiredOption('-o, --output <dir>', 'Output directory for results')
   .option('--organism <species>', 'Organism (mouse, human, rat)', 'mouse')
   .option('--comparison <name>', 'Comparison name (e.g., "treatment_vs_control")', 'comparison')
+  .option('--control-keyword <keyword>', 'Keyword in sample names for control group (e.g., "ctrl", "wt", "cont")')
+  .option('--treatment-keyword <keyword>', 'Keyword in sample names for treatment group (e.g., "ko", "treat", "ips")')
   .option('--genome <path>', 'Path to genome reference (for alignment)')
   .option('--gtf <path>', 'Path to GTF annotation file (for quantification)')
   .option('--aligner <tool>', 'Alignment tool: star or hisat2', 'star')
@@ -62,6 +64,8 @@ program
       output: outputDir,
       organism: options.organism,
       comparison: options.comparison,
+      controlKeyword: options.controlKeyword,
+      treatmentKeyword: options.treatmentKeyword,
       genome: options.genome,
       gtf: options.gtf,
       aligner: options.aligner,

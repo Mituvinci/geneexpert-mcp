@@ -34,15 +34,32 @@ export function analyzeAgreement(responses) {
 
 /**
  * Extract decision from agent response
- * Returns: 'approve', 'reject', 'uncertain', or null
+ * Returns: 'approve', 'reject', 'uncertain', 'automation', 'adaptation', or null
  */
-export function extractDecision(agentResponse) {
+export function extractDecision(agentResponse, decisionType = 'default') {
   if (!agentResponse.success || !agentResponse.content) {
     return null;
   }
 
   const content = agentResponse.content.toLowerCase();
 
+  // For APPROACH decisions (automation vs adaptation)
+  if (decisionType === 'approach_decision') {
+    // Check for ADAPTATION first (more specific, should take priority)
+    if (content.includes('adaptation') || content.includes('custom script') || content.includes('edge case')) {
+      return 'adaptation';
+    }
+
+    // Then check for AUTOMATION
+    if (content.includes('automation') || content.includes('standard pipeline') || content.includes('proceed with automation')) {
+      return 'automation';
+    }
+
+    // If unclear, default to automation as safe choice
+    return 'automation';
+  }
+
+  // For standard decisions (approve/reject)
   // Look for clear approval signals
   if (
     content.includes('approve') ||
@@ -93,24 +110,28 @@ export function extractDecision(agentResponse) {
 export function vote(responses, decisionType = 'threshold') {
   const { gpt4, claude, gemini } = responses;
 
-  // Extract decisions from each agent
+  // Extract decisions from each agent (pass decisionType for context)
   const decisions = {
-    stats: extractDecision(gpt4),
-    pipeline: extractDecision(claude),
-    biology: extractDecision(gemini)
+    stats: extractDecision(gpt4, decisionType),
+    pipeline: extractDecision(claude, decisionType),
+    biology: extractDecision(gemini, decisionType)
   };
 
-  // Count votes
+  // Count votes (handle both standard and approach decision types)
   const votes = {
     approve: 0,
     reject: 0,
     uncertain: 0,
+    automation: 0,
+    adaptation: 0,
     null: 0
   };
 
   Object.values(decisions).forEach(decision => {
-    if (decision) {
+    if (decision && votes.hasOwnProperty(decision)) {
       votes[decision]++;
+    } else if (decision) {
+      votes[decision] = (votes[decision] || 0) + 1;
     } else {
       votes.null++;
     }
@@ -120,6 +141,19 @@ export function vote(responses, decisionType = 'threshold') {
   let result;
 
   switch (decisionType) {
+    case 'approach_decision':
+      // Majority vote for automation vs adaptation
+      const majorityApproach = votes.automation >= votes.adaptation ? 'automation' : 'adaptation';
+      const confidence = Math.max(votes.automation, votes.adaptation);
+
+      result = {
+        decision: majorityApproach,
+        votes,
+        agentDecisions: decisions,
+        reasoning: `${confidence}/3 agents recommend ${majorityApproach.toUpperCase()}`
+      };
+      break;
+
     case 'sample_removal':
       // Require unanimous approval
       result = {
@@ -273,6 +307,23 @@ export function synthesizeConsensus(responses, decisionType = 'threshold') {
  * Calculate confidence score (0-1) based on vote distribution
  */
 function calculateConfidence(votes) {
+  // For approach decisions (automation vs adaptation)
+  if (votes.automation !== undefined || votes.adaptation !== undefined) {
+    const total = votes.automation + votes.adaptation;
+
+    if (total === 0) return 0;
+
+    // Unanimous = 1.0
+    if (votes.automation === 3 || votes.adaptation === 3) return 1.0;
+
+    // 2-1 majority = 0.67
+    if (votes.automation === 2 || votes.adaptation === 2) return 0.67;
+
+    // All uncertain or split = 0.33
+    return 0.33;
+  }
+
+  // For standard decisions (approve/reject/uncertain)
   const total = votes.approve + votes.reject + votes.uncertain;
 
   if (total === 0) return 0;

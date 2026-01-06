@@ -13,9 +13,10 @@ import path from 'path';
 /**
  * Detect input data type and extract sample information
  * @param {string} inputDir - Input directory path
+ * @param {Object} config - Configuration with group keywords (optional)
  * @returns {Object} - { type, samples, pairedEnd, files }
  */
-export function detectInputData(inputDir) {
+export function detectInputData(inputDir, config = {}) {
   console.log('[Data Detector] Analyzing input directory...');
 
   if (!fs.existsSync(inputDir)) {
@@ -41,7 +42,7 @@ export function detectInputData(inputDir) {
   );
 
   if (fastqFiles.length > 0) {
-    return detectFASTQ(inputDir, fastqFiles);
+    return detectFASTQ(inputDir, fastqFiles, config);
   }
 
   // Check for BAM files
@@ -69,7 +70,7 @@ export function detectInputData(inputDir) {
 /**
  * Detect FASTQ files and determine if paired-end
  */
-function detectFASTQ(inputDir, fastqFiles) {
+function detectFASTQ(inputDir, fastqFiles, config = {}) {
   console.log(`[Data Detector] Found ${fastqFiles.length} FASTQ files`);
 
   // Check for paired-end pattern (R1/R2 or _1/_2)
@@ -113,12 +114,65 @@ function detectFASTQ(inputDir, fastqFiles) {
     console.log(`   ${i + 1}. ${s.name}`);
   });
 
+  // Auto-detect experimental groups from sample names (using user-provided keywords if available)
+  const groups = detectGroups(samples, config);
+
   return {
     type: 'fastq',
     pairedEnd,
     samples,
-    files: fastqFiles.map(f => path.join(inputDir, f))
+    files: fastqFiles.map(f => path.join(inputDir, f)),
+    groups  // Add detected groups
   };
+}
+
+/**
+ * Auto-detect experimental groups from sample names
+ * Uses user-provided keywords if available, otherwise falls back to common patterns
+ */
+function detectGroups(samples, config = {}) {
+  const groups = {};
+
+  // Get user-provided keywords (convert to lowercase for matching)
+  const controlKeyword = config.controlKeyword?.toLowerCase();
+  const treatmentKeyword = config.treatmentKeyword?.toLowerCase();
+
+  samples.forEach(sample => {
+    const name = sample.name.toLowerCase();
+
+    // If user provided keywords, use those FIRST
+    if (controlKeyword && name.includes(controlKeyword)) {
+      if (!groups.control) groups.control = [];
+      groups.control.push(sample.name);
+    } else if (treatmentKeyword && name.includes(treatmentKeyword)) {
+      if (!groups.treatment) groups.treatment = [];
+      groups.treatment.push(sample.name);
+    }
+    // Fallback to common patterns if no keywords provided or no match
+    else if (name.includes('control') || name.includes('ctrl') || name.includes('wt')) {
+      if (!groups.control) groups.control = [];
+      groups.control.push(sample.name);
+    } else if (name.includes('ko') || name.includes('knockout')) {
+      if (!groups.knockout) groups.knockout = [];
+      groups.knockout.push(sample.name);
+    } else if (name.includes('treat') || name.includes('drug')) {
+      if (!groups.treatment) groups.treatment = [];
+      groups.treatment.push(sample.name);
+    } else {
+      // Unknown group
+      if (!groups.unknown) groups.unknown = [];
+      groups.unknown.push(sample.name);
+    }
+  });
+
+  // Log what keywords were used
+  if (controlKeyword || treatmentKeyword) {
+    console.log(`[Data Detector] Using user-provided keywords:`);
+    if (controlKeyword) console.log(`   Control: "${controlKeyword}"`);
+    if (treatmentKeyword) console.log(`   Treatment: "${treatmentKeyword}"`);
+  }
+
+  return groups;
 }
 
 /**

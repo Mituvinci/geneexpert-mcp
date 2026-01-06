@@ -1,17 +1,18 @@
 /**
  * GeneExpert MCP Tools
- * Wraps bioinformatics scripts from /data/scripts/ and /destiny/halima/dory/my_script/
+ * Wraps bioinformatics scripts (configured via SCRIPTS_PATH environment variable)
  */
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import fs from 'fs';
 
 const execAsync = promisify(exec);
 
 // Script paths from environment or defaults
-const SCRIPTS_PATH = process.env.SCRIPTS_PATH || '/data/scripts';
-const CUSTOM_SCRIPTS_PATH = process.env.CUSTOM_SCRIPTS_PATH || '/destiny/halima/dory/my_script';
+const SCRIPTS_PATH = process.env.SCRIPTS_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/scripts';
+const CUSTOM_SCRIPTS_PATH = process.env.CUSTOM_SCRIPTS_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/scripts';
 
 /**
  * Execute a script and return the result
@@ -859,7 +860,39 @@ export const tools = [
     handler: async (args) => {
       try {
         const fs = await import('fs');
-        const content = fs.readFileSync(args.file_path, 'utf-8');
+
+        // Try multiple file paths (many scripts don't have .sh extension!)
+        let filePath = args.file_path;
+        let content;
+        let actualPath;
+
+        // Try original path first
+        if (fs.existsSync(filePath)) {
+          content = fs.readFileSync(filePath, 'utf-8');
+          actualPath = filePath;
+        }
+        // If ends with .sh, try without it
+        else if (filePath.endsWith('.sh')) {
+          const pathWithoutSh = filePath.replace(/\.sh$/, '');
+          if (fs.existsSync(pathWithoutSh)) {
+            content = fs.readFileSync(pathWithoutSh, 'utf-8');
+            actualPath = pathWithoutSh;
+          }
+        }
+        // If doesn't end with .sh, try adding it
+        else {
+          const pathWithSh = filePath + '.sh';
+          if (fs.existsSync(pathWithSh)) {
+            content = fs.readFileSync(pathWithSh, 'utf-8');
+            actualPath = pathWithSh;
+          }
+        }
+
+        // If still not found, throw error
+        if (!content) {
+          throw new Error(`File not found: ${filePath} (also tried with/without .sh extension)`);
+        }
+
         const lines = content.split('\n');
         const maxLines = args.max_lines || 100;
 
@@ -869,7 +902,7 @@ export const tools = [
         return {
           content: [{
             type: 'text',
-            text: `=== File: ${path.basename(args.file_path)} ===\n\n${output}${truncated ? `\n\n... (${lines.length - maxLines} more lines truncated)` : ''}`
+            text: `=== File: ${path.basename(actualPath)} ===\n${actualPath !== filePath ? `(Found as: ${path.basename(actualPath)})\n` : ''}\n${output}${truncated ? `\n\n... (${lines.length - maxLines} more lines truncated)` : ''}`
           }]
         };
       } catch (error) {

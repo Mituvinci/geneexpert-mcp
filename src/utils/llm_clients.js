@@ -138,7 +138,11 @@ export async function callGemini(prompt, options = {}) {
 // ============================================
 
 export async function callAllAgents(prompt, options = {}) {
-  console.log('[Multi-Agent] Sending prompt to all 3 LLMs in parallel...');
+  console.log('[Multi-Agent] Sending prompt to all 3 foundation models in parallel...');
+  console.log('[GPT-4 Stats Agent] Analyzing from statistical perspective...');
+  console.log('[Claude Pipeline Agent] Analyzing pipeline requirements...');
+  console.log('[Gemini Biology Agent] Analyzing biological context...');
+  console.log('');
 
   const [gpt4Result, claudeResult, geminiResult] = await Promise.all([
     callGPT4(prompt, {
@@ -154,6 +158,31 @@ export async function callAllAgents(prompt, options = {}) {
       ...options.geminiOptions
     })
   ]);
+
+  // Show FULL agent responses
+  console.log('[GPT-4 Stats Agent] ' + (gpt4Result.success ? '✓ Response received' : '✗ Failed'));
+  if (gpt4Result.success && gpt4Result.content) {
+    console.log('─'.repeat(60));
+    console.log(gpt4Result.content);
+    console.log('─'.repeat(60));
+  }
+  console.log('');
+
+  console.log('[Claude Pipeline Agent] ' + (claudeResult.success ? '✓ Response received' : '✗ Failed'));
+  if (claudeResult.success && claudeResult.content) {
+    console.log('─'.repeat(60));
+    console.log(claudeResult.content);
+    console.log('─'.repeat(60));
+  }
+  console.log('');
+
+  console.log('[Gemini Biology Agent] ' + (geminiResult.success ? '✓ Response received' : '✗ Failed'));
+  if (geminiResult.success && geminiResult.content) {
+    console.log('─'.repeat(60));
+    console.log(geminiResult.content);
+    console.log('─'.repeat(60));
+  }
+  console.log('');
 
   return {
     gpt4: gpt4Result,

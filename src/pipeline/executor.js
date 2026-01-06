@@ -16,6 +16,8 @@ import { createCoordinator } from '../coordinator/orchestrator.js';
 import { Logger } from '../utils/logger.js';
 import { PipelineAgent } from '../agents/pipeline_agent.js';
 import { MCPClaudeAgent } from '../agents/mcp_claude_agent.js';
+import { generateAutomationScript, generateAdaptationScript } from './script_generator.js';
+import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
@@ -23,83 +25,220 @@ import fs from 'fs';
  * Main entry point - Execute multi-agent orchestrated analysis
  */
 export async function executeAnalysis(config) {
-  console.log('[Coordinator] 🧬 Starting multi-agent RNA-seq analysis');
+  // Initialize logger FIRST to capture everything
+  const logger = new Logger(config.output, 'geneexpert_analysis');
+
+  // Override console.log to also write to file
+  const originalLog = console.log;
+  console.log = function(...args) {
+    const message = args.join(' ');
+    originalLog.apply(console, args);
+    logger.log(message);
+  };
+
+  console.log('[Coordinator] 🧬 GeneExpert Multi-Agent RNA-seq Analysis');
   console.log('='.repeat(60));
   console.log('');
 
-  // Step 1: Detect input data type
-  console.log('[Coordinator] Step 1: Detecting input data type');
-  const dataInfo = detectInputData(config.input);
+  // Step 1: Detect input data type (NO execution yet!)
+  console.log('[Coordinator] 📊 Analyzing input data...');
+  console.log('');
+  const dataInfo = detectInputData(config.input, config);
   console.log('');
 
   // Step 2: Plan pipeline
-  console.log('[Coordinator] Step 2: Planning pipeline');
+  console.log('[Coordinator] 📝 Creating analysis plan...');
   const steps = planPipeline(dataInfo, config);
   console.log('');
 
-  // Step 3: Initialize Coordinator, agents, and logger
-  const coordinator = createCoordinator({ verbose: config.verbose });
-  const pipelineAgent = new PipelineAgent({ verbose: config.verbose });
-  const mcpAgent = new MCPClaudeAgent({ verbose: config.verbose }); // MCP-enabled Claude!
-  const logger = new Logger(config.output, 'geneexpert_analysis');
+  // Step 3: AGENTS ANALYZE DATA AND DECIDE APPROACH
+  console.log('[Coordinator] 🤔 Consulting agents to decide approach...');
+  console.log('');
 
-  // Create session context
-  const session = {
-    config,
-    dataInfo,
-    steps,
-    currentStep: 0,
-    outputs: {}, // Store outputs from each step
-    decisions: {}, // Store multi-agent decisions
-    thresholds: {
-      fdr: null,
-      logFC: null
-    },
-    logger, // Add logger to session
-    pipelineAgent, // Add Pipeline Agent to session
-    mcpAgent // Add MCP Claude Agent for decision points
-  };
+  const coordinator = createCoordinator({ verbose: config.verbose }); // Only verbose if user wants it
+  const mcpAgent = new MCPClaudeAgent({ verbose: config.verbose }); // MCP agent for ADAPTATION
 
-  // Step 4: Execute pipeline (Coordinator orchestrates each step)
-  console.log('[Coordinator] Step 3: Executing pipeline');
+  const agentDecision = await coordinator.decideAnalysisApproach(dataInfo, config, steps);
+
+  console.log('');
+
+  // Step 4: GENERATE SCRIPT based on agent decision
+  console.log('[Coordinator] 📜 Generating analysis script...');
+  console.log('');
+
+  const scriptName = `geneexpert_${config.comparison}_v1.sh`;
+  const scriptPath = path.join(config.output, scriptName);
+
+  let scriptResult;
+  const decision = agentDecision.consensus.decision.toLowerCase();
+
+  if (decision === 'automation') {
+    // AUTOMATION: Template-based script
+    scriptResult = generateAutomationScript(dataInfo, config, steps, scriptPath);
+  } else {
+    // ADAPTATION: MCP agent reads scripts and writes custom solution
+    scriptResult = await generateAdaptationScript(dataInfo, config, steps, agentDecision, coordinator, mcpAgent, scriptPath);
+  }
+
+  console.log('');
+
+  // Step 5: Create detailed plan with AGENT'S decision and generated script
+  const plan = createDetailedPlan(dataInfo, config, steps, agentDecision, scriptResult);
+
+  // Step 6: Display plan to user
+  displayPlan(plan);
+
+  // Step 5: Wait for user confirmation
+  const confirmed = await getUserConfirmation();
+
+  if (!confirmed) {
+    console.log('');
+    console.log('[Coordinator] ❌ Analysis cancelled by user.');
+    console.log('[Coordinator] No files were created or modified.');
+    console.log('');
+
+    // Restore console.log and save log even on cancellation
+    console.log = originalLog;
+    logger.log('[Coordinator] User cancelled analysis');
+    logger.finalize({ cancelled: true });
+    console.log(`📄 Planning session log saved to: ${logger.logFile}`);
+    console.log('');
+
+    process.exit(0);
+  }
+
+  // User confirmed - proceed!
+  console.log('');
+  console.log('[Coordinator] ✅ User confirmed. Starting analysis...');
+  console.log('='.repeat(60));
+  console.log('');
+
+  // Step 7: Execute the generated script
+  console.log(`[Executor] Running script: ${scriptResult.scriptPath}`);
   console.log('='.repeat(60));
   console.log('');
 
   try {
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-      session.currentStep = i;
+    const executionResult = await executeScript(scriptResult.scriptPath, logger);
 
-      console.log(`[Coordinator] Step ${i + 1}/${steps.length}: ${step.name}`);
-      console.log(`              ${step.description}`);
-
-      if (step.requiresDebate) {
-        // DECISION POINT - Multi-agent debate
-        await executeDecisionPoint(step, session, coordinator);
-      } else {
-        // EXECUTION STEP - Direct Pipeline Agent to execute
-        await executeToolStep(step, session);
-      }
-
+    if (executionResult.success) {
       console.log('');
+      console.log('='.repeat(60));
+      console.log('[Executor] ✅ Analysis complete!');
+      console.log('');
+      console.log(`📊 Results saved to: ${config.output}`);
+      console.log(`📄 Full session log: ${logger.logFile}`);
+      console.log(`🔬 Script executed: ${scriptResult.scriptPath}`);
+      console.log('');
+    } else {
+      console.log('');
+      console.log('='.repeat(60));
+      console.error('[Executor] ❌ Analysis failed!');
+      console.error(`Error: ${executionResult.error}`);
+      console.log('');
+      console.log(`📄 Full session log: ${logger.logFile}`);
+      console.log(`🔬 Failed script: ${scriptResult.scriptPath}`);
+      console.log('');
+
+      // Restore console.log
+      console.log = originalLog;
+
+      throw new Error(`Script execution failed: ${executionResult.error}`);
     }
 
-    console.log('='.repeat(60));
-    console.log('[Coordinator] ✅ Pipeline complete!');
-    console.log('');
+    // Restore original console.log
+    console.log = originalLog;
 
-    // Generate summary
-    printSummary(session);
-
-    // Finalize logs
-    session.logger.finalize(session);
-
-    return session;
+    return {
+      success: true,
+      output: config.output,
+      scriptPath: scriptResult.scriptPath,
+      executionResult
+    };
 
   } catch (error) {
-    console.error('[Coordinator] ❌ Pipeline failed:', error.message);
+    // Restore console.log even on error
+    console.log = originalLog;
+    console.error('[Executor] ❌ Pipeline failed:', error.message);
     throw error;
   }
+}
+
+/**
+ * Execute the generated bash script
+ */
+async function executeScript(scriptPath, logger) {
+  console.log('[Executor] Starting script execution...');
+  console.log('');
+
+  return new Promise((resolve) => {
+    // Make script executable
+    try {
+      fs.chmodSync(scriptPath, 0o755);
+    } catch (error) {
+      console.error(`[Executor] Failed to make script executable: ${error.message}`);
+      resolve({ success: false, error: error.message });
+      return;
+    }
+
+    // Spawn bash process
+    const process = spawn('bash', [scriptPath], {
+      cwd: path.dirname(scriptPath),
+      env: { ...process.env }
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    // Stream stdout to console in real-time
+    process.stdout.on('data', (data) => {
+      const output = data.toString();
+      console.log(output.trimEnd());
+      stdout += output;
+    });
+
+    // Stream stderr to console in real-time
+    process.stderr.on('data', (data) => {
+      const output = data.toString();
+      console.error(output.trimEnd());
+      stderr += output;
+    });
+
+    // Handle process completion
+    process.on('close', (code) => {
+      console.log('');
+
+      if (code === 0) {
+        console.log('[Executor] Script completed successfully');
+        resolve({
+          success: true,
+          exitCode: code,
+          stdout,
+          stderr
+        });
+      } else {
+        console.error(`[Executor] Script failed with exit code ${code}`);
+        resolve({
+          success: false,
+          exitCode: code,
+          error: `Script exited with code ${code}`,
+          stdout,
+          stderr
+        });
+      }
+    });
+
+    // Handle process errors
+    process.on('error', (error) => {
+      console.error(`[Executor] Failed to start script: ${error.message}`);
+      resolve({
+        success: false,
+        error: error.message,
+        stdout,
+        stderr
+      });
+    });
+  });
 }
 
 /**
@@ -288,6 +427,161 @@ Provide a clear recommendation.`;
   result.mcpAnalysis = mcpResult;
 
   return result;
+}
+
+/**
+ * Create detailed analysis plan WITH AGENT DECISION and GENERATED SCRIPT
+ */
+function createDetailedPlan(dataInfo, config, steps, agentDecision, scriptResult) {
+  // Extract agent decision and reasoning
+  const approach = agentDecision.consensus.decision.toUpperCase();
+  const reasoning = agentDecision.consensus.reasoning || 'See agent responses above.';
+
+  // Add script information
+  const scriptInfo = {
+    type: scriptResult.type,
+    path: scriptResult.scriptPath,
+    agentGenerated: scriptResult.type === 'ADAPTATION'
+  };
+
+  // Format groups
+  const formattedGroups = [];
+  if (dataInfo.groups) {
+    Object.entries(dataInfo.groups).forEach(([groupName, samples]) => {
+      formattedGroups.push({
+        name: groupName.charAt(0).toUpperCase() + groupName.slice(1),
+        samples,
+        count: samples.length
+      });
+    });
+  }
+
+  // Script details
+  const scriptName = `geneexpert_${config.comparison || 'analysis'}_v1.sh`;
+  const scriptPath = path.join(config.output, scriptName);
+
+  // Estimate runtime based on data type and steps
+  let estimatedTime = 'Unknown';
+  if (dataInfo.type === 'fastq') {
+    const nSamples = dataInfo.samples.length;
+    estimatedTime = `${20 + nSamples * 3}-${30 + nSamples * 5} minutes`;
+  } else if (dataInfo.type === 'bam') {
+    estimatedTime = '5-15 minutes';
+  } else {
+    estimatedTime = '2-5 minutes';
+  }
+
+  return {
+    analysisType: 'Bulk RNA-seq',
+    organism: config.organism === 'mouse' ? 'Mouse (mm10)' : 'Human (hg38)',
+    sequencing: dataInfo.pairedEnd ? 'Paired-end ✓' : 'Single-end',
+    comparison: config.comparison || 'Not specified',
+    groups: formattedGroups,
+    approach,
+    reasoning,
+    scriptInfo,  // Add script generation info
+    steps: steps.map(s => ({
+      name: s.name,
+      description: s.description
+    })),
+    scriptName,
+    scriptPath,
+    estimatedTime,
+    outputDir: config.output,
+    sampleCount: dataInfo.samples.length
+  };
+}
+
+/**
+ * Display beautiful plan to user
+ */
+function displayPlan(plan) {
+  console.log('');
+  console.log('╔' + '═'.repeat(58) + '╗');
+  console.log('║' + ' '.repeat(15) + 'PROPOSED ANALYSIS PLAN' + ' '.repeat(21) + '║');
+  console.log('╚' + '═'.repeat(58) + '╝');
+  console.log('');
+
+  // Experiment details
+  console.log('📊 EXPERIMENT DETAILS:');
+  console.log(`   Analysis Type:  ${plan.analysisType}`);
+  console.log(`   Comparison:     ${plan.comparison}`);
+  console.log(`   Organism:       ${plan.organism}`);
+  console.log(`   Sequencing:     ${plan.sequencing}`);
+  console.log('');
+
+  // Samples
+  console.log('📁 SAMPLES IDENTIFIED:');
+  if (plan.groups.length > 0) {
+    plan.groups.forEach(group => {
+      console.log(`   ${group.name} group (n=${group.count}):`);
+      group.samples.forEach(s => console.log(`     • ${s}`));
+    });
+  } else {
+    console.log(`   Total samples: ${plan.sampleCount}`);
+  }
+  console.log('');
+
+  // Agent decision
+  console.log('🎯 AGENT DECISION:');
+  console.log(`   Approach:       ${plan.approach}`);
+  console.log(`   Reason:         ${plan.reasoning}`);
+  console.log('');
+
+  // Pipeline steps
+  console.log('📝 PIPELINE STEPS:');
+  plan.steps.forEach((step, i) => {
+    const num = `${i + 1}.`.padEnd(4);
+    const name = step.name.padEnd(22);
+    console.log(`   ${num}${name} - ${step.description}`);
+  });
+  console.log('');
+
+  // Script info
+  console.log('📜 GENERATED SCRIPT:');
+  console.log(`   Type:     ${plan.scriptInfo.type} ${plan.scriptInfo.agentGenerated ? '(Agent-written custom script)' : '(Template-based)'}`);
+  console.log(`   Name:     ${plan.scriptName}`);
+  console.log(`   Location: ${plan.scriptPath}`);
+  console.log(`   Runtime:  Estimated ${plan.estimatedTime}`);
+  if (plan.scriptInfo.agentGenerated) {
+    console.log(`   Note:     Script customized to address agent concerns`);
+  }
+  console.log('');
+
+  // Outputs
+  console.log('💾 OUTPUTS:');
+  console.log(`   All results will be saved to: ${plan.outputDir}/`);
+  console.log(`   - Alignment files (BAM)`);
+  console.log(`   - Count matrices (txt)`);
+  console.log(`   - QC plots (PDF)`);
+  console.log(`   - DE results (txt, xlsx)`);
+  console.log(`   - Analysis log`);
+  console.log(`   - Versioned script (for reproducibility)`);
+  console.log('');
+
+  console.log('─'.repeat(60));
+  console.log('⚠️  IMPORTANT: No analysis has been run yet.');
+  console.log('   This is a preview of what will happen.');
+  console.log('');
+}
+
+/**
+ * Get user confirmation (Y/N)
+ */
+async function getUserConfirmation() {
+  const readline = await import('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    rl.question('❓ Do you want to proceed with this analysis? (Y/N): ', (answer) => {
+      rl.close();
+      const userSaidYes = answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes';
+      resolve(userSaidYes);
+    });
+  });
 }
 
 /**

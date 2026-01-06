@@ -141,6 +141,53 @@ Provide a clear assessment and recommendations.
   }
 
   /**
+   * AGENTS DECIDE: AUTOMATION or ADAPTATION approach
+   */
+  async decideAnalysisApproach(dataInfo, config, proposedSteps) {
+    console.log('[Coordinator] → Asking all agents to analyze data...');
+    console.log('');
+
+    const question = `
+Analyze this RNA-seq dataset and decide whether to use AUTOMATION or ADAPTATION:
+
+DATASET:
+- Type: ${dataInfo.type}
+- Samples: ${dataInfo.samples.length}
+- Sequencing: ${dataInfo.pairedEnd ? 'Paired-end (R1 + R2 files)' : 'Single-end'}
+- Organism: ${config.organism}
+
+EXPERIMENTAL DESIGN:
+- Comparison: "${config.comparison}"
+- Groups: ${dataInfo.groups ? Object.keys(dataInfo.groups).map(g => `${g} (n=${dataInfo.groups[g].length})`).join(' vs ') : 'unknown'}
+${dataInfo.groups && Object.keys(dataInfo.groups).length === 2 ? `- Replicates per group: ${Math.min(...Object.values(dataInfo.groups).map(g => g.length))}` : ''}
+
+PROPOSED PIPELINE (Standard Bulk RNA-seq):
+${proposedSteps.map((s, i) => `${i + 1}. ${s.name} - ${s.description}`).join('\n')}
+
+PIPELINE CAPABILITIES:
+- Alignment (fastq2bam.sh): Automatically handles ${dataInfo.pairedEnd ? 'paired-end (R1 + R2)' : 'single-end'} reads
+- Feature counting: Uses Subread featureCounts
+- Normalization: RPKM for visualization, edgeR uses raw counts with internal TMM normalization
+- Statistics: edgeR for differential expression
+
+DECISION CRITERIA:
+- AUTOMATION: Standard pipeline, data looks clean, no edge cases → fast, $0 cost
+- ADAPTATION: Issues detected (small n, batch effects, etc.) → agents write custom script
+
+Analyze the data and recommend AUTOMATION or ADAPTATION. Provide clear reasoning (2-3 sentences).
+`;
+
+    const result = await this.consultAgents(question, { dataInfo, config }, 'approach_decision');
+
+    console.log('[Coordinator] 🤝 Synthesizing consensus from agent responses...');
+    console.log(`[Coordinator] Decision: ${result.consensus.decision.toUpperCase()}`);
+    console.log(`[Coordinator] Confidence: ${(result.consensus.confidence * 100).toFixed(0)}%`);
+    console.log(`[Coordinator] Reasoning: ${result.consensus.reasoning}`);
+
+    return result;
+  }
+
+  /**
    * Validate threshold selection
    */
   async validateThreshold(thresholdType, proposedValue, context = {}) {
