@@ -102,31 +102,133 @@ Pipeline: FastQC → Alignment → featureCounts → filterIDS
           → RPKM → entrz → edgeR → merge_results → Excel
 ```
 
-#### Path 2: ADAPTATION (Intelligent)
+#### Path 2: ADAPTATION (Intelligent - Agent Writes Code!)
 ```
 When: Small n, batch effects, outliers, edge cases
-How: MCP-enabled Claude reads scripts & writes custom solution
-Cost: ~$0.50 (MCP tool calls)
+How: MCP-enabled Claude READS existing scripts & WRITES custom solution
+Cost: ~$0.05 (MCP tool calls)
 Speed: Slower (agent analysis + custom script generation)
 
-Process: Agent reads actual scripts
-         → Discovers parameters
-         → Analyzes concerns
-         → Writes custom bash script
-         → Addresses specific issues intelligently
+Process:
+  Step 1: Claude MCP agent READS existing R/bash scripts
+          - Calls read_file("/bio_informatics/scripts/featurecounts.R")
+          - Discovers parameters: need annotation, output, control, treatment, *.bam
+          - Understands workflow requirements
+
+  Step 2: Claude ANALYZES agent concerns from debate
+          - GPT-4: "Small n=2, use exact test"
+          - Gemini: "Need extra QC for low replicates"
+
+  Step 3: Claude WRITES custom bash script from scratch
+          - Not modifying existing files!
+          - Creates NEW orchestration script: geneexpert_v1.sh
+          - Adjusts parameter order, adds validations, modifies logic
+
+  Step 4: System EXECUTES Claude's generated script
+          - Bash executes the custom script
+          - Claude monitors output via stdout/stderr
+          - If fails → Feedback loop (Claude writes v2)
+
+IMPORTANT: Claude doesn't modify your R scripts - it writes NEW bash
+orchestration scripts that CALL your existing R scripts intelligently!
 ```
 
 ### Multi-Agent Decision System
 
 **3 Specialized Agents:**
 - 🔢 **GPT-4 (Stats Agent)**: Statistical validation, threshold selection
-- 🔧 **Claude (Pipeline Agent)**: Technical execution, MCP tool calling
-- 🧬 **Gemini (Biology Agent)**: Biological interpretation, pathway analysis
+  - **No tool access** - Pure reasoning only
+  - Validates thresholds, sample sizes, statistical methods
 
-**Consensus Voting:**
-- Majority vote (2/3) for most decisions
-- Unanimous (3/3) for sample removal
-- Disagreement = uncertainty signal (escalate to user)
+- 🔧 **Claude Sonnet 4.5 (Pipeline Agent)**: Technical execution, MCP tool calling
+  - **HAS MCP tool access** - Can read files and write code
+  - **In ADAPTATION mode:** Reads existing R/bash scripts via MCP tools
+  - **Writes custom bash scripts** that orchestrate pipeline with modifications
+  - **Executes generated scripts** and monitors output
+  - **Can modify workflow logic**: skip steps, add validations, adjust parameters
+
+- 🧬 **Gemini Pro (Biology Agent)**: Biological interpretation, pathway analysis
+  - **No tool access** - Pure reasoning only
+  - Validates biological assumptions and QC criteria
+
+**How Agents Communicate:**
+1. **Coordinator** sends same question to all 3 agents **in parallel**
+2. Each agent analyzes independently (no cross-talk)
+3. **Coordinator** collects all responses
+4. **Consensus mechanism** applies voting rules
+5. **Synthesized decision** returned to user
+
+**Consensus Voting Rules:**
+- **Standard execution**: Pipeline Agent only (no vote needed)
+- **Threshold selection**: Majority vote (2/3 required)
+- **Sample removal**: Unanimous (3/3 required)
+- **Disagreement**: Escalate to user for final decision
+
+---
+
+## 🤖 Which Agent Writes Code?
+
+**ONLY Claude Sonnet 4.5 (Pipeline Agent) can write and execute code!**
+
+### What Each Agent Does:
+
+| Agent | Can Read Files? | Can Write Code? | Can Execute Code? | Role |
+|-------|----------------|-----------------|-------------------|------|
+| **GPT-4 (Stats)** | ❌ No | ❌ No | ❌ No | Pure reasoning - validates statistics |
+| **Claude (Pipeline)** | ✅ YES (MCP) | ✅ YES (writes bash) | ✅ YES (executes scripts) | Code generation & execution |
+| **Gemini (Biology)** | ❌ No | ❌ No | ❌ No | Pure reasoning - validates biology |
+
+### What Claude Writes in ADAPTATION Mode:
+
+**Claude WRITES:** New bash orchestration scripts
+```bash
+# Example: geneexpert_stroke_vs_control_v1.sh
+#!/bin/bash
+set -e
+
+# Claude wrote this entire script!
+# It orchestrates existing R scripts with custom logic
+
+# Step 1: FastQC
+fastqc data/*.fastq.gz -o results/fastqc/
+
+# Step 2: Alignment (Claude adjusted parameters based on agent debate)
+cd data/
+for i in *_R1_001.fastq.gz; do
+  fname=$(basename "$i" _R1_001.fastq.gz)
+  subread-align -t 0 -i /genome/mm10 \
+    -r "${fname}_R1_001.fastq.gz" \
+    -R "${fname}_R2_001.fastq.gz" \
+    -T 8 -o "${fname}.bam"
+done
+
+# Step 3: Feature Counts (Claude got parameters from reading featurecounts.R)
+Rscript /scripts/featurecounts.R mm10 stroke_vs_control cont ips *.bam
+
+# ... continues with all 9 steps
+```
+
+**Claude DOES NOT WRITE:** New R scripts or Python code
+- Your existing R scripts (`featurecounts.R`, `RPKM.R`, etc.) are NEVER modified
+- Claude just orchestrates them with correct parameters
+
+### How Code Generation Works:
+
+```
+AUTOMATION Mode:
+  Coordinator → Template engine → Fills in config variables
+  Result: Standard bash script (no agent writing needed)
+
+ADAPTATION Mode:
+  Coordinator → Sends debate context to Claude MCP agent
+  Claude → Reads existing scripts via read_file tool
+  Claude → Understands parameters and requirements
+  Claude → WRITES custom bash script addressing concerns
+  System → EXECUTES Claude's script
+  If fails → Claude WRITES v2 with fixes
+```
+
+**Key Point:** Claude is the ONLY agent that can read your files, write new scripts, and trigger execution. GPT-4 and Gemini provide analysis and recommendations, but can't touch code.
 
 ---
 
@@ -169,10 +271,130 @@ Process: Agent reads actual scripts
    - Agent conversations logged separately
    - Session history tracked
 
-8. **Robust Consensus Voting**
+8. **Error-Propagating Feedback Loop** (NEW! Jan 11, 2026)
+   - Script fails → Agents analyze error automatically
+   - Detect completed vs failed steps
+   - Generate v2 script with fixes (skips completed work!)
+   - Retry up to 3 attempts (v1 → v2 → v3)
+   - Loop ends: Success OR max retries reached
+
+9. **Robust Consensus Voting**
    - Fixed confidence calculation bug (Jan 6, 2026)
    - Correctly handles all vote types
    - Shows accurate reasoning ("3/3 agents recommend...")
+
+---
+
+## 🔄 Error-Propagating Feedback Loop
+
+**The Innovation:** When scripts fail, agents debug and generate fixed versions automatically.
+
+### How It Works:
+
+```
+ATTEMPT 1: Execute generated script v1.sh
+    ↓
+  [FAILS: Exit code 1]
+    ↓
+FEEDBACK LOOP ACTIVATED:
+    ↓
+Step 1: Detect Progress
+  - Completed: Steps 1-3 ✅
+  - Failed: Step 4 ❌
+    ↓
+Step 2: Capture Error Context
+  - Exit code: 1
+  - Error message: "cannot open file test_run.count.txt"
+  - STDOUT: Last 50 lines
+  - STDERR: Full error output
+    ↓
+Step 3: Multi-Agent Debugging
+  Coordinator asks all 3 agents:
+
+  "PREVIOUS SCRIPT FAILED:
+   - Completed: Steps 1-3
+   - Failed: Step 4 (Filter Bad IDs)
+   - Error: cannot open file test_run.count.txt
+
+   YOUR TASK:
+   1. SKIP completed steps (1-3)
+   2. RESUME from Step 4
+   3. Fix the error (likely wrong file extension)
+   4. Continue with remaining steps"
+    ↓
+  GPT-4: "File extension mismatch. Use .csv not .txt"
+  Claude: [calls list_available_scripts] "Confirmed: output is .csv"
+  Gemini: "Agree with file extension fix"
+    ↓
+Step 4: Generate v2 Script
+  - Skips Steps 1-3 (already done!)
+  - Starts from Step 4 with fix
+  - Continues to completion
+    ↓
+ATTEMPT 2: Execute v2.sh
+    ↓
+  [SUCCESS: Exit code 0] ✅
+    ↓
+ANALYSIS COMPLETE!
+```
+
+### Loop Stopping Criteria:
+
+**The loop ENDS when:**
+1. ✅ **Script succeeds** (exit code 0) → Analysis complete!
+2. ❌ **Max retries reached** (3 attempts) → Report failure to user
+3. 🛑 **User cancels** during confirmation → Stop execution
+
+### Maximum Retry Attempts: **3**
+
+```javascript
+const MAX_RETRIES = 3;
+
+Attempt 1: v1.sh (generated from agent decision)
+Attempt 2: v2.sh (fixed based on v1 errors)
+Attempt 3: v3.sh (fixed based on v2 errors)
+
+If v3 fails → STOP and report to user
+```
+
+### Why This Matters:
+
+**Traditional Pipeline:**
+```
+Script fails at Step 7 → User must manually debug → Hours wasted
+```
+
+**GeneExpert Feedback Loop:**
+```
+Script fails at Step 7 → Agents debug automatically → v2 generated
+  ↓
+Skips Steps 1-6 (saves 20-40 minutes!)
+  ↓
+Resumes from Step 7 with fix → Success!
+```
+
+### Example Error Correction:
+
+**v1 Error:**
+```bash
+# v1.sh (WRONG):
+Rscript filterIDS.R test_run.count.txt
+
+# Error: File not found
+```
+
+**Agents Analyze:**
+- GPT-4: "File extension mismatch detected"
+- Claude: Calls `list_available_scripts` → sees .csv output
+- Gemini: "All R scripts use CSV format since Jan 7"
+
+**v2 Fix:**
+```bash
+# v2.sh (FIXED):
+Rscript filterIDS.R test_run.count.csv
+
+# Success! ✅
+```
 
 ---
 
