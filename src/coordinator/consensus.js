@@ -429,11 +429,95 @@ export function formatConsensusReport(consensus, question) {
   return report;
 }
 
+/**
+ * Extract structured modifications from agent responses (Option 2)
+ * Returns specific changes agents recommend for ADAPTATION
+ */
+export function extractStructuredRecommendations(responses, dataInfo, config) {
+  const modifications = {
+    statistical_adjustments: [],
+    pipeline_modifications: [],
+    quality_checks: [],
+    parameter_changes: {}
+  };
+
+  // Analyze all agent responses for specific recommendations
+  const allContent = [
+    responses.gpt4?.content || '',
+    responses.claude?.content || '',
+    responses.gemini?.content || ''
+  ].join(' ').toLowerCase();
+
+  // 1. STATISTICAL ADJUSTMENTS (from sample size, power analysis)
+
+  // Small sample size (n<3) → use exact test
+  if (dataInfo.groups) {
+    const minN = Math.min(...Object.values(dataInfo.groups).map(g => g.length));
+    if (minN < 3) {
+      modifications.statistical_adjustments.push({
+        type: 'use_exact_test',
+        reason: `Small sample size (n=${minN}) requires exact test instead of quasi-likelihood`,
+        parameters: { method: 'exactTest' }
+      });
+
+      // Relax FDR threshold for low power
+      modifications.parameter_changes.fdr_threshold = 0.1;  // instead of 0.05
+    }
+  }
+
+  // Batch effects mentioned
+  if (allContent.includes('batch') || allContent.includes('confound')) {
+    modifications.quality_checks.push({
+      type: 'batch_detection',
+      step: 'before_de_analysis',
+      command: 'check_batch_effects.R'
+    });
+  }
+
+  // 2. PIPELINE MODIFICATIONS
+
+  // Outlier detection recommended
+  if (allContent.includes('outlier') || allContent.includes('pca') || allContent.includes('mds')) {
+    modifications.quality_checks.push({
+      type: 'outlier_detection',
+      step: 'before_de_analysis',
+      command: 'qc_plots.R',
+      check: 'visual_inspection'
+    });
+  }
+
+  // Conservative filtering
+  if (allContent.includes('conservative') || allContent.includes('stringent') || allContent.includes('careful')) {
+    modifications.parameter_changes.cpm_threshold = 0.5;  // instead of 1.0
+    modifications.parameter_changes.min_samples = 2;
+  }
+
+  // Relaxed filtering (for discovery)
+  if (allContent.includes('relaxed') || allContent.includes('exploratory') || allContent.includes('discovery')) {
+    modifications.parameter_changes.cpm_threshold = 0.3;
+    modifications.parameter_changes.logfc_threshold = 0.5;  // instead of 1.0
+  }
+
+  // 3. QUALITY CHECKS
+
+  // Add extra QC for low sample size
+  if (dataInfo.samples && dataInfo.samples.length <= 4) {
+    modifications.quality_checks.push({
+      type: 'enhanced_qc',
+      step: 'after_alignment',
+      checks: ['alignment_rate', 'duplication_rate', 'library_complexity']
+    });
+  }
+
+  return modifications;
+}
+
 export default {
   analyzeAgreement,
   extractDecision,
   vote,
   categorizeDisagreement,
   synthesizeConsensus,
-  formatConsensusReport
+  formatConsensusReport,
+  extractStructuredRecommendations
 };

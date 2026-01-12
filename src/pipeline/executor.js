@@ -113,54 +113,111 @@ export async function executeAnalysis(config) {
   console.log('='.repeat(60));
   console.log('');
 
-  // Step 7: Execute the generated script
-  console.log(`[Executor] Running script: ${scriptResult.scriptPath}`);
-  console.log('='.repeat(60));
-  console.log('');
+  // Step 7: Execute with FEEDBACK LOOP (retry on failure)
+  const MAX_RETRIES = 3;
+  let attempt = 1;
+  let currentScriptResult = scriptResult;
+  let executionResult = null;
 
-  try {
-    const executionResult = await executeScript(scriptResult.scriptPath, logger);
+  while (attempt <= MAX_RETRIES) {
+    console.log(`[Executor] Attempt ${attempt}/${MAX_RETRIES}: Running script: ${currentScriptResult.scriptPath}`);
+    console.log('='.repeat(60));
+    console.log('');
 
-    if (executionResult.success) {
+    try {
+      executionResult = await executeScript(currentScriptResult.scriptPath, logger);
+
+      if (executionResult.success) {
+        // SUCCESS!
+        console.log('');
+        console.log('='.repeat(60));
+        console.log(`[Executor] ✅ Analysis complete! (attempt ${attempt}/${MAX_RETRIES})`);
+        console.log('');
+        console.log(`📊 Results saved to: ${config.output}`);
+        console.log(`📄 Full session log: ${logger.logFile}`);
+        console.log(`🔬 Script executed: ${currentScriptResult.scriptPath}`);
+        console.log('');
+
+        console.log = originalLog;
+        return {
+          success: true,
+          output: config.output,
+          scriptPath: currentScriptResult.scriptPath,
+          executionResult,
+          attempts: attempt
+        };
+      }
+
+      // FAILURE - Enter FEEDBACK LOOP
       console.log('');
       console.log('='.repeat(60));
-      console.log('[Executor] ✅ Analysis complete!');
-      console.log('');
-      console.log(`📊 Results saved to: ${config.output}`);
-      console.log(`📄 Full session log: ${logger.logFile}`);
-      console.log(`🔬 Script executed: ${scriptResult.scriptPath}`);
-      console.log('');
-    } else {
-      console.log('');
-      console.log('='.repeat(60));
-      console.error('[Executor] ❌ Analysis failed!');
+      console.error(`[Executor] ❌ Script failed (attempt ${attempt}/${MAX_RETRIES})`);
       console.error(`Error: ${executionResult.error}`);
       console.log('');
-      console.log(`📄 Full session log: ${logger.logFile}`);
-      console.log(`🔬 Failed script: ${scriptResult.scriptPath}`);
+
+      if (attempt >= MAX_RETRIES) {
+        console.log('[Executor] Max retries reached. Giving up.');
+        console.log('');
+        console.log(`📄 Full session log: ${logger.logFile}`);
+        console.log(`🔬 Failed script: ${currentScriptResult.scriptPath}`);
+        console.log('');
+        console.log = originalLog;
+        throw new Error(`Script execution failed after ${MAX_RETRIES} attempts: ${executionResult.error}`);
+      }
+
+      // FEEDBACK LOOP: Pass error to agents for debugging
+      console.log('');
+      console.log('🔄 FEEDBACK LOOP: Consulting agents to debug error...');
+      console.log('='.repeat(60));
       console.log('');
 
-      // Restore console.log
+      const debugPrompt = `
+PREVIOUS SCRIPT FAILED WITH ERROR:
+${executionResult.error}
+
+STDERR OUTPUT:
+${executionResult.stderr}
+
+STDOUT OUTPUT (last 50 lines):
+${executionResult.stdout.split('\n').slice(-50).join('\n')}
+
+FAILED SCRIPT PATH: ${currentScriptResult.scriptPath}
+
+YOUR TASK: Analyze this error and write a FIXED version of the script.
+Common issues:
+- Missing files (use list_available_scripts to check)
+- Wrong paths
+- Missing parameters
+- Syntax errors
+
+Write a COMPLETE corrected bash script that fixes this error.
+`;
+
+      const debugDecision = await coordinator.getMultiAgentDecision(debugPrompt, dataInfo, config);
+
+      // Generate v2 script with fixes
+      attempt++;
+      const v2ScriptPath = scriptPath.replace(/v\d+\.sh$/, `v${attempt}.sh`).replace(/\.sh$/, `_v${attempt}.sh`);
+
+      console.log('');
+      console.log(`[Script Generator] Generating v${attempt} script with agent fixes...`);
+
+      if (decision === 'adaptation') {
+        currentScriptResult = await generateAdaptationScript(
+          dataInfo, config, steps, debugDecision, coordinator, mcpAgent, v2ScriptPath
+        );
+      } else {
+        currentScriptResult = generateAutomationScript(dataInfo, config, steps, v2ScriptPath);
+      }
+
+      console.log(`[Script Generator] ✓ v${attempt} script generated: ${v2ScriptPath}`);
+      console.log('');
+
+    } catch (error) {
       console.log = originalLog;
-
-      throw new Error(`Script execution failed: ${executionResult.error}`);
+      console.error('[Executor] ❌ Fatal error:', error.message);
+      throw error;
     }
-
-    // Restore original console.log
-    console.log = originalLog;
-
-    return {
-      success: true,
-      output: config.output,
-      scriptPath: scriptResult.scriptPath,
-      executionResult
-    };
-
-  } catch (error) {
-    // Restore console.log even on error
-    console.log = originalLog;
-    console.error('[Executor] ❌ Pipeline failed:', error.message);
-    throw error;
   }
 }
 
@@ -182,7 +239,7 @@ async function executeScript(scriptPath, logger) {
     }
 
     // Spawn bash process
-    const process = spawn('bash', [scriptPath], {
+    const childProcess = spawn('bash', [scriptPath], {
       cwd: path.dirname(scriptPath),
       env: { ...process.env }
     });
@@ -191,21 +248,21 @@ async function executeScript(scriptPath, logger) {
     let stderr = '';
 
     // Stream stdout to console in real-time
-    process.stdout.on('data', (data) => {
+    childProcess.stdout.on('data', (data) => {
       const output = data.toString();
       console.log(output.trimEnd());
       stdout += output;
     });
 
     // Stream stderr to console in real-time
-    process.stderr.on('data', (data) => {
+    childProcess.stderr.on('data', (data) => {
       const output = data.toString();
       console.error(output.trimEnd());
       stderr += output;
     });
 
     // Handle process completion
-    process.on('close', (code) => {
+    childProcess.on('close', (code) => {
       console.log('');
 
       if (code === 0) {
@@ -229,7 +286,7 @@ async function executeScript(scriptPath, logger) {
     });
 
     // Handle process errors
-    process.on('error', (error) => {
+    childProcess.on('error', (error) => {
       console.error(`[Executor] Failed to start script: ${error.message}`);
       resolve({
         success: false,

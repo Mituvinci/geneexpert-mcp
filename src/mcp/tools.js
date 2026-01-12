@@ -999,6 +999,190 @@ export const tools = [
         }]
       };
     }
+  },
+
+  {
+    name: 'list_available_scripts',
+    description: 'List all available R and bash scripts in the bioinformatics scripts directory. Use this BEFORE generating pipeline scripts to validate which scripts exist.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pattern: {
+          type: 'string',
+          description: 'Optional glob pattern to filter scripts (e.g., "*.R", "edger*", "qc*")',
+          default: '*'
+        }
+      }
+    },
+    handler: async (args) => {
+      try {
+        const pattern = args.pattern || '*';
+        const files = fs.readdirSync(SCRIPTS_PATH);
+
+        // Filter by pattern
+        const matchingFiles = files.filter(file => {
+          if (pattern === '*') return true;
+
+          // Simple glob matching
+          const regex = new RegExp('^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+          return regex.test(file);
+        });
+
+        // Categorize scripts
+        const rScripts = matchingFiles.filter(f => f.endsWith('.R'));
+        const bashScripts = matchingFiles.filter(f => !f.endsWith('.R') && !f.endsWith('.sh'));
+        const shellScripts = matchingFiles.filter(f => f.endsWith('.sh'));
+
+        let output = `📂 Available scripts in ${SCRIPTS_PATH}\n\n`;
+
+        output += `R Scripts (${rScripts.length}):\n`;
+        rScripts.sort().forEach(script => {
+          output += `  - ${script}\n`;
+        });
+
+        if (bashScripts.length > 0) {
+          output += `\nBash Scripts (${bashScripts.length}):\n`;
+          bashScripts.sort().forEach(script => {
+            output += `  - ${script}\n`;
+          });
+        }
+
+        if (shellScripts.length > 0) {
+          output += `\nShell Scripts (${shellScripts.length}):\n`;
+          shellScripts.sort().forEach(script => {
+            output += `  - ${script}\n`;
+          });
+        }
+
+        output += `\n✓ Total: ${matchingFiles.length} scripts found`;
+
+        if (pattern !== '*') {
+          output += ` (matching pattern: "${pattern}")`;
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: output
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Failed to list scripts: ${error.message}`
+          }]
+        };
+      }
+    }
+  },
+
+  {
+    name: 'validate_fastq',
+    description: 'Validate FASTQ input files for quality, completeness, and paired-end consistency. Call this FIRST before any analysis to ensure data integrity.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        input_dir: {
+          type: 'string',
+          description: 'Directory containing FASTQ files'
+        },
+        output_report: {
+          type: 'string',
+          description: 'Path to save validation report TSV',
+          default: '/tmp/fastq_validation.tsv'
+        }
+      },
+      required: ['input_dir']
+    },
+    handler: async (args) => {
+      const inputDir = args.input_dir;
+      const reportPath = args.output_report || '/tmp/fastq_validation.tsv';
+
+      try {
+        // Check if validate_fastq.sh exists
+        const validatorPath = `${SCRIPTS_PATH}/validate_fastq.sh`;
+        if (!fs.existsSync(validatorPath)) {
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ Validator script not found: ${validatorPath}\n\nPlease create this script or use manual validation.`
+            }]
+          };
+        }
+
+        // Run validation script
+        const result = await executeScript(validatorPath, [inputDir, reportPath]);
+
+        if (!result.success) {
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ Validation script failed:\n${result.stderr}`
+            }]
+          };
+        }
+
+        // Read validation report
+        const reportContent = fs.readFileSync(reportPath, 'utf-8');
+        const lines = reportContent.trim().split('\n');
+
+        // Parse TSV
+        const header = lines[0].split('\t');
+        const rows = lines.slice(1).map(line => {
+          const values = line.split('\t');
+          return Object.fromEntries(header.map((h, i) => [h, values[i]]));
+        });
+
+        // Analyze results
+        const totalFiles = rows.length;
+        const validFiles = rows.filter(r => r.status === 'VALID').length;
+        const invalidFiles = rows.filter(r => r.status !== 'VALID');
+        const mismatchFiles = rows.filter(r => r.status === 'MISMATCH');
+
+        let summary = `📊 FASTQ Validation Report\n\n`;
+        summary += `Input Directory: ${inputDir}\n`;
+        summary += `Total Files: ${totalFiles}\n`;
+        summary += `Valid Files: ${validFiles}\n`;
+        summary += `Invalid Files: ${invalidFiles.length}\n`;
+        summary += `Mismatched Pairs: ${mismatchFiles.length}\n\n`;
+
+        if (invalidFiles.length > 0) {
+          summary += `⚠️  ISSUES FOUND:\n`;
+          invalidFiles.forEach(f => {
+            summary += `  - ${f.file}: ${f.status} (reads: ${f.reads})\n`;
+          });
+          summary += `\n`;
+        }
+
+        summary += `Full Report:\n`;
+        summary += reportContent;
+
+        summary += `\n\n📋 DECISION:\n`;
+        if (invalidFiles.length === 0) {
+          summary += `✅ All files valid - PROCEED with analysis`;
+        } else if (invalidFiles.length < totalFiles / 2) {
+          summary += `⚠️  Some files invalid - CONSIDER excluding bad files and proceeding`;
+        } else {
+          summary += `❌ Too many invalid files - STOP and fix data`;
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: summary
+          }]
+        };
+
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Failed to validate FASTQ files: ${error.message}`
+          }]
+        };
+      }
+    }
   }
 ];
 

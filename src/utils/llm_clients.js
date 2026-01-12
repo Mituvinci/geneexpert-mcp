@@ -32,7 +32,7 @@ export async function callGPT4(prompt, options = {}) {
           content: prompt
         }
       ],
-      temperature: options.temperature || 0.3, // Lower for more deterministic statistical analysis
+      temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
       max_tokens: options.maxTokens || 2000,
     });
 
@@ -67,7 +67,7 @@ export async function callClaude(prompt, options = {}) {
     const response = await anthropic.messages.create({
       model: options.model || 'claude-3-haiku-20240307',
       max_tokens: options.maxTokens || 4096,
-      temperature: options.temperature || 0.5,
+      temperature: options.temperature || 0,
       system: options.systemPrompt || 'You are a bioinformatics pipeline expert. Execute workflows, manage data processing, and ensure biological correctness.',
       messages: [
         {
@@ -112,7 +112,11 @@ export async function callGemini(prompt, options = {}) {
       ? `${options.systemPrompt}\n\n${prompt}`
       : prompt;
 
-    const result = await model.generateContent(fullPrompt);
+    const result = await model.generateContent(fullPrompt, {
+      generationConfig: {
+        temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
+      }
+    });
     const response = result.response;
 
     return {
@@ -219,7 +223,7 @@ Be rigorous and specific.
 
   return callGPT4(prompt, {
     systemPrompt: 'You are a statistical expert for genomics. Focus on: threshold validation (FDR, logFC), multiple testing correction, sample size adequacy, outlier detection, and statistical assumptions.',
-    temperature: 0.2 // Very deterministic for stats
+    temperature: 0 // Deterministic for reproducible scientific analysis
   });
 }
 
@@ -246,7 +250,7 @@ Focus on biological insight.
 
   return callGemini(prompt, {
     systemPrompt: 'You are a molecular biology and genomics expert. Interpret results through biological lens: pathway analysis, gene function, regulatory networks, disease mechanisms, and experimental validation.',
-    temperature: 0.5
+    temperature: 0
   });
 }
 
@@ -273,7 +277,7 @@ Be thorough and critical.
 
   return callClaude(prompt, {
     systemPrompt: 'You are a quality control expert for RNA-seq/ATAC-seq. Monitor technical artifacts: batch effects, outliers, low-quality samples, normalization issues, and sequencing depth problems.',
-    temperature: 0.3
+    temperature: 0
   });
 }
 
@@ -300,7 +304,7 @@ Be practical and actionable.
 
   return callClaude(prompt, {
     systemPrompt: 'You are a bioinformatics pipeline expert. Guide RNA-seq/ATAC-seq workflows: tool selection, parameter optimization, quality checks, and troubleshooting. Ensure biological best practices.',
-    temperature: 0.4
+    temperature: 0
   });
 }
 
