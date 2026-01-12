@@ -171,6 +171,14 @@ export async function executeAnalysis(config) {
       console.log('='.repeat(60));
       console.log('');
 
+      // Detect which step failed and which steps completed
+      const completedSteps = detectCompletedSteps(executionResult.stdout);
+      const failedStep = detectFailedStep(executionResult.stdout, executionResult.stderr);
+
+      console.log(`[Feedback Loop] Completed steps: ${completedSteps.join(', ') || 'none'}`);
+      console.log(`[Feedback Loop] Failed at step: ${failedStep || 'unknown'}`);
+      console.log('');
+
       const debugPrompt = `
 PREVIOUS SCRIPT FAILED WITH ERROR:
 ${executionResult.error}
@@ -183,17 +191,46 @@ ${executionResult.stdout.split('\n').slice(-50).join('\n')}
 
 FAILED SCRIPT PATH: ${currentScriptResult.scriptPath}
 
-YOUR TASK: Analyze this error and write a FIXED version of the script.
-Common issues:
-- Missing files (use list_available_scripts to check)
-- Wrong paths
-- Missing parameters
-- Syntax errors
+IMPORTANT PROGRESS INFORMATION:
+- Steps that COMPLETED successfully: ${completedSteps.join(', ') || 'none'}
+- Step that FAILED: ${failedStep || 'unknown'}
 
-Write a COMPLETE corrected bash script that fixes this error.
+YOUR TASK: Write a FIXED script that:
+1. SKIPS all completed steps (${completedSteps.join(', ') || 'none'}) - DO NOT re-run these!
+2. RESUMES from the failed step (${failedStep || 'the beginning'})
+3. Fixes the error that caused the failure
+4. Continues with remaining steps
+
+WHY SKIP COMPLETED STEPS:
+- Step 1 (FastQC) takes 5-10 minutes
+- Step 2 (Alignment) takes 10-30 minutes
+- DO NOT waste time re-running steps that already succeeded!
+
+EFFICIENCY EXAMPLE:
+If Steps 1-3 completed and Step 4 failed:
+- BAD: Run all 10 steps again (wastes 20-40 minutes)
+- GOOD: Start from Step 4 (saves time, uses existing outputs)
+
+Common issues to fix:
+- Wrong file paths (check actual output filenames from completed steps)
+- Wrong file extensions (.csv vs .txt)
+- Missing arguments
+- Wrong argument order
+
+Write a COMPLETE bash script that SKIPS completed steps and fixes the error.
 `;
 
-      const debugDecision = await coordinator.getMultiAgentDecision(debugPrompt, dataInfo, config);
+      const debugDecision = await coordinator.consultAgents(
+        debugPrompt,
+        {
+          dataInfo,
+          config,
+          error: executionResult.error,
+          stderr: executionResult.stderr,
+          attempt
+        },
+        'approach_decision'
+      );
 
       // Generate v2 script with fixes
       attempt++;
@@ -639,6 +676,68 @@ async function getUserConfirmation() {
       resolve(userSaidYes);
     });
   });
+}
+
+/**
+ * Detect which steps completed successfully from stdout
+ */
+function detectCompletedSteps(stdout) {
+  const completed = [];
+  const lines = stdout.split('\n');
+
+  // Look for "Step X/Y: ..." patterns that completed (no error immediately after)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const stepMatch = line.match(/Step (\d+)\/\d+: (.+)/);
+
+    if (stepMatch) {
+      const stepNum = stepMatch[1];
+      const stepName = stepMatch[2];
+
+      // Check if next few lines don't contain errors
+      let hasError = false;
+      for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+        if (lines[j].includes('Error') || lines[j].includes('Execution halted')) {
+          hasError = true;
+          break;
+        }
+        // If we see next step, this one completed
+        if (lines[j].match(/Step \d+\/\d+:/)) {
+          break;
+        }
+      }
+
+      if (!hasError) {
+        completed.push(`Step ${stepNum} (${stepName})`);
+      }
+    }
+  }
+
+  return completed;
+}
+
+/**
+ * Detect which step failed from stdout and stderr
+ */
+function detectFailedStep(stdout, stderr) {
+  const lines = [...stdout.split('\n'), ...stderr.split('\n')];
+
+  let lastStep = null;
+
+  // Find the last "Step X/Y" mentioned before error
+  for (const line of lines) {
+    const stepMatch = line.match(/Step (\d+)\/\d+: (.+)/);
+    if (stepMatch) {
+      lastStep = `Step ${stepMatch[1]} (${stepMatch[2]})`;
+    }
+
+    // If we hit an error, the last step we saw is likely the culprit
+    if (line.includes('Error') || line.includes('Execution halted')) {
+      return lastStep;
+    }
+  }
+
+  return lastStep;
 }
 
 /**
