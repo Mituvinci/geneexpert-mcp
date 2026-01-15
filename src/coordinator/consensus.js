@@ -3,6 +3,9 @@
  * Handles voting, disagreement analysis, and decision synthesis
  */
 
+// Number of agents in the voting system
+const TOTAL_AGENTS = 3;
+
 /**
  * Analyze agreement between agents
  */
@@ -157,10 +160,10 @@ export function vote(responses, decisionType = 'threshold') {
     case 'sample_removal':
       // Require unanimous approval
       result = {
-        decision: votes.approve === 3 ? 'approve' : 'user_decision_required',
+        decision: votes.approve === TOTAL_AGENTS ? 'approve' : 'user_decision_required',
         votes,
         agentDecisions: decisions,
-        reasoning: votes.approve === 3
+        reasoning: votes.approve === TOTAL_AGENTS
           ? 'All 3 agents agree on sample removal'
           : 'Sample removal requires unanimous agreement - escalating to user'
       };
@@ -267,7 +270,7 @@ export function categorizeDisagreement(responses) {
     };
   }
 
-  if (uniqueDecisions.size === 3) {
+  if (uniqueDecisions.size === TOTAL_AGENTS) {
     return {
       type: 'major_disagreement',
       severity: 'high',
@@ -285,14 +288,28 @@ export function categorizeDisagreement(responses) {
 
 /**
  * Synthesize a consensus summary from all agent responses
+ *
+ * @param {Object} responses - Agent responses from GPT-4, Claude, Gemini
+ * @param {string} decisionType - Type of decision (approach_decision, threshold, etc.)
+ * @param {string} decision_id - Unique identifier for this decision (for evaluation logging)
+ *                               Format: "{dataset}_{step}_{type}" e.g., "DA0036_step0_mode"
  */
-export function synthesizeConsensus(responses, decisionType = 'threshold') {
+export function synthesizeConsensus(responses, decisionType = 'threshold', decision_id = null) {
   const voteResult = vote(responses, decisionType);
   const disagreement = categorizeDisagreement(responses);
 
+  // Calculate disagreement score (0 = full agreement, 0.67 = maximum disagreement)
+  // Decision-type aware: only consider relevant vote categories
+  const disagreementScore = calculateDisagreementScore(voteResult.votes, decisionType);
+
   const summary = {
+    // decision_id for evaluation (join with ground_truth offline)
+    decision_id: decision_id,
+    timestamp: new Date().toISOString(),
+    decision_type: decisionType,
     decision: voteResult.decision,
     confidence: calculateConfidence(voteResult.votes),
+    disagreement_score: disagreementScore,
     votes: voteResult.votes,
     agentDecisions: voteResult.agentDecisions,
     disagreement,
@@ -301,6 +318,29 @@ export function synthesizeConsensus(responses, decisionType = 'threshold') {
   };
 
   return summary;
+}
+
+/**
+ * Calculate disagreement score (0 = full agreement, ~0.67 = max disagreement)
+ * Decision-type aware: only considers relevant vote categories
+ */
+function calculateDisagreementScore(votes, decisionType) {
+  let relevantVotes = [];
+
+  if (decisionType === 'approach_decision') {
+    // For approach decisions: only automation vs adaptation
+    relevantVotes = [votes.automation || 0, votes.adaptation || 0];
+  } else {
+    // For threshold/parameter/sample_removal: approve/reject/uncertain
+    relevantVotes = [
+      votes.approve || 0,
+      votes.reject || 0,
+      votes.uncertain || 0
+    ];
+  }
+
+  const maxVotes = Math.max(...relevantVotes);
+  return 1 - maxVotes / TOTAL_AGENTS;
 }
 
 /**
@@ -314,7 +354,7 @@ function calculateConfidence(votes) {
     if (total === 0) return 0;
 
     // Unanimous = 1.0
-    if (votes.automation === 3 || votes.adaptation === 3) return 1.0;
+    if (votes.automation === TOTAL_AGENTS || votes.adaptation === TOTAL_AGENTS) return 1.0;
 
     // 2-1 majority = 0.67
     if (votes.automation === 2 || votes.adaptation === 2) return 0.67;
@@ -329,7 +369,7 @@ function calculateConfidence(votes) {
   if (total === 0) return 0;
 
   // Unanimous = 1.0
-  if (votes.approve === 3 || votes.reject === 3) return 1.0;
+  if (votes.approve === TOTAL_AGENTS || votes.reject === TOTAL_AGENTS) return 1.0;
 
   // 2-1 majority = 0.67
   if (votes.approve === 2 || votes.reject === 2) return 0.67;

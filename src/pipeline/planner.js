@@ -57,6 +57,19 @@ export function planPipeline(dataInfo, config) {
 function planFromFASTQ(dataInfo, config) {
 
   return [
+    // Step 0: FASTQ Validation (validate_fastq.sh)
+    {
+      name: 'FASTQ Validation',
+      description: 'Validate FASTQ file integrity and paired-end consistency',
+      tool: 'validate_fastq',
+      script: `${SCRIPTS_PATH}/validate_fastq.sh`,
+      inputs: dataInfo.inputDir,
+      requiresDebate: false,
+      agent: 'pipeline',
+      outputs: ['validation_report.tsv'],
+      note: 'Checks: line count divisible by 4, paired-end read count match'
+    },
+
     // Step 1: QC on Raw Reads (FastQC)
     {
       name: 'FastQC',
@@ -151,35 +164,46 @@ function planFromFASTQ(dataInfo, config) {
     },
 
     // QC Plots Step - Agent can read these and assess quality
+    // CRITICAL: This step detects outliers and batch effects
     {
       name: 'Generate QC Plots',
-      description: 'PCA, MDS, density plots for quality assessment',
+      description: 'PCA, MDS, density plots + outlier/batch effect detection',
       tool: 'qc_plots',
-      script: `${SCRIPTS_PATH}/qc_plots.R`, // May need to create this
-      inputs: 'outentrz.txt',
-      requiresDebate: false,
-      agent: 'pipeline',
-      outputs: ['PCA.pdf', 'MDS.pdf', 'density.pdf'],
-      note: 'Agent can read these plots via MCP to check for outliers/batch effects'
+      script: `${SCRIPTS_PATH}/qc_plots.R`,
+      inputs: 'outRPKM.txt',  // Uses RPKM-normalized data
+      requiresDebate: true,   // Agents must review and vote!
+      agent: 'multi',         // All agents review the plots
+      decisionType: 'qc_review',
+      params: {
+        controlKeyword: config.controlKeyword || 'cont',
+        treatmentKeyword: config.treatmentKeyword || 'ips'
+      },
+      outputs: ['PCA_plot.png', 'MDS_plot.png', 'density_plot.png', 'qc_summary.json'],
+      note: 'Agents view PCA plot via vision, read qc_summary.json for metrics. Vote UNANIMOUS to remove outliers.'
     },
 
+    // DECISION POINT: If outliers detected, agents vote to remove
+    // DECISION POINT: If batch effect detected, switch to batch_effect_script_edgeR_v2.R
     // NOTE: Agent decides if intervention needed after reviewing QC
-    // Agent can write custom script if problems detected
 
-    // Step 7: Differential Expression (simpleEdger3.R)
+    // Step 7: Differential Expression (simpleEdger3.R or batch_effect_script_edgeR_v2.R)
+    // NOTE: If batch effect detected in QC step, use batch correction script instead
     {
       name: 'DE Analysis (edgeR)',
       description: 'edgeR differential expression analysis (uses RAW filtered counts)',
       tool: 'edger',
       script: `${SCRIPTS_PATH}/simpleEdger3.R`,
+      alternativeScript: `${SCRIPTS_PATH}/batch_effect_edgeR_v3.R`,  // Use if batch effect detected (same input format)
       inputs: 'badIds_txt',  // Uses RAW filtered counts from filterIDS.R, NOT RPKM!
       requiresDebate: false,
       agent: 'pipeline',
       params: {
-        genome: config.organism === 'mouse' ? 'mm10' : 'hg38'
+        genome: config.organism === 'mouse' ? 'mm10' : 'hg38',
+        controlKeyword: config.controlKeyword || 'cont',
+        treatmentKeyword: config.treatmentKeyword || 'ips'
       },
       outputs: ['edger_results.txt'],
-      note: 'edgeR expects raw counts and does its own TMM normalization internally'
+      note: 'edgeR expects raw counts. If batch effect detected, switch to batch_effect_script_edgeR_v2.R'
     },
 
     // Step 8: Excel Conversion (edger3xl.R)
