@@ -1,6 +1,6 @@
 /**
  * LLM API Client Wrappers
- * Unified interface for OpenAI (GPT-4), Anthropic (Claude), and Google (Gemini)
+ * Unified interface for OpenAI (GPT-5.2), Anthropic (Claude Sonnet 4), and Google (Gemini)
  */
 
 import OpenAI from 'openai';
@@ -11,17 +11,17 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // ============================================
-// OpenAI Client (GPT-4 for Stats Agent)
+// OpenAI Client (GPT-5.2 for Stats Agent)
 // ============================================
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function callGPT4(prompt, options = {}) {
+export async function callGPT5(prompt, options = {}) {
   try {
     const response = await openai.chat.completions.create({
-      model: options.model || 'gpt-4-turbo-preview',
+      model: options.model || 'gpt-5.2-2025-12-11',
       messages: [
         {
           role: 'system',
@@ -33,21 +33,21 @@ export async function callGPT4(prompt, options = {}) {
         }
       ],
       temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
-      max_tokens: options.maxTokens || 2000,
+      max_completion_tokens: options.maxTokens || 2000,  // GPT-5 uses max_completion_tokens
     });
 
     return {
       success: true,
-      model: 'gpt-4',
+      model: 'gpt-5.2',
       content: response.choices[0].message.content,
       usage: response.usage,
       raw: response
     };
   } catch (error) {
-    console.error('[GPT-4 Error]:', error.message);
+    console.error('[GPT-5 Error]:', error.message);
     return {
       success: false,
-      model: 'gpt-4',
+      model: 'gpt-5.2',
       error: error.message,
       content: null
     };
@@ -65,7 +65,7 @@ const anthropic = new Anthropic({
 export async function callClaude(prompt, options = {}) {
   try {
     const response = await anthropic.messages.create({
-      model: options.model || 'claude-3-haiku-20240307',
+      model: options.model || 'claude-sonnet-4-20250514',
       max_tokens: options.maxTokens || 4096,
       temperature: options.temperature || 0,
       system: options.systemPrompt || 'You are a bioinformatics pipeline expert. Execute workflows, manage data processing, and ensure biological correctness.',
@@ -79,7 +79,7 @@ export async function callClaude(prompt, options = {}) {
 
     return {
       success: true,
-      model: 'claude-3-haiku',
+      model: 'claude-sonnet-4',
       content: response.content[0].text,
       usage: response.usage,
       raw: response
@@ -143,15 +143,15 @@ export async function callGemini(prompt, options = {}) {
 
 export async function callAllAgents(prompt, options = {}) {
   console.log('[Multi-Agent] Sending prompt to all 3 foundation models in parallel...');
-  console.log('[GPT-4 Stats Agent] Analyzing from statistical perspective...');
-  console.log('[Claude Pipeline Agent] Analyzing pipeline requirements...');
+  console.log('[GPT-5.2 Stats Agent] Analyzing from statistical perspective...');
+  console.log('[Claude Sonnet 4 Pipeline Agent] Analyzing pipeline requirements...');
   console.log('[Gemini Biology Agent] Analyzing biological context...');
   console.log('');
 
-  const [gpt4Result, claudeResult, geminiResult] = await Promise.all([
-    callGPT4(prompt, {
-      systemPrompt: options.gpt4SystemPrompt,
-      ...options.gpt4Options
+  const [gpt5Result, claudeResult, geminiResult] = await Promise.all([
+    callGPT5(prompt, {
+      systemPrompt: options.gpt5SystemPrompt || options.gpt4SystemPrompt,
+      ...options.gpt5Options || options.gpt4Options
     }),
     callClaude(prompt, {
       systemPrompt: options.claudeSystemPrompt,
@@ -164,35 +164,35 @@ export async function callAllAgents(prompt, options = {}) {
   ]);
 
   // Show FULL agent responses
-  console.log('[GPT-4 Stats Agent] ' + (gpt4Result.success ? '✓ Response received' : '✗ Failed'));
-  if (gpt4Result.success && gpt4Result.content) {
-    console.log('─'.repeat(60));
-    console.log(gpt4Result.content);
-    console.log('─'.repeat(60));
+  console.log('[GPT-5.2 Stats Agent] ' + (gpt5Result.success ? '✓ Response received' : '✗ Failed'));
+  if (gpt5Result.success && gpt5Result.content) {
+    console.log('-'.repeat(60));
+    console.log(gpt5Result.content);
+    console.log('-'.repeat(60));
   }
   console.log('');
 
-  console.log('[Claude Pipeline Agent] ' + (claudeResult.success ? '✓ Response received' : '✗ Failed'));
+  console.log('[Claude Sonnet 4 Pipeline Agent] ' + (claudeResult.success ? '✓ Response received' : '✗ Failed'));
   if (claudeResult.success && claudeResult.content) {
-    console.log('─'.repeat(60));
+    console.log('-'.repeat(60));
     console.log(claudeResult.content);
-    console.log('─'.repeat(60));
+    console.log('-'.repeat(60));
   }
   console.log('');
 
   console.log('[Gemini Biology Agent] ' + (geminiResult.success ? '✓ Response received' : '✗ Failed'));
   if (geminiResult.success && geminiResult.content) {
-    console.log('─'.repeat(60));
+    console.log('-'.repeat(60));
     console.log(geminiResult.content);
-    console.log('─'.repeat(60));
+    console.log('-'.repeat(60));
   }
   console.log('');
 
   return {
-    gpt4: gpt4Result,
+    gpt4: gpt5Result,  // Keep key as gpt4 for compatibility, but using GPT-5.2
     claude: claudeResult,
     gemini: geminiResult,
-    allSuccessful: gpt4Result.success && claudeResult.success && geminiResult.success
+    allSuccessful: gpt5Result.success && claudeResult.success && geminiResult.success
   };
 }
 
@@ -201,7 +201,7 @@ export async function callAllAgents(prompt, options = {}) {
 // ============================================
 
 /**
- * Stats Agent (GPT-4) - Statistical validation
+ * Stats Agent (GPT-5.2) - Statistical validation
  */
 export async function askStatsAgent(question, context = {}) {
   const prompt = `
@@ -221,7 +221,7 @@ Please provide:
 Be rigorous and specific.
 `;
 
-  return callGPT4(prompt, {
+  return callGPT5(prompt, {
     systemPrompt: 'You are a statistical expert for genomics. Focus on: threshold validation (FDR, logFC), multiple testing correction, sample size adequacy, outlier detection, and statistical assumptions.',
     temperature: 0 // Deterministic for reproducible scientific analysis
   });
@@ -313,7 +313,7 @@ Be practical and actionable.
 // ============================================
 
 export default {
-  callGPT4,
+  callGPT5,
   callClaude,
   callGemini,
   callAllAgents,

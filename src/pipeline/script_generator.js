@@ -24,6 +24,7 @@ const INDEX_PATH = process.env.INDEX_PATH || '/users/ha00014/Halimas_projects/mu
 const SCRIPT_FILES = {
   'fastq2bam': 'fastq2bam',           // NO .sh extension
   'featurecounts': 'featurecounts.R',
+  'featurecounts_unpaired': 'featurecounts_unpaired.R',  // For single-end reads
   'filterIDS': 'filterIDS.R',
   'RPKM': 'RPKM.R',
   'entrz': 'entrz.R',
@@ -131,10 +132,11 @@ export function generateAutomationScript(dataInfo, config, steps, outputPath) {
   scriptLines.push(`cd -`);
   scriptLines.push('');
 
-  // Step 3: Feature Counts
-  scriptLines.push('echo "Step 3/10: Feature Counts..."');
+  // Step 3: Feature Counts (use paired or unpaired script based on data)
+  const featurecountsScript = dataInfo.pairedEnd ? SCRIPT_FILES.featurecounts : SCRIPT_FILES.featurecounts_unpaired;
+  scriptLines.push(`echo "Step 3/10: Feature Counts (${dataInfo.pairedEnd ? 'paired-end' : 'single-end'})..."`);
   scriptLines.push('cd $OUTPUT_DIR/counts');
-  scriptLines.push(`Rscript $SCRIPTS_DIR/${SCRIPT_FILES.featurecounts} $GENOME $COMPARISON $CONTROL_KEYWORD $TREATMENT_KEYWORD $OUTPUT_DIR/bam_files/*.bam`);
+  scriptLines.push(`Rscript $SCRIPTS_DIR/${featurecountsScript} $GENOME $COMPARISON $CONTROL_KEYWORD $TREATMENT_KEYWORD $OUTPUT_DIR/bam_files/*.bam`);
   scriptLines.push('cd -');
   scriptLines.push('');
 
@@ -312,10 +314,11 @@ function generateBaseTemplate(dataInfo, config, steps) {
   scriptLines.push(`cd -`);
   scriptLines.push('');
 
-  // Step 3: Feature Counts
-  scriptLines.push('echo "Step 3/10: Feature Counts..."');
+  // Step 3: Feature Counts (use paired or unpaired script based on data)
+  const featurecountsScript = dataInfo.pairedEnd ? SCRIPT_FILES.featurecounts : SCRIPT_FILES.featurecounts_unpaired;
+  scriptLines.push(`echo "Step 3/10: Feature Counts (${dataInfo.pairedEnd ? 'paired-end' : 'single-end'})..."`);
   scriptLines.push('cd $OUTPUT_DIR/counts');
-  scriptLines.push(`Rscript $SCRIPTS_DIR/${SCRIPT_FILES.featurecounts} $GENOME $COMPARISON $CONTROL_KEYWORD $TREATMENT_KEYWORD $OUTPUT_DIR/bam_files/*.bam`);
+  scriptLines.push(`Rscript $SCRIPTS_DIR/${featurecountsScript} $GENOME $COMPARISON $CONTROL_KEYWORD $TREATMENT_KEYWORD $OUTPUT_DIR/bam_files/*.bam`);
   scriptLines.push('cd -');
   scriptLines.push('');
 
@@ -412,12 +415,15 @@ ENVIRONMENT SETUP:
 - Scripts directory: ${SCRIPTS_PATH}/
 
 AVAILABLE SCRIPTS (verified to exist):
-- featurecounts: ${SCRIPT_FILES.featurecounts}
+- featurecounts (paired-end): ${SCRIPT_FILES.featurecounts}
+- featurecounts (single-end): ${SCRIPT_FILES.featurecounts_unpaired}
 - filterIDS: ${SCRIPT_FILES.filterIDS}
 - RPKM: ${SCRIPT_FILES.RPKM}
 - entrz: ${SCRIPT_FILES.entrz}
 - simpleEdger3: ${SCRIPT_FILES.simpleEdger3}
 (Note: QC plots may not exist - skip that step if needed)
+
+DATA IS: ${dataInfo.pairedEnd ? 'PAIRED-END (use featurecounts.R)' : 'SINGLE-END (use featurecounts_unpaired.R)'}
 
 ALIGNMENT:
 - Use subread-align directly (NOT the fastq2bam wrapper script)
@@ -447,9 +453,9 @@ Step 2: Alignment (use subread-align directly with correct index path)
   mv *.bam *.log ${config.output}/bam_files/
   cd -
 
-Step 3: Feature Counts
+Step 3: Feature Counts (${dataInfo.pairedEnd ? 'PAIRED' : 'UNPAIRED'})
   cd ${config.output}/counts
-  Rscript ${SCRIPTS_PATH}/${SCRIPT_FILES.featurecounts} ${genomeBuild} ${config.comparison} ${config.controlKeyword} ${config.treatmentKeyword} ${config.output}/bam_files/*.bam
+  Rscript ${SCRIPTS_PATH}/${dataInfo.pairedEnd ? SCRIPT_FILES.featurecounts : SCRIPT_FILES.featurecounts_unpaired} ${genomeBuild} ${config.comparison} ${config.controlKeyword} ${config.treatmentKeyword} ${config.output}/bam_files/*.bam
   cd -
 
 Step 4: Filter Bad IDs
@@ -522,10 +528,10 @@ wait
 mv *.bam *.log ${config.output}/bam_files/
 cd -
 
-# Step 3/8: Feature Counts
+# Step 3/8: Feature Counts (${dataInfo.pairedEnd ? 'PAIRED' : 'UNPAIRED'})
 echo "Step 3/8: Feature Counts..."
 cd ${config.output}/counts
-Rscript ${SCRIPTS_PATH}/${SCRIPT_FILES.featurecounts} ${genomeBuild} ${config.comparison} ${config.controlKeyword} ${config.treatmentKeyword} ${config.output}/bam_files/*.bam
+Rscript ${SCRIPTS_PATH}/${dataInfo.pairedEnd ? SCRIPT_FILES.featurecounts : SCRIPT_FILES.featurecounts_unpaired} ${genomeBuild} ${config.comparison} ${config.controlKeyword} ${config.treatmentKeyword} ${config.output}/bam_files/*.bam
 cd -
 
 # ... CONTINUE WITH ALL OTHER STEPS (4-8) ...

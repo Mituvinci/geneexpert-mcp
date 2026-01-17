@@ -24,8 +24,8 @@ const anthropic = new Anthropic({
 export class MCPClaudeAgent {
   constructor(config = {}) {
     this.config = config;
-    // Use Claude 3.5 Sonnet (latest) or fall back to Haiku if not available
-    this.model = config.model || 'claude-3-5-sonnet-20241022'; // Latest Sonnet for tool use
+    // Use Claude Sonnet 4 (latest) for best tool use capability
+    this.model = config.model || 'claude-sonnet-4-20250514';
     this.verbose = config.verbose || false;
   }
 
@@ -105,8 +105,8 @@ ${JSON.stringify(context, null, 2)}`;
       } catch (modelError) {
         // If Sonnet not available, fall back to Haiku
         if (modelError.status === 404 && this.model.includes('sonnet')) {
-          this.log('[MCP Claude Agent] Sonnet not available, falling back to Haiku...');
-          this.model = 'claude-3-haiku-20240307';
+          this.log('[MCP Claude Agent] Sonnet 4 not available, falling back to Sonnet 3.5...');
+          this.model = 'claude-3-5-sonnet-20241022';
           response = await anthropic.messages.create({
             model: this.model,
             max_tokens: 4096,
@@ -251,10 +251,10 @@ ${JSON.stringify(context, null, 2)}`;
   }
 
   /**
-   * Logging helper
+   * Logging helper - only prints if verbose mode is enabled
    */
   log(message) {
-    if (this.verbose || true) {
+    if (this.verbose) {
       console.log(message);
     }
   }

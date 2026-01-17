@@ -5,7 +5,7 @@
  * Verifies OpenAI, Anthropic, and Google API keys are configured correctly
  */
 
-import { callGPT4, callClaude, callGemini } from './llm_clients.js';
+import { callGPT5, callClaude, callGemini } from './llm_clients.js';
 
 console.log('🧪 Testing LLM API Connections...\n');
 console.log('='.repeat(60));
@@ -15,26 +15,26 @@ const testPrompt = 'Respond with exactly: "API connection successful"';
 async function testAPIs() {
   let allPassed = true;
 
-  // Test OpenAI (GPT-4)
-  console.log('\n1. Testing OpenAI (GPT-4)...');
+  // Test OpenAI (GPT-5.2)
+  console.log('\n1. Testing OpenAI (GPT-5.2)...');
   try {
-    const gpt4Result = await callGPT4(testPrompt, {
+    const gpt5Result = await callGPT5(testPrompt, {
       systemPrompt: 'You are a test assistant.',
       maxTokens: 50
     });
 
-    if (gpt4Result.success) {
-      console.log('   ✅ GPT-4 Connected!');
-      console.log(`   Model: ${gpt4Result.model}`);
-      console.log(`   Response: ${gpt4Result.content.substring(0, 100)}...`);
-      console.log(`   Tokens used: ${gpt4Result.usage?.total_tokens || 'N/A'}`);
+    if (gpt5Result.success) {
+      console.log('   ✅ GPT-5.2 Connected!');
+      console.log(`   Model: ${gpt5Result.model}`);
+      console.log(`   Response: ${gpt5Result.content.substring(0, 100)}...`);
+      console.log(`   Tokens used: ${gpt5Result.usage?.total_tokens || 'N/A'}`);
     } else {
-      console.log('   ❌ GPT-4 Failed!');
-      console.log(`   Error: ${gpt4Result.error}`);
+      console.log('   ❌ GPT-5.2 Failed!');
+      console.log(`   Error: ${gpt5Result.error}`);
       allPassed = false;
     }
   } catch (error) {
-    console.log('   ❌ GPT-4 Error!');
+    console.log('   ❌ GPT-5.2 Error!');
     console.log(`   ${error.message}`);
     allPassed = false;
   }

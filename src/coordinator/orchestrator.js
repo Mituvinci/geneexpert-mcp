@@ -4,7 +4,7 @@
  */
 
 import {
-  callGPT4,
+  callGPT5,
   callClaude,
   callGemini,
   callAllAgents,

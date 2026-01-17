@@ -98,8 +98,8 @@ How: Template-based bash script
 Cost: $0 (no API calls during execution)
 Speed: Fast (no agent overhead)
 
-Pipeline: FastQC → Alignment → featureCounts → filterIDS
-          → RPKM → entrz → edgeR → merge_results → Excel
+Pipeline: FASTQ Validation → FastQC → Alignment → featureCounts → filterIDS
+          → RPKM → entrz → QC Plots → edgeR → merge_results → Excel
 ```
 
 #### Path 2: ADAPTATION (Intelligent - Agent Writes Code!)
@@ -172,11 +172,13 @@ orchestration scripts that CALL your existing R scripts intelligently!
 
 ### What Each Agent Does:
 
-| Agent | Can Read Files? | Can Write Code? | Can Execute Code? | Role |
-|-------|----------------|-----------------|-------------------|------|
-| **GPT-4 (Stats)** | ❌ No | ❌ No | ❌ No | Pure reasoning - validates statistics |
-| **Claude (Pipeline)** | ✅ YES (MCP) | ✅ YES (writes bash) | ✅ YES (executes scripts) | Code generation & execution |
-| **Gemini (Biology)** | ❌ No | ❌ No | ❌ No | Pure reasoning - validates biology |
+| Agent | Can Read Files? | Can Write Code? | Can Execute Code? | Can View Images? | Role |
+|-------|----------------|-----------------|-------------------|------------------|------|
+| **GPT-4 (Stats)** | ❌ No | ❌ No | ❌ No | ✅ YES | Pure reasoning - validates statistics |
+| **Claude (Pipeline)** | ✅ YES (MCP) | ✅ YES (writes bash) | ✅ YES (executes scripts) | ✅ YES | Code generation & execution |
+| **Gemini (Biology)** | ❌ No | ❌ No | ❌ No | ✅ YES | Pure reasoning - validates biology |
+
+**NEW! All 3 agents have VISION capability** - they can view PCA/MDS plots and vote on outliers/batch effects!
 
 ### What Claude Writes in ADAPTATION Mode:
 
@@ -282,6 +284,67 @@ ADAPTATION Mode:
    - Fixed confidence calculation bug (Jan 6, 2026)
    - Correctly handles all vote types
    - Shows accurate reasoning ("3/3 agents recommend...")
+
+10. **QC Plots with Agent Vision** (NEW! Jan 15, 2026)
+    - `qc_plots.R` generates PCA, MDS, density plots as PNG
+    - ALL 3 agents can VIEW images (GPT-4, Claude, Gemini have vision)
+    - Agents VOTE on outlier detection (z-score > 2.5 SD from group centroid)
+    - Agents VOTE on batch effects (separation score, PC1 correlation)
+    - Unanimous vote required for sample removal
+
+11. **Batch Effect Correction** (NEW! Jan 15, 2026)
+    - `batch_effect_edgeR_v3.R` - same input format as standard edgeR
+    - Uses design matrix `~batch + condition` when batch effects detected
+    - Agents decide: standard edgeR OR batch-corrected edgeR
+
+12. **Decision-Level Evaluation Framework** (NEW! Jan 15, 2026)
+    - Every agent decision gets unique `decision_id` for ICML evaluation
+    - Format: `{dataset}_{step}_{type}` (e.g., `DA0036_step0_mode`)
+    - Runtime logging: decisions can be joined with ground truth offline
+    - Decision-type aware disagreement scoring
+    - `TOTAL_AGENTS` constant for scalability (currently 3, extensible to 4+)
+
+---
+
+## 🔬 QC Plots: Agent Vision for Outlier/Batch Detection
+
+**The Innovation:** Agents don't just read numbers - they VIEW PCA plots and VOTE on sample quality!
+
+### How It Works:
+
+```
+Step 7: QC Plots (after normalization)
+    ↓
+qc_plots.R generates:
+  - PCA plot (PNG) - sample clustering
+  - MDS plot (PNG) - distance visualization
+  - Density plot (PNG) - library size distribution
+  - qc_summary.json - structured metrics
+    ↓
+ALL 3 AGENTS VIEW THE IMAGES:
+  [GPT-4]:   "Sample_3 is 3.2 SD from group centroid - outlier"
+  [Claude]:  "Separation score 1.2 suggests batch effects"
+  [Gemini]:  "Groups overlap significantly - check batch"
+    ↓
+CONSENSUS VOTING:
+  - Outlier detection: Unanimous required (3/3) for removal
+  - Batch effects: Majority vote (2/3) to use corrected edgeR
+    ↓
+IF batch effects detected:
+  → Use batch_effect_edgeR_v3.R (design: ~batch + condition)
+ELSE:
+  → Use simpleEdger3.R (standard design: ~condition)
+```
+
+### Outlier Detection Criteria:
+- **Z-score > 2.5** from group centroid in PCA space
+- Flagged samples shown to agents with reasoning
+- User always has final say (unanimous vote OR escalation)
+
+### Batch Effect Detection Criteria:
+- **Separation score < 1.5** (samples spread within groups)
+- **PC1 correlation with group < 0.8**
+- Either triggers batch correction recommendation
 
 ---
 
@@ -435,14 +498,15 @@ Rscript filterIDS.R test_run.count.csv
 ├── src/
 │   ├── pipeline/
 │   │   ├── executor.js                  # Main orchestration
-│   │   ├── planner.js                   # Pipeline planning
+│   │   ├── planner.js                   # Pipeline planning (10 steps)
 │   │   ├── script_generator.js          # AUTOMATION & ADAPTATION scripts
+│   │   ├── modification_engine.js       # Script modification for ADAPTATION
 │   │   └── data_detector.js             # Auto-detect data type
 │   ├── agents/
 │   │   └── mcp_claude_agent.js          # MCP-enabled Claude (ADAPTATION)
 │   ├── coordinator/
-│   │   ├── orchestrator.js              # Multi-agent coordination
-│   │   └── consensus.js                 # Voting & decision synthesis
+│   │   ├── orchestrator.js              # Multi-agent coordination + decision_id
+│   │   └── consensus.js                 # Voting, disagreement scoring, TOTAL_AGENTS
 │   ├── mcp/
 │   │   ├── server.js                    # MCP server
 │   │   └── tools.js                     # 14+ MCP tools
@@ -451,7 +515,12 @@ Rscript filterIDS.R test_run.count.csv
 │       └── logger.js                    # Logging system
 ├── bio_informatics/
 │   ├── scripts/                         # Lab R/bash scripts (existing)
+│   │   ├── qc_plots.R                   # QC: PCA, MDS, outlier detection (NEW!)
+│   │   ├── batch_effect_edgeR_v3.R      # Batch-corrected DE analysis (NEW!)
+│   │   └── ...                          # Other existing scripts
 │   └── myprog/                          # Reference data
+├── experiments/
+│   └── ground_truth.json                # Template for ICML evaluation
 ├── IMPLEMENTATION_STATUS.md              # Detailed progress tracking
 ├── HYBRID_ARCHITECTURE.md                # System design doc
 └── README.md                             # This file
@@ -532,15 +601,17 @@ Groups: cont (n=2) vs ips (n=2)
    results/DA0036_test/geneexpert_DA0036_stroke_vs_control_v1.sh
 
 Pipeline Steps:
+  0. FASTQ Validation
   1. FastQC
   2. Alignment (Subread-align)
   3. Feature Counts
   4. Filter Bad IDs
   5. RPKM Normalization (for visualization)
   6. Add Gene Symbols
-  7. DE Analysis (edgeR with raw counts)
-  8. Merge RPKM + DE Results into Excel
-  9. Complete
+  7. QC Plots (PCA, MDS) → Agents VIEW & VOTE
+  8. DE Analysis (edgeR with raw counts)
+  9. Merge RPKM + DE Results into Excel
+  10. Complete
 
 ⚠️  This will execute the generated script!
 
@@ -568,9 +639,9 @@ Step 2/10: Alignment (FASTQ to BAM)...
 
 ---
 
-## 📈 Development Status (Jan 11, 2026)
+## 📈 Development Status (Jan 15, 2026)
 
-### 🟢 SYSTEM OPERATIONAL - First Successful End-to-End Run Complete!
+### 🟢 SYSTEM OPERATIONAL - QC & Evaluation Framework Complete!
 
 **Completed:**
 - ✅ Multi-agent decision making (AUTOMATION vs ADAPTATION)
@@ -592,17 +663,31 @@ Step 2/10: Alignment (FASTQ to BAM)...
 
 **Major Achievement (Jan 11, 2026):**
 - ✅ First successful end-to-end run (DA0036 dataset)
-- ✅ All 9 steps completed from FASTQ → Excel
+- ✅ All 10 steps completed from FASTQ → Excel
 - ✅ Feedback loops working (error detection + v2 generation)
 - ✅ Intelligent step detection (skip completed steps on retry)
 
+**Major Achievement (Jan 15, 2026):**
+- ✅ QC Plots with Agent Vision (`qc_plots.R`)
+  - PCA, MDS, density plots as PNG for agents to VIEW
+  - Outlier detection (z-score > 2.5 SD from group centroid)
+  - Batch effect detection (separation score, PC1 correlation)
+- ✅ Batch Effect Correction (`batch_effect_edgeR_v3.R`)
+  - Same input format as `simpleEdger3.R`
+  - Uses `~batch + condition` design matrix
+- ✅ Decision-Level Evaluation Framework
+  - Unique `decision_id` for every agent decision
+  - Runtime logging for ICML paper evaluation
+  - Decision-type aware disagreement scoring
+  - `TOTAL_AGENTS` constant for scalability (3 → 4+ agents)
+
 **Next Steps:**
-- Week 3 (Jan 12-15): Test with different datasets (clean, problematic, edge cases)
-- Week 3 (Jan 12-15): Collect baseline metrics (no-agent, single-agent, multi-agent)
-- Week 4 (Jan 16-22): Measure error reduction, consensus quality, cost
+- Week 3 (Jan 15-17): Test with different datasets (clean, problematic, edge cases)
+- Week 3 (Jan 15-17): Collect baseline metrics (no-agent, single-agent, multi-agent)
+- Week 4 (Jan 18-22): Measure error reduction, consensus quality, cost
 - Week 5 (Jan 23-28): Write ICML paper
 
-**Days to ICML Deadline:** 17 days
+**Days to ICML Deadline:** 13 days
 
 ---
 
@@ -700,7 +785,7 @@ MIT
 
 - **GitHub:** https://github.com/Mituvinci/geneexpert-mcp
 - **Status:** 🟢 System operational - First successful end-to-end run complete!
-- **Last Updated:** January 11, 2026
+- **Last Updated:** January 15, 2026
 
 ---
 

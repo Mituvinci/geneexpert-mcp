@@ -60,6 +60,13 @@ export async function executeAnalysis(config) {
 
   const agentDecision = await coordinator.decideAnalysisApproach(dataInfo, config, steps);
 
+  // Log the initial agent decision to conversation file
+  logger.logAgentConversation(
+    { name: 'AUTOMATION vs ADAPTATION Decision', description: 'Agents decide analysis approach' },
+    agentDecision.responses,
+    agentDecision.consensus
+  );
+
   console.log('');
 
   // Step 4: GENERATE SCRIPT based on agent decision
@@ -591,9 +598,9 @@ function createDetailedPlan(dataInfo, config, steps, agentDecision, scriptResult
  */
 function displayPlan(plan) {
   console.log('');
-  console.log('╔' + '═'.repeat(58) + '╗');
-  console.log('║' + ' '.repeat(15) + 'PROPOSED ANALYSIS PLAN' + ' '.repeat(21) + '║');
-  console.log('╚' + '═'.repeat(58) + '╝');
+  console.log('+' + '='.repeat(58) + '+');
+  console.log('|' + ' '.repeat(15) + 'PROPOSED ANALYSIS PLAN' + ' '.repeat(21) + '|');
+  console.log('+' + '='.repeat(58) + '+');
   console.log('');
 
   // Experiment details
@@ -653,8 +660,8 @@ function displayPlan(plan) {
   console.log(`   - Versioned script (for reproducibility)`);
   console.log('');
 
-  console.log('─'.repeat(60));
-  console.log('⚠️  IMPORTANT: No analysis has been run yet.');
+  console.log('-'.repeat(60));
+  console.log('IMPORTANT: No analysis has been run yet.');
   console.log('   This is a preview of what will happen.');
   console.log('');
 }
