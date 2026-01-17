@@ -39,6 +39,8 @@ program
   .option('--aligner <tool>', 'Alignment tool: star or hisat2', 'star')
   .option('--de-tool <tool>', 'DE analysis tool: edger or deseq2', 'edger')
   .option('--threads <n>', 'Number of threads', '4')
+  .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (for experiments)')
+  .option('--force-automation', 'Skip all agents, use template-based AUTOMATION only (no-agent baseline)')
   .option('--verbose', 'Verbose output', false)
   .action(async (input, options) => {
     console.log('🧬 GeneExpert Multi-Agent RNA-seq Analysis');
@@ -71,6 +73,8 @@ program
       aligner: options.aligner,
       deTool: options.deTool,
       threads: parseInt(options.threads),
+      singleAgent: options.singleAgent, // For experimental comparisons
+      forceAutomation: options.forceAutomation, // Skip agents, use template only
       verbose: options.verbose
     };
 

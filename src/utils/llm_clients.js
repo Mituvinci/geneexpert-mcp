@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
+import { getSystemPrompt } from '../config/prompts.js';
 
 dotenv.config();
 
@@ -142,6 +143,88 @@ export async function callGemini(prompt, options = {}) {
 // ============================================
 
 export async function callAllAgents(prompt, options = {}) {
+  const singleAgent = options.singleAgent;
+
+  // Single-agent mode for experiments (uses COMBINED prompt - agent does stats + pipeline + biology)
+  if (singleAgent) {
+    console.log(`[Single-Agent Mode] Using only ${singleAgent.toUpperCase()} agent...`);
+    console.log('[Single-Agent] This agent will perform ALL roles: Statistical + Pipeline + Biological analysis');
+    console.log('');
+
+    let result;
+    if (singleAgent === 'gpt5.2' || singleAgent === 'gpt4') {
+      console.log('[GPT-5.2 Full-Stack Agent] Analyzing (Stats + Pipeline + Biology)...');
+      // Get COMBINED prompt for single-agent mode
+      const combinedPrompt = getSystemPrompt('gpt5.2', true);
+      result = await callGPT5(prompt, {
+        systemPrompt: combinedPrompt,
+        ...options.gpt5_2_Options
+      });
+      console.log('[GPT-5.2 Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
+      if (result.success && result.content) {
+        console.log('-'.repeat(60));
+        console.log(result.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      return {
+        gpt5_2: result,
+        claude: { success: false, model: 'claude', content: null, skipped: true },
+        gemini: { success: false, model: 'gemini', content: null, skipped: true },
+        allSuccessful: result.success,
+        singleAgentMode: true
+      };
+    } else if (singleAgent === 'claude') {
+      console.log('[Claude Full-Stack Agent] Analyzing (Stats + Pipeline + Biology + MCP Tools)...');
+      // Get COMBINED prompt for single-agent mode (includes MCP tool usage)
+      const combinedPrompt = getSystemPrompt('claude', true);
+      result = await callClaude(prompt, {
+        systemPrompt: combinedPrompt,
+        ...options.claudeOptions
+      });
+      console.log('[Claude Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
+      if (result.success && result.content) {
+        console.log('-'.repeat(60));
+        console.log(result.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      return {
+        gpt5_2: { success: false, model: 'gpt-5.2', content: null, skipped: true },
+        claude: result,
+        gemini: { success: false, model: 'gemini', content: null, skipped: true },
+        allSuccessful: result.success,
+        singleAgentMode: true
+      };
+    } else if (singleAgent === 'gemini') {
+      console.log('[Gemini Full-Stack Agent] Analyzing (Stats + Pipeline + Biology)...');
+      // Get COMBINED prompt for single-agent mode
+      const combinedPrompt = getSystemPrompt('gemini', true);
+      result = await callGemini(prompt, {
+        systemPrompt: combinedPrompt,
+        ...options.geminiOptions
+      });
+      console.log('[Gemini Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
+      if (result.success && result.content) {
+        console.log('-'.repeat(60));
+        console.log(result.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      return {
+        gpt5_2: { success: false, model: 'gpt-5.2', content: null, skipped: true },
+        claude: { success: false, model: 'claude', content: null, skipped: true },
+        gemini: result,
+        allSuccessful: result.success,
+        singleAgentMode: true
+      };
+    }
+  }
+
+  // Multi-agent mode (default)
   console.log('[Multi-Agent] Sending prompt to all 3 foundation models in parallel...');
   console.log('[GPT-5.2 Stats Agent] Analyzing from statistical perspective...');
   console.log('[Claude Sonnet 4 Pipeline Agent] Analyzing pipeline requirements...');
@@ -150,8 +233,8 @@ export async function callAllAgents(prompt, options = {}) {
 
   const [gpt5Result, claudeResult, geminiResult] = await Promise.all([
     callGPT5(prompt, {
-      systemPrompt: options.gpt5SystemPrompt || options.gpt4SystemPrompt,
-      ...options.gpt5Options || options.gpt4Options
+      systemPrompt: options.gpt5_2_SystemPrompt,
+      ...options.gpt5_2_Options
     }),
     callClaude(prompt, {
       systemPrompt: options.claudeSystemPrompt,
@@ -189,7 +272,7 @@ export async function callAllAgents(prompt, options = {}) {
   console.log('');
 
   return {
-    gpt4: gpt5Result,  // Keep key as gpt4 for compatibility, but using GPT-5.2
+    gpt5_2: gpt5Result,
     claude: claudeResult,
     gemini: geminiResult,
     allSuccessful: gpt5Result.success && claudeResult.success && geminiResult.success
@@ -222,7 +305,18 @@ Be rigorous and specific.
 `;
 
   return callGPT5(prompt, {
-    systemPrompt: 'You are a statistical expert for genomics. Focus on: threshold validation (FDR, logFC), multiple testing correction, sample size adequacy, outlier detection, and statistical assumptions.',
+    systemPrompt: `You are a statistical expert for genomics.
+Your role is limited to statistical validity, uncertainty, and evaluation metrics.
+
+Rules:
+- Do NOT provide biological interpretation or pipeline implementation details.
+- Base conclusions only on information provided in the input.
+- If assumptions are required or data is insufficient, respond with UNCERTAIN.
+
+Output:
+- One clear recommendation
+- A confidence level (HIGH / MEDIUM / LOW)
+- A brief statistical justification`,
     temperature: 0 // Deterministic for reproducible scientific analysis
   });
 }
@@ -249,7 +343,18 @@ Focus on biological insight.
 `;
 
   return callGemini(prompt, {
-    systemPrompt: 'You are a molecular biology and genomics expert. Interpret results through biological lens: pathway analysis, gene function, regulatory networks, disease mechanisms, and experimental validation.',
+    systemPrompt: `You are a molecular biology expert.
+Your role is biological interpretation and experimental plausibility.
+
+Rules:
+- Do NOT comment on statistical methods or pipeline mechanics.
+- Base reasoning on known biological principles only.
+- If evidence is weak or ambiguous, respond with UNCERTAIN.
+
+Output:
+- Biological assessment
+- Plausibility check
+- Confidence level`,
     temperature: 0
   });
 }
@@ -276,7 +381,18 @@ Be thorough and critical.
 `;
 
   return callClaude(prompt, {
-    systemPrompt: 'You are a quality control expert for RNA-seq/ATAC-seq. Monitor technical artifacts: batch effects, outliers, low-quality samples, normalization issues, and sequencing depth problems.',
+    systemPrompt: `You are a bioinformatics pipeline expert.
+Your role is to assess technical feasibility, QC risks, and execution reliability.
+
+Rules:
+- Use tool-grounded reasoning when files or scripts are available.
+- Do NOT speculate about biological meaning.
+- Flag edge cases such as batch effects, low read depth, or missing metadata.
+
+Output:
+- Recommended action (AUTOMATION / ADAPTATION / UNCERTAIN)
+- Key technical risk factors
+- Confidence level`,
     temperature: 0
   });
 }
@@ -303,7 +419,18 @@ Be practical and actionable.
 `;
 
   return callClaude(prompt, {
-    systemPrompt: 'You are a bioinformatics pipeline expert. Guide RNA-seq/ATAC-seq workflows: tool selection, parameter optimization, quality checks, and troubleshooting. Ensure biological best practices.',
+    systemPrompt: `You are a bioinformatics pipeline expert.
+Your role is to assess technical feasibility, QC risks, and execution reliability.
+
+Rules:
+- Use tool-grounded reasoning when files or scripts are available.
+- Do NOT speculate about biological meaning.
+- Flag edge cases such as batch effects, low read depth, or missing metadata.
+
+Output:
+- Recommended action (AUTOMATION / ADAPTATION / UNCERTAIN)
+- Key technical risk factors
+- Confidence level`,
     temperature: 0
   });
 }

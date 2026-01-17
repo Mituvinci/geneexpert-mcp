@@ -10,10 +10,10 @@ const TOTAL_AGENTS = 3;
  * Analyze agreement between agents
  */
 export function analyzeAgreement(responses) {
-  const { gpt4, claude, gemini } = responses;
+  const { gpt5_2, claude, gemini } = responses;
 
   // Count successful responses
-  const successCount = [gpt4.success, claude.success, gemini.success].filter(Boolean).length;
+  const successCount = [gpt5_2.success, claude.success, gemini.success].filter(Boolean).length;
 
   if (successCount < 2) {
     return {
@@ -28,7 +28,7 @@ export function analyzeAgreement(responses) {
     level: 'pending_analysis',
     successCount,
     agents: {
-      stats: gpt4,
+      stats: gpt5_2,
       pipeline: claude,
       biology: gemini
     }
@@ -111,11 +111,11 @@ export function extractDecision(agentResponse, decisionType = 'default') {
  * - Change methods: Majority + user approval required
  */
 export function vote(responses, decisionType = 'threshold') {
-  const { gpt4, claude, gemini } = responses;
+  const { gpt5_2, claude, gemini } = responses;
 
   // Extract decisions from each agent (pass decisionType for context)
   const decisions = {
-    stats: extractDecision(gpt4, decisionType),
+    stats: extractDecision(gpt5_2, decisionType),
     pipeline: extractDecision(claude, decisionType),
     biology: extractDecision(gemini, decisionType)
   };
@@ -233,10 +233,10 @@ export function vote(responses, decisionType = 'threshold') {
  * Categorize disagreement type
  */
 export function categorizeDisagreement(responses) {
-  const { gpt4, claude, gemini } = responses;
+  const { gpt5_2, claude, gemini } = responses;
 
   const decisions = {
-    stats: extractDecision(gpt4),
+    stats: extractDecision(gpt5_2),
     pipeline: extractDecision(claude),
     biology: extractDecision(gemini)
   };
@@ -483,7 +483,7 @@ export function extractStructuredRecommendations(responses, dataInfo, config) {
 
   // Analyze all agent responses for specific recommendations
   const allContent = [
-    responses.gpt4?.content || '',
+    responses.gpt5_2?.content || '',
     responses.claude?.content || '',
     responses.gemini?.content || ''
   ].join(' ').toLowerCase();

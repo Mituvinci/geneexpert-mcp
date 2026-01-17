@@ -1,0 +1,26 @@
+GeneExpert Multi-Agent Analysis Log
+Session: test_analysis
+Started: 2026-01-17T21:43:40.444Z
+================================================================================
+
+[2026-01-17T21:43:40.454Z] [INFO] Decision Point: Automation vs Adaptation Decision -> ADAPTATION (72% confidence)
+[2026-01-17T21:43:40.459Z] [INFO] Decision Point: FDR Threshold Selection -> FDR_0.05 (90% confidence)
+
+================================================================================
+ANALYSIS COMPLETE
+Finished: 2026-01-17T21:43:40.462Z
+================================================================================
+
+Summary:
+  Input Type: FASTQ
+  Samples: 4
+  Steps Executed: 2/2
+  Multi-Agent Decisions: 0
+  Thresholds: FDR < 0.05, logFC > 1
+  Output Directory: ./test_output
+
+  Total API Cost: $0.012
+    GPT-5.2: $0.004
+    Claude:  $0.007
+    Gemini:  $0.000
+

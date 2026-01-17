@@ -21,12 +21,15 @@ import {
   categorizeDisagreement
 } from './consensus.js';
 
+import { getMultiAgentPrompts } from '../config/prompts.js';
+
 /**
  * Main Coordinator Class
  */
 export class Coordinator {
   constructor(options = {}) {
     this.verbose = options.verbose || false;
+    this.singleAgent = options.singleAgent || null;  // For experimental single-agent mode
     this.sessionHistory = [];
     this.currentDataset = null;  // Set when analysis starts, used for decision_id generation
     this.stepCounter = 0;        // Tracks pipeline step for unique decision_ids
@@ -63,15 +66,17 @@ export class Coordinator {
     this.log(`Decision type: ${decisionType}`);
     if (decision_id) this.log(`Decision ID: ${decision_id}`);
 
-    // Call all agents in parallel
+    // Call all agents in parallel (or single agent if in experimental mode)
+    // Note: In single-agent mode, the agent gets a COMBINED prompt (stats + pipeline + bio)
+    // In multi-agent mode, each agent gets a domain-separated prompt
+    const prompts = getMultiAgentPrompts();
     const responses = await callAllAgents(question, {
-      gpt4SystemPrompt: 'You are a statistical expert for genomics. Provide statistical validation and recommendations.',
-      claudeSystemPrompt: 'You are a bioinformatics pipeline expert. Provide technical and quality control guidance.',
-      geminiSystemPrompt: 'You are a molecular biology expert. Provide biological interpretation and validation.'
+      singleAgent: this.singleAgent,
+      ...prompts
     });
 
     // Log responses
-    this.log(`GPT-4: ${responses.gpt4.success ? 'responded' : 'failed'}`);
+    this.log(`GPT-5.2: ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
     this.log(`Claude: ${responses.claude.success ? 'responded' : 'failed'}`);
     this.log(`Gemini: ${responses.gemini.success ? 'responded' : 'failed'}`);
 

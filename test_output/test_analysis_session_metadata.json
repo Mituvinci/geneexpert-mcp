@@ -1,0 +1,56 @@
+{
+  "session_id": "test_analysis_2026-01-17T21-43-40-444Z",
+  "timestamp_start": "2026-01-17T21:43:40.444Z",
+  "timestamp_end": "2026-01-17T21:43:40.462Z",
+  "duration_seconds": 0.018,
+  "system": "multi-agent",
+  "config": {
+    "input": "/data/test_dataset",
+    "output": "./test_output",
+    "organism": "mouse",
+    "comparison": "test_comparison",
+    "singleAgent": null
+  },
+  "data_info": {
+    "type": "fastq",
+    "samples": [
+      "cont1",
+      "cont2",
+      "ips1",
+      "ips2"
+    ],
+    "sample_count": 4,
+    "paired_end": true,
+    "groups": {
+      "control": [
+        "cont1",
+        "cont2"
+      ],
+      "treatment": [
+        "ips1",
+        "ips2"
+      ]
+    }
+  },
+  "execution": {
+    "script_path": "test_output/test_script_v1.sh",
+    "script_type": "ADAPTATION",
+    "success": true,
+    "attempts": 1,
+    "exit_code": null
+  },
+  "costs": {
+    "total_usd": 0.011923,
+    "breakdown": {
+      "gpt5_2": 0.004425,
+      "claude": 0.007350000000000001,
+      "gemini": 0.000148
+    }
+  },
+  "metrics": {
+    "total_decisions": 2,
+    "decisions_automation": 0,
+    "decisions_adaptation": 1,
+    "average_confidence": 0.81
+  }
+}

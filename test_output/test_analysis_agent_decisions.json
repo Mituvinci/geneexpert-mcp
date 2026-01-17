@@ -1,0 +1,225 @@
+{
+  "session_id": "test_analysis_2026-01-17T21-43-40-444Z",
+  "timestamp_start": "2026-01-17T21:43:40.444Z",
+  "timestamp_end": "2026-01-17T21:43:40.462Z",
+  "duration_seconds": 0.018,
+  "system": "multi-agent",
+  "config": {
+    "input": "/data/test_dataset",
+    "output": "./test_output",
+    "organism": "mouse",
+    "comparison": "test_comparison",
+    "singleAgent": null
+  },
+  "decisions": [
+    {
+      "decision_id": "test_dataset_step1_approach",
+      "step_name": "Automation vs Adaptation Decision",
+      "step_description": "Agents decide analysis approach",
+      "timestamp": "2026-01-17T21:43:40.453Z",
+      "decision_type": "approach_decision",
+      "user_prompt": "Dataset: test_dataset\nOrganism: mouse\nSamples: n=2 per group (control: cont1, cont2; treatment: ips1, ips2)\nData type: FASTQ paired-end\n\nQuestion: Should we use AUTOMATION (template pipeline) or ADAPTATION (custom solution)?",
+      "agent_responses": {
+        "gpt5_2": {
+          "model": "gpt-5.2-2025-12-11",
+          "success": true,
+          "content": "Statistical Assessment:\n- Sample size n=2 is below recommended minimum (n≥3)\n- Statistical power will be limited\n- Recommendation: ADAPTATION with robust methods\n\nConfidence: HIGH\nReasoning: Small sample size requires specialized statistical approach",
+          "extracted_decision": "ADAPTATION",
+          "confidence_label": "HIGH",
+          "confidence_score": 0.9,
+          "tokens": {
+            "prompt_tokens": 450,
+            "completion_tokens": 230,
+            "total_tokens": 680
+          },
+          "cost_usd": 0.003425,
+          "skipped": false
+        },
+        "claude": {
+          "model": "claude-sonnet-4-20250514",
+          "success": true,
+          "content": "Pipeline/QC Assessment:\n- Dataset: 2 samples per group (edge case)\n- Risk: Low statistical power, batch effects could dominate\n- Recommendation: ADAPTATION (custom QC pipeline)\n\nConfidence: MEDIUM\nTechnical risks: Limited replication, sensitivity to outliers",
+          "extracted_decision": "ADAPTATION",
+          "confidence_label": "MEDIUM",
+          "confidence_score": 0.7,
+          "tokens": {
+            "input_tokens": 450,
+            "output_tokens": 310
+          },
+          "cost_usd": 0.006,
+          "skipped": false,
+          "mcp_tools_used": [
+            {
+              "tool": "read_file",
+              "file": "/data/test_dataset/metadata.txt",
+              "success": true
+            }
+          ]
+        },
+        "gemini": {
+          "model": "gemini-2.5-flash",
+          "success": true,
+          "content": "Biological Assessment:\n- Mouse stroke model is well-established\n- n=2 per group is acceptable for pilot studies\n- Recommendation: AUTOMATION (standard pipeline is fine)\n\nConfidence: MEDIUM\nPlausibility: Biological signal likely detectable despite low n",
+          "extracted_decision": "AUTOMATION",
+          "confidence_label": "MEDIUM",
+          "confidence_score": 0.7,
+          "tokens": {
+            "promptTokenCount": 450,
+            "candidatesTokenCount": 280
+          },
+          "cost_usd": 0.000118,
+          "skipped": false
+        }
+      },
+      "consensus": {
+        "decision": "adaptation",
+        "confidence_label": "MEDIUM",
+        "confidence_score": 0.72,
+        "voting_method": "majority",
+        "votes": {
+          "automation": 1,
+          "adaptation": 2,
+          "uncertain": 0
+        },
+        "vote_breakdown": null,
+        "reasoning": "Majority of agents (2/3) recommend ADAPTATION due to small sample size",
+        "recommendations": [
+          {
+            "priority": "HIGH",
+            "action": "normalization",
+            "message": "Use robust normalization (TMM or DESeq2)"
+          },
+          {
+            "priority": "MEDIUM",
+            "action": "qc",
+            "message": "Manual QC inspection recommended"
+          }
+        ]
+      },
+      "costs": {
+        "total_usd": 0.009543,
+        "breakdown": {
+          "gpt5_2": 0.003425,
+          "claude": 0.006,
+          "gemini": 0.000118
+        }
+      }
+    },
+    {
+      "decision_id": "test_dataset_step2_threshold",
+      "step_name": "FDR Threshold Selection",
+      "step_description": "Agents decide statistical threshold",
+      "timestamp": "2026-01-17T21:43:40.458Z",
+      "decision_type": "threshold",
+      "user_prompt": "What FDR threshold should we use?",
+      "agent_responses": {
+        "gpt5_2": {
+          "model": "gpt-5.2-2025-12-11",
+          "success": true,
+          "content": "Recommend FDR < 0.05 (standard threshold)\nConfidence: HIGH",
+          "extracted_decision": null,
+          "confidence_label": "HIGH",
+          "confidence_score": 0.9,
+          "tokens": {
+            "prompt_tokens": 200,
+            "completion_tokens": 50,
+            "total_tokens": 250
+          },
+          "cost_usd": 0.001,
+          "skipped": false
+        },
+        "claude": {
+          "model": "claude-sonnet-4-20250514",
+          "success": true,
+          "content": "FDR < 0.05 is appropriate\nConfidence: HIGH",
+          "extracted_decision": null,
+          "confidence_label": "HIGH",
+          "confidence_score": 0.9,
+          "tokens": {
+            "input_tokens": 200,
+            "output_tokens": 50
+          },
+          "cost_usd": 0.00135,
+          "skipped": false,
+          "mcp_tools_used": []
+        },
+        "gemini": {
+          "model": "gemini-2.5-flash",
+          "success": true,
+          "content": "Standard FDR < 0.05 acceptable\nConfidence: MEDIUM",
+          "extracted_decision": null,
+          "confidence_label": "MEDIUM",
+          "confidence_score": 0.7,
+          "tokens": {
+            "promptTokenCount": 200,
+            "candidatesTokenCount": 50
+          },
+          "cost_usd": 0.00003,
+          "skipped": false
+        }
+      },
+      "consensus": {
+        "decision": "FDR_0.05",
+        "confidence_label": "HIGH",
+        "confidence_score": 0.9,
+        "voting_method": "unanimous",
+        "votes": {
+          "FDR_0.05": 3
+        },
+        "vote_breakdown": null,
+        "reasoning": "All agents agree on standard FDR threshold",
+        "recommendations": []
+      },
+      "costs": {
+        "total_usd": 0.00238,
+        "breakdown": {
+          "gpt5_2": 0.001,
+          "claude": 0.00135,
+          "gemini": 0.00003
+        }
+      }
+    }
+  ],
+  "costs": {
+    "total_usd": 0.011923,
+    "breakdown": {
+      "gpt5_2": 0.004425,
+      "claude": 0.007350000000000001,
+      "gemini": 0.000148
+    }
+  },
+  "data_info": {
+    "type": "fastq",
+    "samples": [
+      "cont1",
+      "cont2",
+      "ips1",
+      "ips2"
+    ],
+    "sample_count": 4,
+    "paired_end": true,
+    "groups": {
+      "control": [
+        "cont1",
+        "cont2"
+      ],
+      "treatment": [
+        "ips1",
+        "ips2"
+      ]
+    }
+  },
+  "execution": {
+    "script_path": "test_output/test_script_v1.sh",
+    "script_type": "ADAPTATION",
+    "success": true,
+    "attempts": 1,
+    "exit_code": null
+  },
+  "metrics": {
+    "total_decisions": 2,
+    "decisions_automation": 0,
+    "decisions_adaptation": 1,
+    "average_confidence": 0.81
+  }
+}

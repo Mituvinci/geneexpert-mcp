@@ -376,7 +376,7 @@ export async function generateAdaptationScriptLegacy(dataInfo, config, steps, ag
 
   // Build context for agents
   const agentConcerns = [
-    agentDecision.responses.gpt4.content,
+    agentDecision.responses.gpt5_2.content,
     agentDecision.responses.claude.content,
     agentDecision.responses.gemini.content
   ].join('\n\n---\n\n');
@@ -565,6 +565,17 @@ Write the FULL executable bash script now (and ONLY the script, no other text):
   const result = await mcpAgent.callWithTools(prompt, mcpContext, [
     'read_file'  // To read the R/bash scripts (agent writes script directly in response)
   ]);
+
+  // DEBUG: Log what the agent actually returned
+  console.log('[DEBUG] MCP Agent returned:');
+  console.log('[DEBUG] - Success:', result.success);
+  console.log('[DEBUG] - Model:', result.model);
+  console.log('[DEBUG] - Tool calls:', result.toolCalls ? result.toolCalls.length : 0);
+  console.log('[DEBUG] - Content length:', result.content.length);
+  console.log('[DEBUG] - Content preview (first 500 chars):');
+  console.log(result.content.substring(0, 500));
+  console.log('[DEBUG] - Content preview (last 500 chars):');
+  console.log(result.content.substring(Math.max(0, result.content.length - 500)));
 
   const scriptContent = extractBashScript(result.content);
 

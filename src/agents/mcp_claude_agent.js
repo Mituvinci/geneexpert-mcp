@@ -120,54 +120,72 @@ ${JSON.stringify(context, null, 2)}`;
       }
 
       // Handle tool calls if Claude wants to use MCP tools
+      // Loop until we get a final text response (agent may make multiple tool calls)
       const toolCalls = [];
       let finalText = '';
+      let currentResponse = response;
+      const MAX_TOOL_ROUNDS = 10; // Prevent infinite loops
+      let roundCount = 0;
 
-      for (const block of response.content) {
-        if (block.type === 'text') {
-          finalText += block.text;
-        } else if (block.type === 'tool_use') {
-          this.log(`[MCP Claude Agent] Tool call: ${block.name}`);
+      while (roundCount < MAX_TOOL_ROUNDS) {
+        roundCount++;
+        let hasToolUse = false;
 
-          // Execute the MCP tool
-          const toolResult = await this.executeMCPTool(block.name, block.input);
+        for (const block of currentResponse.content) {
+          if (block.type === 'text') {
+            finalText += (finalText ? '\n\n' : '') + block.text;
+          } else if (block.type === 'tool_use') {
+            hasToolUse = true;
+            console.log(`[DEBUG MCP] Round ${roundCount}: Tool call: ${block.name}`);
 
-          toolCalls.push({
-            tool: block.name,
-            input: block.input,
-            output: toolResult
-          });
+            // Execute the MCP tool
+            const toolResult = await this.executeMCPTool(block.name, block.input);
 
-          // Continue conversation with tool result
-          messages.push({
-            role: 'assistant',
-            content: response.content
-          });
+            toolCalls.push({
+              tool: block.name,
+              input: block.input,
+              output: toolResult
+            });
 
-          messages.push({
-            role: 'user',
-            content: [{
-              type: 'tool_result',
-              tool_use_id: block.id,
-              content: JSON.stringify(toolResult)
-            }]
-          });
+            // Continue conversation with tool result
+            messages.push({
+              role: 'assistant',
+              content: currentResponse.content
+            });
 
-          // Get Claude's analysis after seeing tool results
-          const followUp = await anthropic.messages.create({
-            model: this.model,
-            max_tokens: 4096,
-            system: systemPrompt,
-            messages,
-            tools: anthropicTools
-          });
+            messages.push({
+              role: 'user',
+              content: [{
+                type: 'tool_result',
+                tool_use_id: block.id,
+                content: JSON.stringify(toolResult)
+              }]
+            });
 
-          for (const followBlock of followUp.content) {
-            if (followBlock.type === 'text') {
-              finalText += '\n\n' + followBlock.text;
-            }
+            // Get Claude's response after seeing tool results
+            currentResponse = await anthropic.messages.create({
+              model: this.model,
+              max_tokens: 4096,
+              system: systemPrompt,
+              messages,
+              tools: anthropicTools
+            });
+
+            console.log(`[DEBUG MCP] Round ${roundCount} follow-up has ${currentResponse.content.length} blocks`);
+            // Break to process the new response from the top
+            break;
           }
         }
+
+        // If no tool use in this round, we're done
+        if (!hasToolUse) {
+          console.log(`[DEBUG MCP] Finished after ${roundCount} rounds, final text length: ${finalText.length}`);
+          break;
+        }
+      }
+
+      if (roundCount >= MAX_TOOL_ROUNDS) {
+        console.warn(`[MCP Claude Agent] Warning: Reached max tool rounds (${MAX_TOOL_ROUNDS}), stopping`);
       }
 
       this.log('[MCP Claude Agent] Response received');

@@ -25,8 +25,8 @@ import fs from 'fs';
  * Main entry point - Execute multi-agent orchestrated analysis
  */
 export async function executeAnalysis(config) {
-  // Initialize logger FIRST to capture everything
-  const logger = new Logger(config.output, 'geneexpert_analysis');
+  // Initialize logger FIRST to capture everything (pass config for JSON metadata)
+  const logger = new Logger(config.output, 'geneexpert_analysis', config);
 
   // Override console.log to also write to file
   const originalLog = console.log;
@@ -51,21 +51,57 @@ export async function executeAnalysis(config) {
   const steps = planPipeline(dataInfo, config);
   console.log('');
 
-  // Step 3: AGENTS ANALYZE DATA AND DECIDE APPROACH
-  console.log('[Coordinator] 🤔 Consulting agents to decide approach...');
-  console.log('');
-
-  const coordinator = createCoordinator({ verbose: config.verbose }); // Only verbose if user wants it
+  // Step 3: AGENTS ANALYZE DATA AND DECIDE APPROACH (or skip if --force-automation)
+  const coordinator = createCoordinator({
+    verbose: config.verbose,
+    singleAgent: config.singleAgent  // For experimental single-agent mode
+  });
   const mcpAgent = new MCPClaudeAgent({ verbose: config.verbose }); // MCP agent for ADAPTATION
 
-  const agentDecision = await coordinator.decideAnalysisApproach(dataInfo, config, steps);
+  let agentDecision;
 
-  // Log the initial agent decision to conversation file
-  logger.logAgentConversation(
-    { name: 'AUTOMATION vs ADAPTATION Decision', description: 'Agents decide analysis approach' },
-    agentDecision.responses,
-    agentDecision.consensus
-  );
+  if (config.forceAutomation) {
+    // NO-AGENT BASELINE: Skip all agents, force AUTOMATION mode
+    console.log('[Coordinator] ⚡ Force AUTOMATION mode (no agents)...');
+    console.log('');
+
+    agentDecision = {
+      responses: {
+        gpt5_2: { success: false, content: 'Skipped (--force-automation)', decision: 'AUTOMATION' },
+        claude: { success: false, content: 'Skipped (--force-automation)', decision: 'AUTOMATION' },
+        gemini: { success: false, content: 'Skipped (--force-automation)', decision: 'AUTOMATION' }
+      },
+      consensus: {
+        decision: 'AUTOMATION',
+        reasoning: 'No-agent baseline mode: Template-based script generation only',
+        confidence: 1.0,
+        confidence_label: 'FORCED',
+        confidence_score: 1.0,
+        votingMethod: 'forced',
+        agreementLevel: 'forced'
+      }
+    };
+
+    // Log the forced decision
+    logger.logAgentConversation(
+      { name: 'NO-AGENT BASELINE', description: 'Force AUTOMATION mode (--force-automation flag)' },
+      agentDecision.responses,
+      agentDecision.consensus
+    );
+  } else {
+    // NORMAL MODE: Consult agents to decide approach
+    console.log('[Coordinator] 🤔 Consulting agents to decide approach...');
+    console.log('');
+
+    agentDecision = await coordinator.decideAnalysisApproach(dataInfo, config, steps);
+
+    // Log the initial agent decision to conversation file
+    logger.logAgentConversation(
+      { name: 'AUTOMATION vs ADAPTATION Decision', description: 'Agents decide analysis approach' },
+      agentDecision.responses,
+      agentDecision.consensus
+    );
+  }
 
   console.log('');
 
