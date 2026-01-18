@@ -8,12 +8,19 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Install Dependencies
+### 1. Requirement
 
 ```bash
-npm install
+Node: v18.20.8
+npm: 10.8.2
+Python: Python 3.10.19
+R: R version 4.3.3 (2024-02-29)
+Subread:
+FastQC: FastQC v0.12.1
+SAMtools: samtools 1.22.1
+
 ```
 
 ### 2. Configure API Keys
@@ -35,18 +42,18 @@ node bin/geneexpert.js analyze data/DA0036 \
 ```
 
 **What happens:**
-1. 🔍 System detects data type (FASTQ/BAM/counts), paired-end status, sample groups
-2. 🤖 **3 agents analyze your data** (GPT-4, Claude, Gemini)
-3. 🎯 **Agents vote: AUTOMATION or ADAPTATION?**
+1.  System detects data type (FASTQ/BAM/counts), paired-end status, sample groups
+2.  **3 agents analyze your data** (GPT-4, Claude, Gemini)
+3.  **Agents vote: AUTOMATION or ADAPTATION?**
    - Small n, batch effects, outliers → ADAPTATION (custom script)
    - Clean data, standard design → AUTOMATION (fast template)
-4. 📜 **Beautiful plan displayed** - you confirm with Y/N
-5. ⚡ **Script executes** with real-time output streaming
-6. 📊 Results saved with full logs
+4.  **Beautiful plan displayed** - you confirm with Y/N
+5.  **Script executes** with real-time output streaming
+6.  Results saved with full logs
 
 ---
 
-## 🎯 What Makes This Novel
+##  What Makes This Novel
 
 ### AUTOMATION vs ADAPTATION: Agents Decide Dynamically
 
@@ -87,7 +94,7 @@ Step 5: User confirms → Execute → Results!
 
 ---
 
-## 📊 Architecture Overview
+##  Architecture Overview
 
 ### Two Execution Paths
 
@@ -136,7 +143,7 @@ orchestration scripts that CALL your existing R scripts intelligently!
 ### Multi-Agent Decision System
 
 **3 Specialized Agents:**
-- 🔢 **GPT-4 (Stats Agent)**: Statistical validation, threshold selection
+-  **GPT-4 (Stats Agent)**: Statistical validation, threshold selection
   - **No tool access** - Pure reasoning only
   - Validates thresholds, sample sizes, statistical methods
 
@@ -147,7 +154,7 @@ orchestration scripts that CALL your existing R scripts intelligently!
   - **Executes generated scripts** and monitors output
   - **Can modify workflow logic**: skip steps, add validations, adjust parameters
 
-- 🧬 **Gemini Pro (Biology Agent)**: Biological interpretation, pathway analysis
+-  **Gemini Pro (Biology Agent)**: Biological interpretation, pathway analysis
   - **No tool access** - Pure reasoning only
   - Validates biological assumptions and QC criteria
 
@@ -166,7 +173,7 @@ orchestration scripts that CALL your existing R scripts intelligently!
 
 ---
 
-## 🤖 Which Agent Writes Code?
+##  Which Agent Writes Code?
 
 **ONLY Claude Sonnet 4.5 (Pipeline Agent) can write and execute code!**
 
@@ -174,9 +181,9 @@ orchestration scripts that CALL your existing R scripts intelligently!
 
 | Agent | Can Read Files? | Can Write Code? | Can Execute Code? | Can View Images? | Role |
 |-------|----------------|-----------------|-------------------|------------------|------|
-| **GPT-4 (Stats)** | ❌ No | ❌ No | ❌ No | ✅ YES | Pure reasoning - validates statistics |
-| **Claude (Pipeline)** | ✅ YES (MCP) | ✅ YES (writes bash) | ✅ YES (executes scripts) | ✅ YES | Code generation & execution |
-| **Gemini (Biology)** | ❌ No | ❌ No | ❌ No | ✅ YES | Pure reasoning - validates biology |
+| **GPT-4 (Stats)** |  No |  No |  No |  YES | Pure reasoning - validates statistics |
+| **Claude (Pipeline)** |  YES (MCP) |  YES (writes bash) |  YES (executes scripts) |  YES | Code generation & execution |
+| **Gemini (Biology)** |  No |  No |  No |  YES | Pure reasoning - validates biology |
 
 **NEW! All 3 agents have VISION capability** - they can view PCA/MDS plots and vote on outliers/batch effects!
 
@@ -234,9 +241,9 @@ ADAPTATION Mode:
 
 ---
 
-## 💡 Key Features (All Working! ✅)
+## Key Features (All Working! )
 
-### ✅ Implemented & Tested:
+###  Implemented & Tested:
 
 1. **Agent-Driven Decision Making**
    - Agents analyze data and vote AUTOMATION vs ADAPTATION
@@ -306,7 +313,7 @@ ADAPTATION Mode:
 
 ---
 
-## 🔬 QC Plots: Agent Vision for Outlier/Batch Detection
+##  QC Plots: Agent Vision for Outlier/Batch Detection
 
 **The Innovation:** Agents don't just read numbers - they VIEW PCA plots and VOTE on sample quality!
 
@@ -348,7 +355,7 @@ ELSE:
 
 ---
 
-## 🔄 Error-Propagating Feedback Loop
+##  Error-Propagating Feedback Loop
 
 **The Innovation:** When scripts fail, agents debug and generate fixed versions automatically.
 
@@ -362,8 +369,8 @@ ATTEMPT 1: Execute generated script v1.sh
 FEEDBACK LOOP ACTIVATED:
     ↓
 Step 1: Detect Progress
-  - Completed: Steps 1-3 ✅
-  - Failed: Step 4 ❌
+  - Completed: Steps 1-3 
+  - Failed: Step 4 
     ↓
 Step 2: Capture Error Context
   - Exit code: 1
@@ -396,7 +403,7 @@ Step 4: Generate v2 Script
     ↓
 ATTEMPT 2: Execute v2.sh
     ↓
-  [SUCCESS: Exit code 0] ✅
+  [SUCCESS: Exit code 0] 
     ↓
 ANALYSIS COMPLETE!
 ```
@@ -404,9 +411,9 @@ ANALYSIS COMPLETE!
 ### Loop Stopping Criteria:
 
 **The loop ENDS when:**
-1. ✅ **Script succeeds** (exit code 0) → Analysis complete!
-2. ❌ **Max retries reached** (3 attempts) → Report failure to user
-3. 🛑 **User cancels** during confirmation → Stop execution
+1.  **Script succeeds** (exit code 0) → Analysis complete!
+2.  **Max retries reached** (3 attempts) → Report failure to user
+3.  **User cancels** during confirmation → Stop execution
 
 ### Maximum Retry Attempts: **3**
 
@@ -456,42 +463,42 @@ Rscript filterIDS.R test_run.count.txt
 # v2.sh (FIXED):
 Rscript filterIDS.R test_run.count.csv
 
-# Success! ✅
+# Success! 
 ```
 
 ---
 
-## 🛠️ MCP Tools
+## ️ MCP Tools
 
 ### Implemented Tools:
 
 **File Reading (for ADAPTATION):**
-- ✅ `read_file` - Read any text file (R scripts, logs, results)
+-  `read_file` - Read any text file (R scripts, logs, results)
   - Smart extension handling (tries with/without .sh)
   - Auto-discovery of script parameters
 
 **Pipeline Execution (for both):**
-- ✅ `run_fastqc` - Quality control
-- ✅ `run_alignment` - STAR/HISAT2 alignment
-- ✅ `run_featurecounts` - Gene quantification
-- ✅ `run_filter` - Filter low counts
-- ✅ `run_rpkm` - RPKM normalization
-- ✅ `run_annotation` - Add gene symbols
-- ✅ `run_edger` - Differential expression
-- ✅ `export_to_excel` - Format results
-- ✅ Visualization: volcano, MA plots, Venn diagrams
+-  `run_fastqc` - Quality control
+-  `run_alignment` - STAR/HISAT2 alignment
+-  `run_featurecounts` - Gene quantification
+-  `run_filter` - Filter low counts
+-  `run_rpkm` - RPKM normalization
+-  `run_annotation` - Add gene symbols
+-  `run_edger` - Differential expression
+-  `export_to_excel` - Format results
+-  Visualization: volcano, MA plots, Venn diagrams
 
 ### In Development:
 
 **Analysis Tools (for future ADAPTATION enhancements):**
-- 🔄 `read_bam_summary` - Parse alignment statistics
-- 🔄 `read_count_summary` - Analyze count matrices
-- 🔄 `write_custom_script` - Save custom R scripts
-- 🔄 `execute_custom_script` - Run custom solutions
+-  `read_bam_summary` - Parse alignment statistics
+-  `read_count_summary` - Analyze count matrices
+-  `write_custom_script` - Save custom R scripts
+-  `execute_custom_script` - Run custom solutions
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 ├── bin/geneexpert.js                    # CLI entry point
@@ -528,7 +535,7 @@ Rscript filterIDS.R test_run.count.csv
 
 ---
 
-## 🧪 Example: Small Sample Size (n=2)
+##  Example: Small Sample Size (n=2)
 
 ### Agent Analysis:
 
@@ -572,7 +579,7 @@ The dataset's primary issue is the very low number of replicates
 Therefore, ADAPTATION is recommended to address these limitations.
 ────────────────────────────────────────────────────────────
 
-[Coordinator] 🤝 Synthesizing consensus...
+[Coordinator]  Synthesizing consensus...
 [Coordinator] Decision: ADAPTATION
 [Coordinator] Confidence: 100%
 [Coordinator] Reasoning: 3/3 agents recommend ADAPTATION
@@ -587,17 +594,17 @@ Therefore, ADAPTATION is recommended to address these limitations.
   results/DA0036_test/geneexpert_DA0036_stroke_vs_control_v1.sh
 
 ─────────────────────────────────────────────────────────────
-📋 ANALYSIS PLAN
+ ANALYSIS PLAN
 ─────────────────────────────────────────────────────────────
 Experiment: DA0036_stroke_vs_control
 Organism: mouse (mm10)
 Samples: 4 (paired-end)
 Groups: cont (n=2) vs ips (n=2)
 
-🤖 Agent Decision: ADAPTATION (100% confidence)
+ Agent Decision: ADAPTATION (100% confidence)
    Reason: 3/3 agents recommend custom approach for small n
 
-📜 Generated Script:
+ Generated Script:
    results/DA0036_test/geneexpert_DA0036_stroke_vs_control_v1.sh
 
 Pipeline Steps:
@@ -613,7 +620,7 @@ Pipeline Steps:
   9. Merge RPKM + DE Results into Excel
   10. Complete
 
-⚠️  This will execute the generated script!
+  This will execute the generated script!
 
 Proceed? (Y/N):
 ```
@@ -631,51 +638,51 @@ Step 2/10: Alignment (FASTQ to BAM)...
 
 ...
 
-[Executor] ✅ Analysis complete!
-📊 Results saved to: results/DA0036_test/
+[Executor]  Analysis complete!
+ Results saved to: results/DA0036_test/
 ```
 
 **This is true intelligence!** Agents saw n=2, debated the risk, and chose ADAPTATION.
 
 ---
 
-## 📈 Development Status (Jan 15, 2026)
+##  Development Status (Jan 15, 2026)
 
-### 🟢 SYSTEM OPERATIONAL - QC & Evaluation Framework Complete!
+###  SYSTEM OPERATIONAL - QC & Evaluation Framework Complete!
 
 **Completed:**
-- ✅ Multi-agent decision making (AUTOMATION vs ADAPTATION)
-- ✅ Consensus voting with accurate confidence calculation
-- ✅ AUTOMATION script generation (template-based, 10 steps)
-- ✅ ADAPTATION script generation (MCP-powered, intelligent)
-- ✅ User confirmation flow with beautiful plan display
-- ✅ Script execution with real-time output streaming
-- ✅ Smart file handling (with/without .sh extension)
-- ✅ Data detection and auto-grouping
-- ✅ Genome build translation (mouse → mm10)
-- ✅ Complete logging system
-- ✅ CLI interface
+-  Multi-agent decision making (AUTOMATION vs ADAPTATION)
+-  Consensus voting with accurate confidence calculation
+-  AUTOMATION script generation (template-based, 10 steps)
+-  ADAPTATION script generation (MCP-powered, intelligent)
+-  User confirmation flow with beautiful plan display
+-  Script execution with real-time output streaming
+-  Smart file handling (with/without .sh extension)
+-  Data detection and auto-grouping
+-  Genome build translation (mouse → mm10)
+-  Complete logging system
+-  CLI interface
 
 **Bugs Fixed (Jan 6, 2026):**
-- ✅ Confidence calculation bug (0% → 100% for unanimous votes)
-- ✅ File extension handling (fastq2bam.sh vs fastq2bam)
-- ✅ MCP agent file reading errors
+-  Confidence calculation bug (0% → 100% for unanimous votes)
+-  File extension handling (fastq2bam.sh vs fastq2bam)
+-  MCP agent file reading errors
 
 **Major Achievement (Jan 11, 2026):**
-- ✅ First successful end-to-end run (DA0036 dataset)
-- ✅ All 10 steps completed from FASTQ → Excel
-- ✅ Feedback loops working (error detection + v2 generation)
-- ✅ Intelligent step detection (skip completed steps on retry)
+-  First successful end-to-end run (DA0036 dataset)
+-  All 10 steps completed from FASTQ → Excel
+-  Feedback loops working (error detection + v2 generation)
+-  Intelligent step detection (skip completed steps on retry)
 
 **Major Achievement (Jan 15, 2026):**
-- ✅ QC Plots with Agent Vision (`qc_plots.R`)
+-  QC Plots with Agent Vision (`qc_plots.R`)
   - PCA, MDS, density plots as PNG for agents to VIEW
   - Outlier detection (z-score > 2.5 SD from group centroid)
   - Batch effect detection (separation score, PC1 correlation)
-- ✅ Batch Effect Correction (`batch_effect_edgeR_v3.R`)
+-  Batch Effect Correction (`batch_effect_edgeR_v3.R`)
   - Same input format as `simpleEdger3.R`
   - Uses `~batch + condition` design matrix
-- ✅ Decision-Level Evaluation Framework
+-  Decision-Level Evaluation Framework
   - Unique `decision_id` for every agent decision
   - Runtime logging for ICML paper evaluation
   - Decision-type aware disagreement scoring
@@ -691,7 +698,7 @@ Step 2/10: Alignment (FASTQ to BAM)...
 
 ---
 
-## 💰 Cost Estimate
+##  Cost Estimate
 
 ### AUTOMATION Path:
 - Agent decision-making: ~$0.03 (one-time, 3 agents analyze data)
@@ -710,7 +717,7 @@ Step 2/10: Alignment (FASTQ to BAM)...
 
 ---
 
-## 📚 Documentation
+##  Documentation
 
 - **IMPLEMENTATION_STATUS.md** - Complete progress tracking (updated Jan 6, 2026)
 - **HYBRID_ARCHITECTURE.md** - Detailed system design
@@ -719,7 +726,7 @@ Step 2/10: Alignment (FASTQ to BAM)...
 
 ---
 
-## 🛠️ Development Commands
+##  Development Commands
 
 ```bash
 # Test LLM APIs
@@ -739,7 +746,7 @@ tail -f results/my_analysis/analysis_*.log
 
 ---
 
-## 🔬 Research Contribution (ICML 2026)
+##  Research Contribution (ICML 2026)
 
 **Hypothesis:** Multi-foundation model collaboration with dynamic approach selection reduces errors 40%+ compared to single-agent or static pipeline systems.
 
@@ -775,20 +782,20 @@ tail -f results/my_analysis/analysis_*.log
 
 ---
 
-## 📝 License
+##  License
 
 MIT
 
 ---
 
-## 🔗 Links
+##  Links
 
 - **GitHub:** https://github.com/Mituvinci/geneexpert-mcp
-- **Status:** 🟢 System operational - First successful end-to-end run complete!
+- **Status:**  System operational - First successful end-to-end run complete!
 - **Last Updated:** January 15, 2026
 
 ---
 
-**Ready to revolutionize bioinformatics analysis with multi-agent intelligence!** 🚀
+**Ready to revolutionize bioinformatics analysis with multi-agent intelligence!** 
 
 See `IMPLEMENTATION_STATUS.md` for detailed progress tracking.
