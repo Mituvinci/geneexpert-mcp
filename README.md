@@ -9,12 +9,22 @@
 ---
 
 ## Quick Start
+### 0. npm intallation
 
-### 1. Requirement
 
 ```bash
 Node: v18.20.8
 npm: 10.8.2
+OpenAI SDK: v4.104.0
+Anthropic (Claude) SDK: v0.32.1
+Google Gemini SDK: v0.21.0
+Model Context Protocol (MCP) SDK: v1.25.1
+
+```
+
+### 1. Requirement
+
+```bash
 Python: 3.10.19
 R: R version 4.3.3 (2024-02-29)
 Subread-align: v2.1.1
