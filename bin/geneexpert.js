@@ -36,7 +36,7 @@ program
   .option('--treatment-keyword <keyword>', 'Keyword in sample names for treatment group (e.g., "ko", "treat", "ips")')
   .option('--genome <path>', 'Path to genome reference (for alignment)')
   .option('--gtf <path>', 'Path to GTF annotation file (for quantification)')
-  .option('--aligner <tool>', 'Alignment tool: star or hisat2', 'star')
+  .option('--aligner <tool>', 'Alignment tool (subread only)', 'subread')
   .option('--de-tool <tool>', 'DE analysis tool: edger or deseq2', 'edger')
   .option('--threads <n>', 'Number of threads', '4')
   .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (for experiments)')

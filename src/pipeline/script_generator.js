@@ -22,13 +22,17 @@ const INDEX_PATH = process.env.INDEX_PATH || '/users/ha00014/Halimas_projects/mu
  * Maps logical name → actual filename
  */
 const SCRIPT_FILES = {
+  'validate_fastq': 'validate_fastq.sh',  // Step 1: FASTQ validation
   'fastq2bam': 'fastq2bam',           // NO .sh extension
+  'alignment_qc': 'alignment_qc_screening.R',  // Step 3.5: Alignment QC (contamination/quality screening)
   'featurecounts': 'featurecounts.R',
   'featurecounts_unpaired': 'featurecounts_unpaired.R',  // For single-end reads
   'filterIDS': 'filterIDS.R',
   'RPKM': 'RPKM.R',
   'entrz': 'entrz.R',
+  'qc_assessment': 'qc_assessment_pca.R',  // Step 8: QC with outlier/batch detection
   'simpleEdger3': 'simpleEdger3.R',
+  'batch_effect_edger': 'batch_effect_edgeR_v3.R',  // Batch-corrected edgeR (design: ~ batch + condition)
   'edger3xl': 'edger3xl.R',
   'merge_results': 'merge_results.R'
 };
@@ -415,13 +419,21 @@ ENVIRONMENT SETUP:
 - Scripts directory: ${SCRIPTS_PATH}/
 
 AVAILABLE SCRIPTS (verified to exist):
+- validate_fastq: ${SCRIPT_FILES.validate_fastq} (FASTQ integrity check)
+- alignment_qc: ${SCRIPT_FILES.alignment_qc} (alignment-based contamination/quality screening)
 - featurecounts (paired-end): ${SCRIPT_FILES.featurecounts}
 - featurecounts (single-end): ${SCRIPT_FILES.featurecounts_unpaired}
 - filterIDS: ${SCRIPT_FILES.filterIDS}
 - RPKM: ${SCRIPT_FILES.RPKM}
 - entrz: ${SCRIPT_FILES.entrz}
-- simpleEdger3: ${SCRIPT_FILES.simpleEdger3}
-(Note: QC plots may not exist - skip that step if needed)
+- qc_assessment: ${SCRIPT_FILES.qc_assessment} (PCA-based outlier & batch detection)
+- simpleEdger3: ${SCRIPT_FILES.simpleEdger3} (standard DE analysis)
+- batch_effect_edger: ${SCRIPT_FILES.batch_effect_edger} (DE with batch correction)
+  * 3rd arg specifies EXPERIMENTAL BATCHES (not sequencing type!):
+    - "auto" = try to detect from sample names
+    - "paired" = ctrl1+trt1 same batch, ctrl2+trt2 same batch, etc.
+    - "1,1,2,2" = explicit batch labels (ctrl1=batch1, ctrl2=batch1, trt1=batch2, trt2=batch2)
+  * Default if omitted: assumes paired design
 
 DATA IS: ${dataInfo.pairedEnd ? 'PAIRED-END (use featurecounts.R)' : 'SINGLE-END (use featurecounts_unpaired.R)'}
 
@@ -438,6 +450,10 @@ Activate conda environment:
   source $(conda info --base)/etc/profile.d/conda.sh
   conda activate ${CONDA_ENV}
 
+Step 0: FASTQ Validation (REQUIRED FIRST STEP)
+  bash ${SCRIPTS_PATH}/${SCRIPT_FILES.validate_fastq} ${config.input} ${config.output}/fastq_validation_report.tsv
+  # Check if validation passed before proceeding
+
 Step 1: FastQC
   fastqc ${config.input}/*.fastq* -o ${config.output}/fastqc_results
 
@@ -450,8 +466,20 @@ Step 2: Alignment (use subread-align directly with correct index path)
       -T 8 -o "\${fname}.bam" &> "\${fname}.log" &
   done
   wait
+  echo "Alignment complete - all samples finished successfully"
   mv *.bam *.log ${config.output}/bam_files/
   cd -
+
+Step 2.5: Alignment QC Screening (ALWAYS RUN - contamination/quality check)
+  mkdir -p ${config.output}/alignment_qc
+  Rscript ${SCRIPTS_PATH}/${SCRIPT_FILES.alignment_qc} ${config.output}/bam_files ${config.output}/alignment_qc
+  ALIGN_QC_EXIT=$?
+
+  if [ $ALIGN_QC_EXIT -eq 2 ]; then
+    echo "WARNING: Alignment QC detected FAIL or SEVERE_FAIL samples"
+    echo "Review: ${config.output}/alignment_qc/alignment_qc_report.txt"
+    # Agents will decide whether to proceed or remove samples
+  fi
 
 Step 3: Feature Counts (${dataInfo.pairedEnd ? 'PAIRED' : 'UNPAIRED'})
   cd ${config.output}/counts
@@ -467,13 +495,33 @@ Step 5: RPKM Normalization (for visualization)
 Step 6: Add Gene Symbols
   Rscript ${SCRIPTS_PATH}/${SCRIPT_FILES.entrz} ${config.output}/counts/${config.comparison}.rpkm.csv ${genomeBuild}
 
-Step 7: QC Plots - SKIP THIS STEP
-  # QC plots not needed for this analysis
-  # User can run PCA/MDS manually later if desired
+Step 7: QC Assessment (CRITICAL - Outlier & Batch Detection)
+  mkdir -p ${config.output}/qc_assessment
+  Rscript ${SCRIPTS_PATH}/${SCRIPT_FILES.qc_assessment} \\
+    ${config.output}/counts/${config.comparison}.rpkm.csv \\
+    ${config.output}/qc_assessment \\
+    ${config.controlKeyword} \\
+    ${config.treatmentKeyword}
+  QC_EXIT_CODE=$?
+
+  # Check QC results
+  if [ $QC_EXIT_CODE -eq 2 ]; then
+    echo "WARNING: QC issues detected - review qc_assessment/qc_summary.txt"
+    # TODO: Decide batch_effect_edger vs simpleEdger3 based on QC report
+  fi
 
 Step 8: DE Analysis (edgeR uses RAW filtered counts, not RPKM)
   cd ${config.output}/de_results
-  Rscript ${SCRIPTS_PATH}/${SCRIPT_FILES.simpleEdger3} ${config.output}/counts/${config.comparison}.count.filtered.csv ${genomeBuild}
+
+  # Decision based on QC results:
+  if grep -q "TOO SPREAD" ${config.output}/qc_assessment/qc_summary.txt 2>/dev/null; then
+    echo "Batch effects detected - using batch correction"
+    Rscript ${SCRIPTS_PATH}/${SCRIPT_FILES.batch_effect_edger} ${config.output}/counts/${config.comparison}.count.filtered.csv ${genomeBuild} paired
+  else
+    echo "Standard DE analysis"
+    Rscript ${SCRIPTS_PATH}/${SCRIPT_FILES.simpleEdger3} ${config.output}/counts/${config.comparison}.count.filtered.csv ${genomeBuild}
+  fi
+
   cd -
 
 Step 9: Merge RPKM + edgeR Results into Final Excel
