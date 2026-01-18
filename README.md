@@ -15,10 +15,10 @@
 ```bash
 Node: v18.20.8
 npm: 10.8.2
-Python: Python 3.10.19
+Python: 3.10.19
 R: R version 4.3.3 (2024-02-29)
-Subread:
-FastQC: FastQC v0.12.1
+Subread-align: v2.1.1
+FastQC: v0.12.1
 SAMtools: samtools 1.22.1
 
 ```
