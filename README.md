@@ -41,13 +41,13 @@ nano .env  # Add your OpenAI, Anthropic, Google API keys
 ### 3. Run Analysis (Staged Architecture)
 
 ```bash
-node bin/geneexpert.js analyze data/DA0036 \
+node bin/geneexpert.js analyze data/your_input_folder \
   --staged \
   --organism mouse \
   --comparison "stroke_vs_control" \
   --control-keyword "cont" \
   --treatment-keyword "ips" \
-  --output results/DA0036
+  --output results/your_output_folder
 ```
 
 **What happens:**
@@ -57,15 +57,6 @@ node bin/geneexpert.js analyze data/DA0036 \
 4. Stage 4: DE Analysis - Agents review differential expression results
 5. User input tracked when agents can't reach consensus (critical for research evaluation)
 
-### Test Individual Stages
-
-```bash
-# Test each stage independently
-node test_stage1.js data/DA0036 results/test --organism=mouse
-node test_stage2.js data/DA0036 results/test --organism=mouse
-node test_stage3.js data/DA0036 results/test --organism=mouse
-node test_stage4.js data/DA0036 results/test --organism=mouse
-```
 
 ---
 
@@ -413,13 +404,13 @@ node test_stage2.js data/DA0036 results/test --organism=mouse
 node test_stage3.js data/DA0036 results/test --organism=mouse
 node test_stage4.js data/DA0036 results/test --organism=mouse
 
-# Run with single agent (for ICML baseline)
+# Run with single agent (for  baseline)
 node bin/geneexpert.js analyze data/DA0036 \
   --staged \
   --single-agent gpt5.2 \
   --output results/single_agent
 
-# Run without agents (for ICML baseline)
+# Run without agents (for  baseline)
 node bin/geneexpert.js analyze data/DA0036 \
   --staged \
   --force-automation \
@@ -476,7 +467,7 @@ MIT
 
 - **GitHub:** https://github.com/Mituvinci/geneexpert-mcp
 - **Status:** Staged architecture complete - Ready for research experiments
-- **Last Updated:** January 18, 2026
+- 
 
 ---
 
