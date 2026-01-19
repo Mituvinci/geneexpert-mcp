@@ -17,6 +17,7 @@ import { Command } from 'commander';
 import path from 'path';
 import fs from 'fs';
 import { executeAnalysis } from '../src/pipeline/executor.js';
+import { StagedExecutor } from '../src/executor/staged_executor.js';
 
 const program = new Command();
 
@@ -39,6 +40,7 @@ program
   .option('--aligner <tool>', 'Alignment tool (subread only)', 'subread')
   .option('--de-tool <tool>', 'DE analysis tool: edger or deseq2', 'edger')
   .option('--threads <n>', 'Number of threads', '4')
+  .option('--staged', 'Use staged architecture (4-stage pipeline with agent checkpoints)')
   .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (for experiments)')
   .option('--force-automation', 'Skip all agents, use template-based AUTOMATION only (no-agent baseline)')
   .option('--verbose', 'Verbose output', false)
@@ -85,11 +87,29 @@ program
     console.log(`   Comparison: ${config.comparison}`);
     console.log(`   Aligner:    ${config.aligner}`);
     console.log(`   DE Tool:    ${config.deTool}`);
+    console.log(`   Architecture: ${options.staged ? 'Staged (4-stage checkpoints)' : 'Monolithic'}`);
     console.log('');
 
     try {
-      // Execute multi-agent orchestrated analysis
-      await executeAnalysis(config);
+      // Execute analysis - use staged or monolithic architecture
+      if (options.staged) {
+        // Use new staged architecture (4-stage pipeline with agent checkpoints)
+        const executor = new StagedExecutor({
+          inputDir: config.input,
+          outputDir: config.output,
+          organism: config.organism,
+          comparison: config.comparison,
+          controlKeyword: config.controlKeyword,
+          treatmentKeyword: config.treatmentKeyword,
+          verbose: config.verbose,
+          singleAgent: config.singleAgent,
+          forceAutomation: config.forceAutomation
+        });
+        await executor.run();
+      } else {
+        // Use old monolithic architecture
+        await executeAnalysis(config);
+      }
 
       console.log('');
       console.log('='.repeat(60));

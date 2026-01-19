@@ -22,6 +22,7 @@ import {
 } from './consensus.js';
 
 import { getMultiAgentPrompts } from '../config/prompts.js';
+import { getStagePrompts, formatStageOutputForAgents } from '../config/stage_prompts.js';
 
 /**
  * Main Coordinator Class
@@ -347,6 +348,415 @@ Focus on biological insight and interpretation.
       agent: 'biology',
       ...result
     };
+  }
+
+  // ============================================
+  // STAGED ARCHITECTURE METHODS
+  // ============================================
+
+  /**
+   * Consult agents with stage-specific prompts
+   * Used in staged architecture where each stage has specialized prompts
+   *
+   * @param {number} stage - Stage number (1, 2, 3)
+   * @param {string} stageOutput - Formatted stage output for agents
+   * @param {Object} context - Additional context
+   * @param {string} decisionType - Type of decision
+   * @param {string} decision_id - Unique ID for evaluation
+   */
+  async consultAgentsWithStagePrompts(stage, stageOutput, context = {}, decisionType = 'stage_checkpoint', decision_id = null) {
+    this.log(`Consulting agents for Stage ${stage} review...`);
+    if (decision_id) this.log(`Decision ID: ${decision_id}`);
+
+    // Get stage-specific prompts
+    const stagePrompts = getStagePrompts(stage);
+
+    // Call all agents with stage-specific prompts
+    const responses = await callAllAgents(stageOutput, {
+      singleAgent: this.singleAgent,
+      ...stagePrompts
+    });
+
+    // Log responses
+    this.log(`GPT-5.2: ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude: ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini: ${responses.gemini.success ? 'responded' : 'failed'}`);
+
+    // Synthesize consensus (with decision_id for evaluation)
+    const consensus = synthesizeConsensus(responses, decisionType, decision_id);
+
+    // Store in session history
+    this.sessionHistory.push({
+      timestamp: new Date().toISOString(),
+      decision_id,
+      stage,
+      stageName: `Stage ${stage}`,
+      question: stageOutput,
+      context,
+      decisionType,
+      responses,
+      consensus
+    });
+
+    return {
+      responses,
+      consensus,
+      report: formatConsensusReport(consensus, `Stage ${stage} Review`)
+    };
+  }
+
+  /**
+   * Review Stage 1 output (FASTQ Validation)
+   *
+   * @param {Object} stage1Output - Parsed output from stage1_fastq_validation.js
+   * @param {Object} dataInfo - Dataset information
+   * @returns {Object} - { responses, consensus, proceed }
+   */
+  async reviewStage1Output(stage1Output, dataInfo) {
+    console.log('[Coordinator] Reviewing Stage 1 (FASTQ Validation) output...');
+    console.log('');
+
+    // Generate decision_id
+    const decision_id = `${this.currentDataset || 'unknown'}_stage1_validation`;
+
+    // Format output for agents
+    const formattedOutput = formatStageOutputForAgents(1, stage1Output, dataInfo);
+
+    // Consult agents with stage-specific prompts
+    const result = await this.consultAgentsWithStagePrompts(
+      1,
+      formattedOutput,
+      { stage1Output, dataInfo },
+      'stage_checkpoint',
+      decision_id
+    );
+
+    // Determine if we should proceed
+    const proceed = this.shouldProceedFromStage1(result.consensus);
+
+    console.log('[Coordinator] Stage 1 Review Complete');
+    console.log(`[Coordinator] Decision: ${result.consensus.decision.toUpperCase()}`);
+    console.log(`[Coordinator] Confidence: ${(result.consensus.confidence * 100).toFixed(0)}%`);
+    console.log(`[Coordinator] Proceed to Stage 2: ${proceed ? 'YES' : 'NO'}`);
+    console.log('');
+
+    return {
+      ...result,
+      proceed,
+      stage: 1,
+      stageName: 'FASTQ Validation'
+    };
+  }
+
+  /**
+   * Determine if we should proceed from Stage 1 based on consensus
+   */
+  shouldProceedFromStage1(consensus) {
+    const decision = consensus.decision.toLowerCase();
+
+    // PASS or PASS_WITH_WARNING -> proceed
+    if (decision.includes('pass')) {
+      return true;
+    }
+
+    // FAIL -> don't proceed
+    if (decision.includes('fail')) {
+      return false;
+    }
+
+    // Check votes - majority PASS means proceed
+    if (consensus.votes) {
+      const passVotes = (consensus.votes.pass || 0) + (consensus.votes.pass_with_warning || 0);
+      const failVotes = consensus.votes.fail || 0;
+      return passVotes > failVotes;
+    }
+
+    // Default: proceed if confidence is high enough
+    return consensus.confidence >= 0.5;
+  }
+
+  /**
+   * Review Stage 2 output (Alignment + QC)
+   *
+   * @param {Object} stage2Output - Parsed output from stage2_alignment.js
+   * @param {Object} dataInfo - Dataset information
+   * @returns {Object} - { responses, consensus, proceed, samplesToRemove }
+   */
+  async reviewStage2Output(stage2Output, dataInfo) {
+    console.log('[Coordinator] Reviewing Stage 2 (Alignment QC) output...');
+    console.log('');
+
+    // Generate decision_id
+    const decision_id = `${this.currentDataset || 'unknown'}_stage2_alignment`;
+
+    // Format output for agents
+    const formattedOutput = formatStageOutputForAgents(2, stage2Output, dataInfo);
+
+    // Consult agents with stage-specific prompts
+    const result = await this.consultAgentsWithStagePrompts(
+      2,
+      formattedOutput,
+      { stage2Output, dataInfo },
+      'stage_checkpoint',
+      decision_id
+    );
+
+    // Determine action based on consensus
+    const { proceed, samplesToRemove } = this.parseStage2Decision(result.consensus, result.responses);
+
+    console.log('[Coordinator] Stage 2 Review Complete');
+    console.log(`[Coordinator] Decision: ${result.consensus.decision.toUpperCase()}`);
+    console.log(`[Coordinator] Samples to Remove: ${samplesToRemove.length > 0 ? samplesToRemove.join(', ') : 'None'}`);
+    console.log(`[Coordinator] Proceed to Stage 3: ${proceed ? 'YES' : 'NO'}`);
+    console.log('');
+
+    return {
+      ...result,
+      proceed,
+      samplesToRemove,
+      stage: 2,
+      stageName: 'Alignment QC'
+    };
+  }
+
+  /**
+   * Parse Stage 2 decision to extract samples to remove
+   */
+  parseStage2Decision(consensus, responses) {
+    const decision = consensus.decision.toLowerCase();
+    let samplesToRemove = [];
+    let proceed = true;
+
+    if (decision.includes('abort')) {
+      proceed = false;
+    } else if (decision.includes('remove')) {
+      // Extract samples to remove from agent responses
+      samplesToRemove = this.extractSamplesToRemove(responses);
+    }
+
+    return { proceed, samplesToRemove };
+  }
+
+  /**
+   * Extract samples to remove from agent responses
+   */
+  extractSamplesToRemove(responses) {
+    const samples = new Set();
+
+    for (const [agent, response] of Object.entries(responses)) {
+      if (!response.success || !response.content) continue;
+
+      const content = response.content;
+
+      // Look for "Samples_to_Remove:" pattern
+      const removeMatch = content.match(/Samples_to_Remove:\s*\[([^\]]+)\]/i);
+      if (removeMatch) {
+        const sampleList = removeMatch[1].split(',').map(s => s.trim().replace(/["']/g, ''));
+        sampleList.forEach(s => {
+          if (s && s.toLowerCase() !== 'none') {
+            samples.add(s);
+          }
+        });
+      }
+
+      // Also look for sample names mentioned after "remove"
+      const removePatterns = content.match(/remove[:\s]+([^\n]+)/gi);
+      if (removePatterns) {
+        for (const pattern of removePatterns) {
+          const sampleMatches = pattern.match(/[A-Za-z0-9_-]+_R[12]/g);
+          if (sampleMatches) {
+            sampleMatches.forEach(s => samples.add(s.replace(/_R[12]$/, '')));
+          }
+        }
+      }
+    }
+
+    return Array.from(samples);
+  }
+
+  /**
+   * Review Stage 3 output (Quantification + QC Assessment)
+   *
+   * @param {Object} stage3Output - Parsed output from stage3_quantification_qc.js
+   * @param {Object} dataInfo - Dataset information
+   * @returns {Object} - { responses, consensus, deMethod, outlierAction, outliersToRemove }
+   */
+  async reviewStage3Output(stage3Output, dataInfo) {
+    console.log('[Coordinator] Reviewing Stage 3 (QC Assessment) output...');
+    console.log('');
+
+    // Generate decision_id
+    const decision_id = `${this.currentDataset || 'unknown'}_stage3_qc`;
+
+    // Format output for agents
+    const formattedOutput = formatStageOutputForAgents(3, stage3Output, dataInfo);
+
+    // Consult agents with stage-specific prompts
+    const result = await this.consultAgentsWithStagePrompts(
+      3,
+      formattedOutput,
+      { stage3Output, dataInfo },
+      'stage_checkpoint',
+      decision_id
+    );
+
+    // Extract DE method and outlier decision
+    const { deMethod, batchSpecification, outlierAction, outliersToRemove } =
+      this.parseStage3Decision(result.consensus, result.responses);
+
+    console.log('[Coordinator] Stage 3 Review Complete');
+    console.log(`[Coordinator] DE Method: ${deMethod}`);
+    console.log(`[Coordinator] Batch Specification: ${batchSpecification || 'N/A'}`);
+    console.log(`[Coordinator] Outlier Action: ${outlierAction}`);
+    console.log(`[Coordinator] Outliers to Remove: ${outliersToRemove.length > 0 ? outliersToRemove.join(', ') : 'None'}`);
+    console.log('');
+
+    return {
+      ...result,
+      deMethod,
+      batchSpecification,
+      outlierAction,
+      outliersToRemove,
+      stage: 3,
+      stageName: 'QC Assessment'
+    };
+  }
+
+  /**
+   * Parse Stage 3 decision to extract DE method and outlier handling
+   */
+  parseStage3Decision(consensus, responses) {
+    let deMethod = 'simpleEdger';  // default
+    let batchSpecification = null;
+    let outlierAction = 'KEEP_ALL';
+    let outliersToRemove = [];
+
+    // Count votes for DE method
+    let simpleEdgerVotes = 0;
+    let batchEffectVotes = 0;
+    let keepAllVotes = 0;
+    let removeOutlierVotes = 0;
+
+    for (const [agent, response] of Object.entries(responses)) {
+      if (!response.success || !response.content) continue;
+
+      const content = response.content;
+
+      // Extract DE_Method
+      const deMatch = content.match(/DE_Method:\s*\[?\s*(simpleEdger|batch_effect_edger)\s*\]?/i);
+      if (deMatch) {
+        if (deMatch[1].toLowerCase().includes('batch')) {
+          batchEffectVotes++;
+        } else {
+          simpleEdgerVotes++;
+        }
+      }
+
+      // Extract Batch_Specification
+      const batchMatch = content.match(/Batch_Specification:\s*\[?\s*([^\]\n]+)\s*\]?/i);
+      if (batchMatch && batchMatch[1].toLowerCase() !== 'n/a') {
+        batchSpecification = batchMatch[1].trim().replace(/["']/g, '');
+      }
+
+      // Extract Outlier_Action
+      const outlierMatch = content.match(/Outlier_Action:\s*\[?\s*(KEEP_ALL|REMOVE_OUTLIERS)\s*\]?/i);
+      if (outlierMatch) {
+        if (outlierMatch[1].toUpperCase().includes('REMOVE')) {
+          removeOutlierVotes++;
+        } else {
+          keepAllVotes++;
+        }
+      }
+
+      // Extract Outliers_to_Remove
+      const outliersMatch = content.match(/Outliers_to_Remove:\s*\[([^\]]+)\]/i);
+      if (outliersMatch) {
+        const outlierList = outliersMatch[1].split(',').map(s => s.trim().replace(/["']/g, ''));
+        outlierList.forEach(s => {
+          if (s && s.toLowerCase() !== 'none') {
+            outliersToRemove.push(s);
+          }
+        });
+      }
+    }
+
+    // Majority vote for DE method
+    deMethod = batchEffectVotes > simpleEdgerVotes ? 'batch_effect_edger' : 'simpleEdger';
+
+    // Majority vote for outlier action
+    outlierAction = removeOutlierVotes > keepAllVotes ? 'REMOVE_OUTLIERS' : 'KEEP_ALL';
+
+    // Deduplicate outliers
+    outliersToRemove = [...new Set(outliersToRemove)];
+
+    return { deMethod, batchSpecification, outlierAction, outliersToRemove };
+  }
+
+  /**
+   * Review Stage 4 output (DE Analysis)
+   */
+  async reviewStage4Output(stage4Output, dataInfo) {
+    console.log('[Coordinator] Reviewing Stage 4 (DE Analysis) output...');
+    console.log('');
+
+    // Generate decision_id
+    const decision_id = `${this.currentDataset || 'unknown'}_stage4_de_analysis`;
+
+    // Format output for agents
+    const formattedOutput = formatStageOutputForAgents(4, stage4Output, dataInfo);
+
+    // Consult agents with stage-specific prompts
+    const result = await this.consultAgentsWithStagePrompts(
+      4,
+      formattedOutput,
+      { stage4Output, dataInfo },
+      'stage_checkpoint',
+      decision_id
+    );
+
+    // Extract approval decision
+    const { approve } = this.parseStage4Decision(result.consensus, result.responses);
+
+    console.log('[Coordinator] Stage 4 Review Complete');
+    console.log(`[Coordinator] Final Decision: ${approve ? 'APPROVE' : 'REQUEST_REANALYSIS'}`);
+    console.log('');
+
+    return {
+      ...result,
+      approve,
+      proceed: approve,  // proceed if approved
+      stage: 4,
+      stageName: 'DE Analysis'
+    };
+  }
+
+  /**
+   * Parse Stage 4 decision to extract approval
+   */
+  parseStage4Decision(consensus, responses) {
+    let approveVotes = 0;
+    let reanalysisVotes = 0;
+
+    for (const [agent, response] of Object.entries(responses)) {
+      if (!response.success || !response.content) continue;
+
+      const content = response.content;
+
+      // Extract Final_Decision
+      const decisionMatch = content.match(/Final_Decision:\s*\[?\s*(APPROVE|REQUEST_REANALYSIS)\s*\]?/i);
+      if (decisionMatch) {
+        if (decisionMatch[1].toUpperCase().includes('APPROVE')) {
+          approveVotes++;
+        } else {
+          reanalysisVotes++;
+        }
+      }
+    }
+
+    // Majority vote for approval
+    const approve = approveVotes > reanalysisVotes;
+
+    return { approve };
   }
 
   /**

@@ -272,6 +272,221 @@ class Logger {
   }
 
   /**
+   * Log stage decision (STAGED ARCHITECTURE)
+   * Records stage checkpoint decisions with full agent responses
+   *
+   * @param {number} stageNumber - Stage number (1, 2, 3, 4)
+   * @param {string} stageName - Human-readable stage name
+   * @param {Object} stageInput - Input data for the stage
+   * @param {Object} stageOutput - Output/results from running the stage
+   * @param {Object} agents - Agent responses { gpt5_2, claude, gemini }
+   * @param {Object} consensus - Consensus decision
+   * @param {Object} stageDecision - Stage-specific decision data
+   */
+  logStageDecision(stageNumber, stageName, stageInput, stageOutput, agents, consensus, stageDecision = {}) {
+    const timestamp = new Date().toISOString();
+
+    // 1. WRITE PLAIN TEXT
+    this.writePlainTextStageDecision(stageNumber, stageName, stageOutput, agents, consensus, stageDecision, timestamp);
+
+    // 2. WRITE JSON
+    this.writeJsonStageDecision(stageNumber, stageName, stageInput, stageOutput, agents, consensus, stageDecision, timestamp);
+  }
+
+  /**
+   * Write plain text stage decision
+   */
+  writePlainTextStageDecision(stageNumber, stageName, stageOutput, agents, consensus, stageDecision, timestamp) {
+    let conversation = `\n${'='.repeat(80)}\n`;
+    conversation += `STAGE ${stageNumber} CHECKPOINT: ${stageName}\n`;
+    conversation += `Timestamp: ${timestamp}\n`;
+    conversation += `${'='.repeat(80)}\n\n`;
+
+    // Stage output summary
+    conversation += `--- Stage Output Summary ---\n`;
+    conversation += `Overall Status: ${stageOutput.overall_status || 'unknown'}\n`;
+    if (stageOutput.warnings?.length > 0) {
+      conversation += `Warnings: ${stageOutput.warnings.join('; ')}\n`;
+    }
+    if (stageOutput.errors?.length > 0) {
+      conversation += `Errors: ${stageOutput.errors.join('; ')}\n`;
+    }
+    conversation += `\n`;
+
+    // Log each agent's response
+    if (agents.gpt5_2) {
+      conversation += `+-- Stats Agent (GPT-5.2) ${'-'.repeat(39)}+\n`;
+      conversation += `| Model: ${agents.gpt5_2.model}\n`;
+      conversation += `| Status: ${agents.gpt5_2.success ? 'Success' : 'Failed'}\n`;
+      conversation += `+${'-'.repeat(64)}+\n\n`;
+      conversation += `${agents.gpt5_2.content || 'No response'}\n\n`;
+    }
+
+    if (agents.claude) {
+      conversation += `+-- Pipeline Agent (Claude) ${'-'.repeat(37)}+\n`;
+      conversation += `| Model: ${agents.claude.model}\n`;
+      conversation += `| Status: ${agents.claude.success ? 'Success' : 'Failed'}\n`;
+      conversation += `+${'-'.repeat(64)}+\n\n`;
+      conversation += `${agents.claude.content || 'No response'}\n\n`;
+    }
+
+    if (agents.gemini) {
+      conversation += `+-- Biology Agent (Gemini) ${'-'.repeat(38)}+\n`;
+      conversation += `| Model: ${agents.gemini.model}\n`;
+      conversation += `| Status: ${agents.gemini.success ? 'Success' : 'Failed'}\n`;
+      conversation += `+${'-'.repeat(64)}+\n\n`;
+      conversation += `${agents.gemini.content || 'No response'}\n\n`;
+    }
+
+    // Stage decision
+    conversation += `+-- STAGE ${stageNumber} DECISION ${'-'.repeat(44)}+\n`;
+    conversation += `| Consensus: ${consensus.decision.toUpperCase()}\n`;
+    conversation += `| Confidence: ${(consensus.confidence * 100).toFixed(0)}%\n`;
+
+    // Stage-specific decision info
+    if (stageDecision.proceed !== undefined) {
+      conversation += `| Proceed to Next Stage: ${stageDecision.proceed ? 'YES' : 'NO'}\n`;
+    }
+    if (stageDecision.samplesToRemove?.length > 0) {
+      conversation += `| Samples to Remove: ${stageDecision.samplesToRemove.join(', ')}\n`;
+    }
+    if (stageDecision.deMethod) {
+      conversation += `| DE Method: ${stageDecision.deMethod}\n`;
+    }
+    if (stageDecision.outlierAction) {
+      conversation += `| Outlier Action: ${stageDecision.outlierAction}\n`;
+    }
+    if (stageDecision.outliersToRemove?.length > 0) {
+      conversation += `| Outliers to Remove: ${stageDecision.outliersToRemove.join(', ')}\n`;
+    }
+
+    conversation += `+${'-'.repeat(64)}+\n\n`;
+
+    // Write to files
+    fs.appendFileSync(this.conversationFile, conversation, 'utf8');
+    this.log(`Stage ${stageNumber} (${stageName}): ${consensus.decision.toUpperCase()} - Proceed: ${stageDecision.proceed ? 'YES' : 'NO'}`);
+  }
+
+  /**
+   * Write JSON stage decision (for ICML experiments)
+   */
+  writeJsonStageDecision(stageNumber, stageName, stageInput, stageOutput, agents, consensus, stageDecision, timestamp) {
+    // Calculate costs
+    const costs = calculateDecisionCost(agents);
+
+    // Update session totals
+    this.sessionData.costs.total_usd += costs.total_usd;
+    this.sessionData.costs.breakdown.gpt5_2 += costs.breakdown.gpt5_2;
+    this.sessionData.costs.breakdown.claude += costs.breakdown.claude;
+    this.sessionData.costs.breakdown.gemini += costs.breakdown.gemini;
+
+    // Build stage decision object
+    const decision = {
+      decision_id: `${this.sessionData.config.comparison || 'unknown'}_stage${stageNumber}_${stageName.toLowerCase().replace(/\s+/g, '_')}`,
+      stage: stageNumber,
+      stage_name: stageName,
+      timestamp: timestamp,
+      decision_type: 'stage_checkpoint',
+
+      stage_input: {
+        samples: stageInput.samples || [],
+        organism: stageInput.organism || 'unknown',
+        paired_end: stageInput.pairedEnd || false
+      },
+
+      stage_output: {
+        overall_status: stageOutput.overall_status || 'unknown',
+        validation_status: stageOutput.validation_status,
+        fastqc_status: stageOutput.fastqc_status,
+        read_statistics: stageOutput.read_statistics,
+        per_sample_summary: Object.keys(stageOutput.per_sample || {}).length,
+        warnings: stageOutput.warnings || [],
+        errors: stageOutput.errors || []
+      },
+
+      agent_responses: {
+        gpt5_2: agents.gpt5_2 ? (() => {
+          const parsed = parseAgentResponse(agents.gpt5_2.content || '');
+          return {
+            model: agents.gpt5_2.model,
+            role: 'stats_agent',
+            success: agents.gpt5_2.success,
+            content: agents.gpt5_2.content || '',
+            extracted_decision: parsed.extracted_decision,
+            confidence_label: parsed.confidence_label,
+            confidence_score: parsed.confidence_score,
+            tokens: agents.gpt5_2.usage || null,
+            cost_usd: calculateAgentCost(agents.gpt5_2)
+          };
+        })() : null,
+
+        claude: agents.claude ? (() => {
+          const parsed = parseAgentResponse(agents.claude.content || '');
+          return {
+            model: agents.claude.model,
+            role: 'pipeline_agent',
+            success: agents.claude.success,
+            content: agents.claude.content || '',
+            extracted_decision: parsed.extracted_decision,
+            confidence_label: parsed.confidence_label,
+            confidence_score: parsed.confidence_score,
+            tokens: agents.claude.usage || null,
+            cost_usd: calculateAgentCost(agents.claude)
+          };
+        })() : null,
+
+        gemini: agents.gemini ? (() => {
+          const parsed = parseAgentResponse(agents.gemini.content || '');
+          return {
+            model: agents.gemini.model,
+            role: 'biology_agent',
+            success: agents.gemini.success,
+            content: agents.gemini.content || '',
+            extracted_decision: parsed.extracted_decision,
+            confidence_label: parsed.confidence_label,
+            confidence_score: parsed.confidence_score,
+            tokens: agents.gemini.usage || null,
+            cost_usd: calculateAgentCost(agents.gemini)
+          };
+        })() : null
+      },
+
+      consensus: {
+        decision: consensus.decision,
+        confidence_score: consensus.confidence,
+        confidence_label: getConfidenceLabel(consensus.confidence),
+        votes: consensus.votes || {},
+        voting_method: 'majority',
+        reasoning: consensus.reasoning || '',
+        proceed_to_next_stage: stageDecision.proceed
+      },
+
+      stage_decision: {
+        proceed: stageDecision.proceed,
+        user_input_required: stageDecision.userDecision ? true : false,
+        user_decision: stageDecision.userDecision || null,
+        samples_to_remove: stageDecision.samplesToRemove || [],
+        de_method: stageDecision.deMethod || null,
+        batch_specification: stageDecision.batchSpecification || null,
+        outlier_action: stageDecision.outlierAction || null,
+        outliers_to_remove: stageDecision.outliersToRemove || []
+      },
+
+      costs: costs
+    };
+
+    // Add to in-memory array
+    this.sessionData.decisions.push(decision);
+
+    // Append to JSONL file
+    fs.appendFileSync(
+      this.decisionsJsonlFile,
+      JSON.stringify(decision) + '\n',
+      'utf8'
+    );
+  }
+
+  /**
    * Log tool execution
    */
   logToolExecution(stepName, tool, status, details = {}) {
