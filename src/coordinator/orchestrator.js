@@ -3,6 +3,8 @@
  * Orchestrates multi-agent collaboration for bioinformatics analysis
  */
 
+import fs from 'fs';
+
 import {
   callGPT5,
   callClaude,
@@ -371,11 +373,21 @@ Focus on biological insight and interpretation.
     // Get stage-specific prompts
     const stagePrompts = getStagePrompts(stage);
 
-    // Call all agents with stage-specific prompts
-    const responses = await callAllAgents(stageOutput, {
+    // Build options with images (if provided)
+    const agentOptions = {
       singleAgent: this.singleAgent,
       ...stagePrompts
-    });
+    };
+
+    // Add images to each agent's options if available
+    if (context.images && context.images.length > 0) {
+      agentOptions.gpt5_2_Options = { ...(agentOptions.gpt5_2_Options || {}), images: context.images };
+      agentOptions.claudeOptions = { ...(agentOptions.claudeOptions || {}), images: context.images };
+      agentOptions.geminiOptions = { ...(agentOptions.geminiOptions || {}), images: context.images };
+    }
+
+    // Call all agents with stage-specific prompts (and images)
+    const responses = await callAllAgents(stageOutput, agentOptions);
 
     // Log responses
     this.log(`GPT-5.2: ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
@@ -591,11 +603,30 @@ Focus on biological insight and interpretation.
     // Format output for agents
     const formattedOutput = formatStageOutputForAgents(3, stage3Output, dataInfo);
 
-    // Consult agents with stage-specific prompts
+    // Read PCA plot image (if available) to pass to agents
+    let pcaImages = [];
+    if (stage3Output.pca_plot_path && fs.existsSync(stage3Output.pca_plot_path)) {
+      console.log('[Coordinator] Loading PCA plot for agent review...');
+      console.log(`[Coordinator] Plot: ${stage3Output.pca_plot_path}`);
+      try {
+        const imageBuffer = fs.readFileSync(stage3Output.pca_plot_path);
+        const base64Image = imageBuffer.toString('base64');
+        pcaImages.push({
+          data: base64Image,
+          mediaType: 'application/pdf'
+        });
+        console.log('[Coordinator] PCA plot loaded successfully');
+      } catch (error) {
+        console.log(`[Coordinator] Warning: Could not read PCA plot: ${error.message}`);
+      }
+      console.log('');
+    }
+
+    // Consult agents with stage-specific prompts (and PCA plot image)
     const result = await this.consultAgentsWithStagePrompts(
       3,
       formattedOutput,
-      { stage3Output, dataInfo },
+      { stage3Output, dataInfo, images: pcaImages },
       'stage_checkpoint',
       decision_id
     );

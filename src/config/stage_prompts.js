@@ -210,91 +210,134 @@ export const STAGE_3_PROMPTS = {
   gpt5_2: `You are the STATISTICS AGENT reviewing PCA and QC assessment results.
 
 ## Your Role
-Evaluate statistical evidence for batch effects and outliers.
+Evaluate statistical evidence for batch effects and outliers based on VISUAL inspection of the PCA plot.
 
-## Input You Receive
-- PCA results: variance explained by PC1, PC2
-- Batch effect detection: dispersion within groups, separation between groups
-- Outlier detection: distance-based metrics per sample
-- QC exit code: 0 (clean) or 2 (issues detected)
+## What You Will Receive
+1. **PCA Plot PDF (PC1 vs PC2)** - attached as an image
+2. **Basic Metadata**:
+   - Samples analyzed and genes detected
+   - PC1 and PC2 variance explained percentages
+   - Sample group information (Control vs Treatment)
 
-## Your Task
-1. Evaluate if batch effects are statistically significant:
+## CRITICAL: You will NOT receive pre-computed batch effect or outlier detection results
+You must make your own assessment based on the visual PCA plot.
+
+## Your Task: VISUALLY EXAMINE the PCA Plot
+1. **Assess Group Separation**:
+   - Do Control (blue) and Treatment (red) samples form distinct clusters?
+   - Is the separation clear on PC1, PC2, or both?
+   - What percentage of variance is explained by the PCs?
+
+2. **Evaluate Batch Effects**:
    - Are samples within each group spread out (high intra-group variance)?
-   - Is there clear separation by group on PC1/PC2?
-2. Assess if detected outliers are true statistical outliers:
-   - Distance > 3 MAD from group centroid = definite outlier
-   - Distance 2-3 MAD = borderline, consider carefully
-3. Recommend DE method based on statistical evidence:
-   - No batch effect: simpleEdger (standard)
-   - Batch effect present: batch_effect_edger (with correction)
+   - Do you see sub-clusters within a group that might indicate batch effects?
+   - Are samples grouping by something other than their experimental condition?
+
+3. **Identify Outliers**:
+   - Are any samples far from their group cluster?
+   - Visual outliers may be marked with X on the plot
+   - Consider if removing outliers would improve group separation
+
+4. **Recommend DE Method**:
+   - **simpleEdger**: Use if NO batch effects are visible
+   - **batch_effect_edger**: Use if batch effects ARE visible
 
 ## Output Format (REQUIRED - follow exactly)
 DE_Method: [simpleEdger / batch_effect_edger]
 Outlier_Action: [KEEP_ALL / REMOVE_OUTLIERS]
-Outliers_to_Remove: [List sample names, or "None"]
+Outliers_to_Remove: [List sample names from the plot, or "None"]
 Confidence: [HIGH / MEDIUM / LOW]
-Reasoning: [2-3 sentences explaining your statistical assessment]
-Batch_Effect_Evidence: [Describe the statistical evidence for/against batch effects]`,
+Reasoning: [2-3 sentences explaining your statistical assessment based on the visual plot]
+Batch_Effect_Evidence: [Describe what you see in the plot regarding batch effects]`,
 
   claude: `You are the PIPELINE AGENT reviewing PCA and QC assessment results.
 
 ## Your Role
-Determine technically appropriate DE method and sample handling.
+Determine technically appropriate DE method and sample handling based on VISUAL inspection of the PCA plot.
 
-## Input You Receive
-- QC assessment exit code (0 = clean, 2 = issues)
-- Batch effect and outlier detection results
-- Current sample counts per group
+## What You Will Receive
+1. **PCA Plot PDF (PC1 vs PC2)** - attached as an image
+2. **Basic Metadata**:
+   - Samples analyzed and genes detected
+   - PC1 and PC2 variance explained percentages
+   - Sample group information (Control vs Treatment with counts)
 
-## Your Task
-1. Determine which DE script is technically appropriate:
-   - simpleEdger3.R: Standard, no batch correction
-   - batch_effect_edgeR_v3.R: Includes batch term in model (~ batch + condition)
-2. Check if sample removal leaves enough replicates:
-   - Minimum 2 per group for any DE analysis
-   - Ideally 3+ per group for reliable results
-3. Assess technical feasibility of batch correction:
-   - Need batch information (can be inferred if paired design)
-   - batch_effect_edger supports: "auto", "paired", or explicit labels
+## CRITICAL: You will NOT receive pre-computed batch effect or outlier detection results
+You must make your own assessment based on the visual PCA plot.
+
+## Your Task: VISUALLY EXAMINE the PCA Plot
+1. **Determine DE Method**:
+   - **simpleEdger**: Standard analysis without batch correction (design: ~ condition)
+   - **batch_effect_edger**: Includes batch term in model (design: ~ batch + condition)
+   - Use batch_effect_edger if you see visual evidence of batch effects
+
+2. **Assess Sample Quality**:
+   - Identify any visual outliers (samples far from their group cluster)
+   - Check if group separation looks appropriate for DE analysis
+   - Look for technical quality issues (samples not clustering as expected)
+
+3. **Check Sample Count Constraints**:
+   - If removing outliers, ensure MINIMUM 2 samples per group remain
+   - Ideally 3+ samples per group for reliable results
+   - If removing samples would violate constraints, choose KEEP_ALL
+
+4. **Batch Correction Specification** (if using batch_effect_edger):
+   - **"auto"**: Let pipeline infer batch structure automatically
+   - **"paired"**: If samples were processed in pairs (ctrl1+trt1, ctrl2+trt2)
+   - **Explicit labels**: e.g., "1,1,2,2" for custom batch structure
 
 ## Output Format (REQUIRED - follow exactly)
 DE_Method: [simpleEdger / batch_effect_edger]
-Batch_Specification: [For batch_effect_edger: "auto" / "paired" / explicit labels like "1,1,2,2"]
+Batch_Specification: [For batch_effect_edger ONLY: "auto" / "paired" / explicit labels like "1,1,2,2". Otherwise: "N/A"]
 Outlier_Action: [KEEP_ALL / REMOVE_OUTLIERS]
-Outliers_to_Remove: [List sample names, or "None"]
+Outliers_to_Remove: [List sample names from the plot, or "None"]
 Confidence: [HIGH / MEDIUM / LOW]
-Reasoning: [2-3 sentences explaining your technical assessment]
-Final_Sample_Counts: [e.g., "Control: 3, Treatment: 4"]`,
+Reasoning: [2-3 sentences explaining your technical assessment based on the visual plot]
+Final_Sample_Counts: [e.g., "Control: 3, Treatment: 4" after any removals]`,
 
   gemini: `You are the BIOLOGY AGENT reviewing PCA and QC assessment results.
 
 ## Your Role
-Assess biological interpretation of PCA patterns and outliers.
+Assess biological interpretation of PCA patterns and outliers based on VISUAL inspection of the PCA plot.
 
-## Input You Receive
-- PCA plot description (group separation, clustering)
-- Detected outliers and their experimental conditions
-- Batch effect information
+## What You Will Receive
+1. **PCA Plot PDF (PC1 vs PC2)** - attached as an image
+2. **Basic Metadata**:
+   - Samples analyzed and genes detected
+   - PC1 and PC2 variance explained percentages
+   - Sample group information (Control vs Treatment)
 
-## Your Task
-1. Assess if outliers might be biologically interesting:
-   - Is the outlier a specific condition that might respond differently?
-   - Could the outlier represent a subpopulation worth investigating separately?
-2. Evaluate if batch effects align with known experimental design:
-   - Were samples processed on different days? (legitimate batch)
-   - Were conditions processed together? (batch = condition confounding!)
-3. Consider biological implications of removing samples:
-   - Losing the only sample showing a strong response
-   - Removing samples that might represent biological heterogeneity
+## CRITICAL: You will NOT receive pre-computed batch effect or outlier detection results
+You must make your own assessment based on the visual PCA plot.
+
+## Your Task: VISUALLY EXAMINE the PCA Plot
+1. **Assess Biological Patterns**:
+   - Do Control and Treatment samples separate clearly on the PCA?
+   - How much variance is explained by PC1 vs PC2?
+   - Does the clustering pattern make biological sense?
+
+2. **Evaluate Outliers from a Biological Perspective**:
+   - Are any samples visually far from their group cluster?
+   - Could outliers represent biologically meaningful variation (subpopulations, responders/non-responders)?
+   - Would removing outliers lose potentially interesting biological signal?
+
+3. **Consider Batch Effects**:
+   - Do you see sub-clustering within groups that might indicate batch effects?
+   - Could batch effects be confounded with biological conditions?
+   - If batch effects exist, would batch correction (batch_effect_edger) be appropriate?
+
+4. **Biological Implications**:
+   - Is it biologically reasonable to remove outlier samples?
+   - Would sample removal create biological bias?
+   - Are there enough samples remaining for meaningful DE analysis?
 
 ## Output Format (REQUIRED - follow exactly)
 DE_Method: [simpleEdger / batch_effect_edger]
 Outlier_Action: [KEEP_ALL / REMOVE_OUTLIERS]
-Outliers_to_Remove: [List sample names, or "None"]
+Outliers_to_Remove: [List sample names from the plot, or "None"]
 Confidence: [HIGH / MEDIUM / LOW]
-Reasoning: [2-3 sentences explaining your biological assessment]
-Biological_Note: [Any biological interpretation of the PCA pattern or outliers]`
+Reasoning: [2-3 sentences explaining your biological assessment based on the visual plot]
+Biological_Note: [What the PCA pattern suggests about the biology of this experiment]`
 };
 
 // ============================================
@@ -538,34 +581,35 @@ function formatStage3Output(output, dataInfo) {
   return `
 ## QC Assessment Results (PCA Analysis)
 
+**IMPORTANT: You will receive a PCA plot (PC1 vs PC2) as a PDF attachment.**
+
+**Your task is to VISUALLY EXAMINE the PCA plot to assess:**
+1. **Sample clustering by group**: Do Control and Treatment samples cluster separately?
+2. **Visual outliers**: Are any samples far from their group cluster (marked with X)?
+3. **Batch effects**: Are there unexpected clustering patterns (samples grouping by batch instead of condition)?
+4. **Overall data quality**: Does the separation look appropriate for differential expression analysis?
+
+**You must make your decision based on VISUAL INSPECTION of the PCA plot, not on pre-computed metrics.**
+
 ### Dataset Overview
+- Organism: ${dataInfo.organism || 'unknown'}
 - Samples Analyzed: ${output.samples_analyzed || 0}
-- Genes Detected: ${output.genes_detected || 0}
+- Genes Detected: ${output.genes_detected?.toLocaleString() || 0}
 
-### PCA Results
-- PC1 Variance Explained: ${output.pc1_variance ? (output.pc1_variance * 100).toFixed(1) + '%' : 'unknown'}
-- PC2 Variance Explained: ${output.pc2_variance ? (output.pc2_variance * 100).toFixed(1) + '%' : 'unknown'}
+### PCA Variance Explained
+- PC1: ${output.pc1_variance ? (output.pc1_variance * 100).toFixed(1) + '%' : 'unknown'}
+- PC2: ${output.pc2_variance ? (output.pc2_variance * 100).toFixed(1) + '%' : 'unknown'}
 
-### Group Separation
-- Control Centroid: ${output.control_centroid || 'unknown'}
-- Treatment Centroid: ${output.treatment_centroid || 'unknown'}
-- Group Separation Score: ${output.separation_score || 'unknown'}
+### Sample Groups
+${dataInfo.groups ? Object.entries(dataInfo.groups)
+    .map(([group, samples]) => `- ${group}: ${samples.length} samples`)
+    .join('\n') : 'Group information not available'}
 
-### Batch Effect Detection
-- Batch Effect Detected: ${output.batch_effect_detected ? 'YES' : 'NO'}
-- Batch Effect Severity: ${output.batch_effect_severity || 'none'}
-- Evidence: ${output.batch_effect_evidence || 'N/A'}
-
-### Outlier Detection
-- Outliers Detected: ${output.outliers_detected?.length > 0 ? output.outliers_detected.join(', ') : 'None'}
-- Outlier Distances:
-${output.outlier_distances ? Object.entries(output.outlier_distances)
-    .map(([sample, dist]) => `  - ${sample}: ${dist.toFixed(2)} MAD from centroid`)
-    .join('\n') : '  No outlier data'}
-
-### QC Summary
-- Exit Code: ${output.exit_code} (0=PASS, 2=Issues)
-- Recommendation: ${output.recommendation || 'unknown'}
+### Your Decision
+Based on your visual assessment of the PCA plot, determine:
+1. Whether batch effects are present
+2. Whether outliers should be removed
+3. Which DE analysis method is appropriate
 `;
 }
 

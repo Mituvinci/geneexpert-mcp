@@ -507,10 +507,19 @@ export class StagedExecutor {
     }
 
     console.log('');
+    console.log('='.repeat(60));
     console.log(`Stage 3 Result: ${finalProceed ? 'PASS' : 'FAIL'}`);
-    console.log(`DE Method: ${finalDeMethod}`);
+    console.log('='.repeat(60));
+    console.log('');
+    console.log('Agent Decisions (from visual PCA inspection):');
+    console.log(`  Batch Effects: ${finalDeMethod === 'batch_effect_edger' ? 'YES (using batch correction)' : 'NO (standard analysis)'}`);
+    console.log(`  DE Method: ${finalDeMethod}`);
+    if (finalBatchSpecification) {
+      console.log(`  Batch Specification: ${finalBatchSpecification}`);
+    }
+    console.log(`  Outlier Action: ${finalOutlierAction}`);
     if (finalOutliersToRemove.length > 0) {
-      console.log(`Outliers removed: ${finalOutliersToRemove.join(', ')}`);
+      console.log(`  Outliers Removed: ${finalOutliersToRemove.join(', ')}`);
     }
 
     return {

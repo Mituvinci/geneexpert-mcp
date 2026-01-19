@@ -160,7 +160,9 @@ echo ""
 
 Rscript \${SCRIPTS_PATH}/qc_assessment_pca.R \\
   "\${COMPARISON}.count.filtered.csv" \\
-  "\${COMPARISON}"
+  "\${COMPARISON}" \\
+  "\${CONTROL_KEYWORD}" \\
+  "\${TREATMENT_KEYWORD}"
 
 QC_EXIT_CODE=$?
 
@@ -223,6 +225,7 @@ export function parseStage3Output(outputDir) {
     samples_analyzed: 0,
     genes_detected: 0,
     recommendation: '',
+    pca_plot_path: null,  // Path to PCA plot PDF for agent review
     warnings: [],
     errors: []
   };
@@ -318,7 +321,13 @@ export function parseStage3Output(outputDir) {
       result.genes_detected = Math.max(0, lines.length - 1); // Subtract header
     }
 
-    // 6. Set default recommendation if not found
+    // 6. Find PCA plot path
+    const pcaPlotPath = path.join(stage3Dir, comparison, 'pca_plot_qc.pdf');
+    if (fs.existsSync(pcaPlotPath)) {
+      result.pca_plot_path = pcaPlotPath;
+    }
+
+    // 7. Set default recommendation if not found
     if (!result.recommendation) {
       if (result.overall_status === 'PASS') {
         result.recommendation = 'No issues detected. Proceed with simpleEdger (standard DE analysis).';
@@ -387,6 +396,9 @@ export function formatStage3ForAgents(parsedOutput, dataInfo) {
 
   let formatted = `# Stage 3: Quantification + QC Assessment Results\n\n`;
 
+  formatted += `**IMPORTANT:** A PCA plot (PC1 vs PC2) will be provided as a PDF attachment.\n`;
+  formatted += `You must VISUALLY EXAMINE the PCA plot to assess batch effects and outliers.\n\n`;
+
   // Dataset overview
   formatted += `## Dataset Overview\n`;
   formatted += `- Organism: ${dataInfo.organism || 'unknown'}\n`;
@@ -395,88 +407,32 @@ export function formatStage3ForAgents(parsedOutput, dataInfo) {
   formatted += `- Sequencing Type: ${dataInfo.pairedEnd ? 'Paired-end' : 'Single-end'}\n`;
   formatted += `\n`;
 
-  // PCA Results
-  formatted += `## PCA Results\n`;
+  // Sample Groups
+  formatted += `## Sample Groups\n`;
+  for (const [group, sampleNames] of Object.entries(groups)) {
+    formatted += `- ${group}: ${sampleNames.length} samples\n`;
+    formatted += `  (${sampleNames.join(', ')})\n`;
+  }
+  formatted += `\n`;
+
+  // PCA Variance
+  formatted += `## PCA Variance Explained\n`;
   if (parsedOutput.pc1_variance !== null) {
-    formatted += `- PC1 Variance Explained: ${(parsedOutput.pc1_variance * 100).toFixed(1)}%\n`;
+    formatted += `- PC1: ${(parsedOutput.pc1_variance * 100).toFixed(1)}%\n`;
   }
   if (parsedOutput.pc2_variance !== null) {
-    formatted += `- PC2 Variance Explained: ${(parsedOutput.pc2_variance * 100).toFixed(1)}%\n`;
+    formatted += `- PC2: ${(parsedOutput.pc2_variance * 100).toFixed(1)}%\n`;
   }
   formatted += `\n`;
 
-  // Batch Effect Detection
-  formatted += `## Batch Effect Detection\n`;
-  formatted += `- Batch Effect Detected: **${parsedOutput.batch_effect_detected ? 'YES' : 'NO'}**\n`;
-  if (parsedOutput.batch_effect_detected) {
-    formatted += `- Severity: ${parsedOutput.batch_effect_severity}\n`;
-    formatted += `- Evidence: ${parsedOutput.batch_effect_evidence}\n`;
-  }
-  formatted += `\n`;
-
-  // Outlier Detection
-  formatted += `## Outlier Detection\n`;
-  if (parsedOutput.outliers_detected.length > 0) {
-    formatted += `- Outliers Detected: **${parsedOutput.outliers_detected.length}**\n`;
-    formatted += `- Outlier Samples:\n`;
-    for (const sample of parsedOutput.outliers_detected) {
-      // Find which group this sample belongs to
-      let sampleGroup = 'unknown';
-      for (const [group, sampleNames] of Object.entries(groups)) {
-        if (sampleNames.includes(sample)) {
-          sampleGroup = group;
-          break;
-        }
-      }
-      formatted += `  - ${sample} (${sampleGroup})\n`;
-    }
-  } else {
-    formatted += `- Outliers Detected: **None**\n`;
-  }
-  formatted += `\n`;
-
-  // Per-sample QC metrics (if available)
-  if (Object.keys(parsedOutput.per_sample_qc).length > 0) {
-    formatted += `## Per-Sample QC Metrics\n`;
-    formatted += `| Sample | PC1 | PC2 | Distance to Centroid | Outlier |\n`;
-    formatted += `|--------|-----|-----|---------------------|----------|\n`;
-
-    for (const [sample, metrics] of Object.entries(parsedOutput.per_sample_qc)) {
-      const isOutlier = parsedOutput.outliers_detected.includes(sample);
-      formatted += `| ${sample} | `;
-      formatted += `${metrics.PC1?.toFixed(2) || 'N/A'} | `;
-      formatted += `${metrics.PC2?.toFixed(2) || 'N/A'} | `;
-      formatted += `${metrics.distance?.toFixed(2) || 'N/A'} | `;
-      formatted += `${isOutlier ? '⚠️ YES' : 'No'} |\n`;
-    }
+  // PCA Plot Path (for reference)
+  if (parsedOutput.pca_plot_path) {
+    formatted += `## PCA Plot Location\n`;
+    formatted += `\`${parsedOutput.pca_plot_path}\`\n`;
     formatted += `\n`;
   }
 
-  // Group Balance Check
-  formatted += `## Group Balance After Potential Outlier Removal\n`;
-  const currentCounts = {};
-  for (const [group, sampleNames] of Object.entries(groups)) {
-    const remaining = sampleNames.filter(s => !parsedOutput.outliers_detected.includes(s));
-    currentCounts[group] = remaining.length;
-  }
-
-  for (const [group, count] of Object.entries(currentCounts)) {
-    formatted += `- ${group}: ${count} samples`;
-    if (count < 2) {
-      formatted += ` ⚠️ **WARNING: Less than 2 samples!**`;
-    }
-    formatted += `\n`;
-  }
-  formatted += `\n`;
-
-  // QC Status and Recommendation
-  formatted += `## QC Status\n`;
-  formatted += `- Overall Status: **${parsedOutput.overall_status}**\n`;
-  formatted += `- Exit Code: ${parsedOutput.exit_code} (0=PASS, 2=Issues)\n`;
-  formatted += `- Recommendation: ${parsedOutput.recommendation}\n`;
-  formatted += `\n`;
-
-  // Warnings and Errors
+  // Warnings and Errors (if any)
   if (parsedOutput.warnings.length > 0) {
     formatted += `## Warnings\n`;
     for (const warning of parsedOutput.warnings) {
@@ -493,37 +449,13 @@ export function formatStage3ForAgents(parsedOutput, dataInfo) {
     formatted += `\n`;
   }
 
-  // Decision Prompt
   formatted += `---\n\n`;
-  formatted += `## Your Decision (REQUIRED FORMAT)\n\n`;
-  formatted += `Please review the QC assessment results above and provide your decision:\n\n`;
-
-  formatted += `**DE_Method:** [simpleEdger / batch_effect_edger]\n`;
-  formatted += `- Choose simpleEdger if NO batch effects detected\n`;
-  formatted += `- Choose batch_effect_edger if batch effects detected\n\n`;
-
-  if (parsedOutput.batch_effect_detected) {
-    formatted += `**Batch_Specification:** [auto / paired / explicit like "1,1,2,2"]\n`;
-    formatted += `- Use "auto" to let the pipeline infer batch structure\n`;
-    formatted += `- Use "paired" if samples were processed in pairs (ctrl1+trt1, ctrl2+trt2)\n`;
-    formatted += `- Use explicit labels for custom batch structure\n\n`;
-  } else {
-    formatted += `**Batch_Specification:** [N/A]\n\n`;
-  }
-
-  formatted += `**Outlier_Action:** [KEEP_ALL / REMOVE_OUTLIERS]\n`;
-  formatted += `- KEEP_ALL: Keep all samples (even outliers)\n`;
-  formatted += `- REMOVE_OUTLIERS: Remove detected outliers\n\n`;
-
-  if (parsedOutput.outliers_detected.length > 0) {
-    formatted += `**Outliers_to_Remove:** [${parsedOutput.outliers_detected.join(', ')} / None]\n`;
-    formatted += `- List specific outliers to remove, or "None" to keep all\n\n`;
-  } else {
-    formatted += `**Outliers_to_Remove:** [None]\n\n`;
-  }
-
-  formatted += `**Confidence:** [HIGH / MEDIUM / LOW]\n\n`;
-  formatted += `**Reasoning:** [2-3 sentences explaining your assessment]\n`;
+  formatted += `## Your Task\n\n`;
+  formatted += `Based on your VISUAL INSPECTION of the PCA plot, determine:\n`;
+  formatted += `1. Whether batch effects are present\n`;
+  formatted += `2. Whether any samples are outliers\n`;
+  formatted += `3. Which DE analysis method to use (simpleEdger or batch_effect_edger)\n`;
+  formatted += `4. Whether to keep all samples or remove outliers\n`;
 
   return formatted;
 }

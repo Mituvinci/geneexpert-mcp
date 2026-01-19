@@ -21,6 +21,23 @@ const openai = new OpenAI({
 
 export async function callGPT5(prompt, options = {}) {
   try {
+    // Build user message content (text + optional images)
+    let userContent = prompt;
+    if (options.images && options.images.length > 0) {
+      // Vision mode: create multimodal content
+      userContent = [
+        { type: 'text', text: prompt }
+      ];
+      for (const img of options.images) {
+        userContent.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:${img.mediaType};base64,${img.data}`
+          }
+        });
+      }
+    }
+
     const response = await openai.chat.completions.create({
       model: options.model || 'gpt-5.2-2025-12-11',
       messages: [
@@ -30,7 +47,7 @@ export async function callGPT5(prompt, options = {}) {
         },
         {
           role: 'user',
-          content: prompt
+          content: userContent
         }
       ],
       temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
@@ -65,6 +82,25 @@ const anthropic = new Anthropic({
 
 export async function callClaude(prompt, options = {}) {
   try {
+    // Build user message content (text + optional images)
+    let userContent = prompt;
+    if (options.images && options.images.length > 0) {
+      // Vision mode: create multimodal content array
+      userContent = [
+        { type: 'text', text: prompt }
+      ];
+      for (const img of options.images) {
+        userContent.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: img.mediaType,
+            data: img.data
+          }
+        });
+      }
+    }
+
     const response = await anthropic.messages.create({
       model: options.model || 'claude-sonnet-4-20250514',
       max_tokens: options.maxTokens || 4096,
@@ -73,7 +109,7 @@ export async function callClaude(prompt, options = {}) {
       messages: [
         {
           role: 'user',
-          content: prompt
+          content: userContent
         }
       ]
     });
@@ -113,7 +149,24 @@ export async function callGemini(prompt, options = {}) {
       ? `${options.systemPrompt}\n\n${prompt}`
       : prompt;
 
-    const result = await model.generateContent(fullPrompt, {
+    // Build content (text + optional images)
+    let content = fullPrompt;
+    if (options.images && options.images.length > 0) {
+      // Vision mode: create multimodal parts
+      content = [
+        { text: fullPrompt }
+      ];
+      for (const img of options.images) {
+        content.push({
+          inlineData: {
+            mimeType: img.mediaType,
+            data: img.data
+          }
+        });
+      }
+    }
+
+    const result = await model.generateContent(content, {
       generationConfig: {
         temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
       }
