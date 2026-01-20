@@ -57,7 +57,7 @@ node bin/geneexpert.js analyze data/your_input_folder \
 4. Stage 4: DE Analysis - Agents review differential expression results
 5. User input tracked when agents can't reach consensus (critical for research evaluation)
 
-### NEW: Two Multi-Agent Modes
+### Two Multi-Agent Modes
 
 **Parallel Independent Voting (Default):**
 ```bash
@@ -66,7 +66,7 @@ node bin/geneexpert.js analyze data/your_input \
   --staged --organism mouse --output results/parallel
 ```
 
-**Sequential Chain (Experimental):**
+**Sequential Chain:**
 ```bash
 # Agents respond sequentially: GPT-5.2 → Gemini → Claude
 # Each agent sees previous responses for informed synthesis
@@ -226,7 +226,7 @@ Outputs: stage4_de_analysis/ with DE results CSV, final Excel file
   - Validates biological assumptions, gene patterns, QC criteria
   - Pure reasoning, no tool access
 
-**Two Multi-Agent Modes (NEW):**
+**Two Multi-Agent Modes:**
 
 **Mode 1: Parallel Independent Voting (Default)**
 ```
@@ -237,7 +237,7 @@ All 3 agents receive SAME input → Respond simultaneously → Majority vote
 - Default behavior (no flag needed)
 ```
 
-**Mode 2: Sequential Chain (Experimental - NEW!)**
+**Mode 2: Sequential Chain**
 ```
 GPT-5.2 (Stats) → Gemini (Biology) → Claude (Pipeline)
 - Each agent sees previous responses
@@ -304,15 +304,15 @@ GPT-5.2 (Stats) → Gemini (Biology) → Claude (Pipeline)
    - Single-agent baseline: `--single-agent gpt5.2|claude|gemini`
    - Sequential chain mode: `--sequential-chain` flag
 
-8. **Hybrid Approach with Lab-Standard Formulas (NEW - Jan 19, 2026)**
-   - **Excel File Generation:** Creates XLSX with dynamic formulas and thresholds
-   - **Expr Formula:** Checks if gene is expressed (max group average logRPKM > 2 AND logCPM > 0)
-   - **CG Classification:** Categorizes genes as failed2DownRegulate, failed2UpRegulate, or nchg
-   - **Auto-Counting:** Formula-based counts for each classification category
-   - **Lab Thresholds:** FDR=0.05, logCPM=0, logFC=0.585 (1.5-fold), logRPKM=2
-   - **MA Plot Visualization:** Generated with customizable thresholds, PDF + JPEG formats
-   - **Enhanced Agent Summaries:** Distribution statistics, top genes by p-value, classification counts
-   - **Agent-Driven Decisions:** Agents can suggest threshold adjustments based on data characteristics
+8. **Hybrid Approach with Lab-Standard Formulas**
+   - Excel file generation with dynamic formulas and thresholds
+   - Expr formula checks if gene is expressed (max group average logRPKM > 2 AND logCPM > 0)
+   - CG classification categorizes genes as failed2DownRegulate, failed2UpRegulate, or nchg
+   - Formula-based auto-counting for each classification category
+   - Lab thresholds: FDR=0.05, logCPM=0, logFC=0.585 (1.5-fold), logRPKM=2
+   - MA plot visualization with customizable thresholds, PDF + JPEG formats
+   - Enhanced agent summaries with distribution statistics, top genes by p-value, classification counts
+   - Agent-driven threshold adjustments based on data characteristics
 
 ---
 
@@ -355,7 +355,7 @@ node bin/geneexpert.js analyze <dataset> \
 ```
 3 agents review simultaneously with independent voting.
 
-### System 5: Multi-Agent Sequential Chain (NEW!)
+### System 5: Multi-Agent Sequential Chain
 ```bash
 node bin/geneexpert.js analyze <dataset> \
   --staged \
@@ -408,52 +408,6 @@ node bin/geneexpert.js analyze <dataset> \
 
 ---
 
-## Development Status (Jan 19, 2026)
-
-### ALL 4 STAGES TESTED - READY FOR ICML EXPERIMENTS
-
-**Completed (Jan 19, 2026):**
-- Stage 1: FASTQ Validation (tested, working)
-- Stage 2: Alignment + QC (tested, working)
-- Stage 3: Quantification + PCA QC (tested, working, PDF to JPEG conversion)
-- Stage 4: DE Analysis (tested, working, Hybrid Approach implemented)
-- Staged executor (orchestrates all 4 stages with agent checkpoints)
-- User input tracking (JSON logs with user_input_required flag)
-- Test scripts for all 4 stages (test_stage1.js, test_stage2.js, test_stage3.js, test_stage4.js)
-- Sequential Chain mode (--sequential-chain flag)
-- Hybrid Approach with lab-standard Excel formulas
-- Enhanced agent summaries with distribution statistics
-
-**Hybrid Approach Features (Jan 19, 2026):**
-- **Excel Formulas:** Expr (expression check), CG (gene classification)
-- **Thresholds:** FDR=0.05, logCPM=0, logFC=0.585 (1.5-fold), logRPKM=2
-- **Classifications:** failed2DownRegulate, failed2UpRegulate, nchg with auto-counts
-- **MA Plot Generation:** PDF for user viewing, JPEG for agent analysis
-- **Enhanced Agent Summaries:**
-  - FDR distribution (genes at 0.05, 0.10, 0.20, 0.50)
-  - logFC distribution (genes at |FC| > 0.5, 1.0, 2.0)
-  - Top 10 genes by p-value (most promising candidates)
-  - Classification counts and suggested threshold adjustments
-- **Files:** merge_results.R, stage4_de_analysis.js, maplot.R
-
-**Bugs Fixed (Jan 19, 2026):**
-- Stage 4: COMPARISON variable escaping in bash template
-- Stage 4: Missing path import in stage_prompts.js
-- Stage 4: Parser now counts all genes including NA values
-- maplot.R: Changed to read.csv() for CSV files
-- Consensus mechanism recognizes stage-specific keywords (PASS_ALL, ABORT, REMOVE_SAMPLES)
-- FastQC results parsing with sample name matching
-- Agent recommendations display fixed (content vs response)
-- PDF to JPEG conversion for PCA plots (GPT/Claude compatibility)
-
-**Next Steps:**
-- Run full ICML experiments (45 analyses: 5 systems × 9 datasets)
-- Use properly powered datasets (15-20M reads/sample, n>=3 per group)
-- Calculate evaluation metrics and statistical tests
-- Prepare ICML 2026 paper submission
-
----
-
 ## Cost Estimate
 
 ### Per-Stage Agent Review:
@@ -467,7 +421,7 @@ node bin/geneexpert.js analyze <dataset> \
 
 **Total: ~$0.12 per RNA-seq analysis with full multi-agent validation**
 
----
+
 
 ## Development Commands
 
@@ -516,9 +470,9 @@ tail -f results/my_analysis/stage*_log.txt
    - Early issue detection (catch problems in Stage 2, not Stage 4)
    - Progressive refinement (remove outliers before DE analysis)
 
-2. **Parallel vs Sequential Multi-Agent Comparison (NEW!)**
-   - **Parallel mode**: Independent voting by all agents simultaneously
-   - **Sequential mode**: Information passing (GPT-5.2 → Gemini → Claude)
+2. **Parallel vs Sequential Multi-Agent Comparison**
+   - Parallel mode: Independent voting by all agents simultaneously
+   - Sequential mode: Information passing (GPT-5.2 → Gemini → Claude)
    - Research question: Does sequential synthesis improve decisions or does parallel independence reduce errors?
    - Empirical comparison of two multi-agent architectures
 
@@ -543,7 +497,64 @@ tail -f results/my_analysis/stage*_log.txt
    - Measure impact of each stage's agent review
    - Evaluate error propagation in sequential mode
 
-**Status:** Staged architecture complete with Sequential Chain mode, ready for comprehensive evaluation (Jan 19, 2026)
+---
+
+## Evaluation Datasets
+
+The system is evaluated on 9 RNA-seq datasets covering clean signals, batch effects, and contamination scenarios:
+
+### Clean Biological Signal Datasets
+
+**1. GSE52778 - Human Dexamethasone Response**
+- Organism: Human cell lines (N61311, N052611, N080611, N061011)
+- Design: Untreated vs dexamethasone-treated (4 vs 4 samples)
+- Platform: Illumina paired-end RNA-seq
+- Citation: Rüegger et al., Genome Biology, 2015
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE52778
+
+**2. GSE114845 - Mouse Sleep Deprivation (Paired)**
+- Organism: Mouse cortex
+- Design: Control vs sleep-deprived, biologically paired by mouse (5 vs 5 samples)
+- Platform: Illumina HiSeq 2500, single-end 101bp
+- Citation: Bellesi et al., Journal of Neuroscience, 2018
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE114845
+
+**3. GSE113754 - Mouse Sleep Deprivation (Wildtype)**
+- Organism: Mouse prefrontal cortex
+- Design: Wildtype homecage control vs sleep deprivation (5 vs 5 samples)
+- Platform: Illumina HiSeq 2500, paired-end
+- Citation: Ingiosi et al., eLife, 2019 (PMID: 30973326)
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE113754
+
+### Batch Effect Datasets
+
+**4. GSE141496 - HeLa Technical Heterogeneity**
+- Organism: Human HeLa cell line
+- Design: Same biological condition across multiple lanes/runs (14 samples)
+- Purpose: Stress-test for false-positive biological signals from technical variation
+- Citation: Chen et al., Nature Biotechnology, 2019 (PMID: 30617342)
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE141496
+
+**5. GSE47774 - SEQC Multi-Site Reference**
+- Organism: Human reference RNA samples
+- Design: Same RNA sequenced across multiple sites, flowcells, lanes (24 samples selected)
+- Purpose: Multi-batch technical variation benchmark
+- Citation: SEQC/MAQC-III Consortium, Nature Biotechnology, 2014
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE47774
+
+### Contamination Source Datasets
+
+**6. GSE193658 - Human Lab Experiment**
+- Organism: Human cell line
+- Design: Laboratory perturbation experiments
+- Purpose: Source for synthetic contamination generation
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE193658
+
+**7. GSE48151 - E. coli Reference**
+- Organism: Escherichia coli
+- Design: Bacterial transcriptome under controlled conditions
+- Purpose: Non-host organism for synthetic contamination (50% and 70% mixing)
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE48151
 
 ---
 
@@ -557,9 +568,4 @@ MIT
 
 - **GitHub:** https://github.com/Mituvinci/geneexpert-mcp
 - **Status:** Staged architecture complete with Sequential Chain mode
-- **Datasets:** 9 experimental datasets ready (3 Clean, 2 Batch, 2 Contamination, 1 Lab, 1 E.coli)
 - **Experiments:** 45 total (5 systems × 9 datasets) for ICML 2026
-
----
-
-**Ready to compare Parallel vs Sequential multi-agent architectures for RNA-seq analysis!**

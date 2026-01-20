@@ -28,7 +28,28 @@ program
 
 program
   .command('analyze')
-  .description('Run RNA-seq analysis with multi-agent orchestration')
+  .description(`Run RNA-seq analysis with multi-agent orchestration
+
+ICML 2026 EXPERIMENTAL MODES:
+  1. No-Agent (Baseline):       --staged --force-automation
+  2. Single-Agent GPT-5.2:      --staged --single-agent gpt5.2
+  3. Single-Agent Claude:       --staged --single-agent claude
+  4. Multi-Agent Parallel:      --staged (default, all agents vote independently)
+  5. Multi-Agent Sequential:    --staged --sequential-chain (GPT→Gemini→Claude)
+
+EXAMPLES:
+  # Multi-agent parallel (default - recommended)
+  geneexpert analyze data/DA0036 -o results/test --organism mouse --staged
+
+  # Sequential chain mode (experimental)
+  geneexpert analyze data/DA0036 -o results/test --organism mouse --staged --sequential-chain
+
+  # Single-agent baseline (for comparison)
+  geneexpert analyze data/DA0036 -o results/test --organism mouse --staged --single-agent gpt5.2
+
+  # No-agent baseline (template only)
+  geneexpert analyze data/DA0036 -o results/test --organism mouse --staged --force-automation
+`)
   .argument('<input>', 'Input directory (FASTQ files, BAM files, or count matrix)')
   .requiredOption('-o, --output <dir>', 'Output directory for results')
   .option('--organism <species>', 'Organism (mouse, human, rat)', 'mouse')
@@ -40,10 +61,10 @@ program
   .option('--aligner <tool>', 'Alignment tool (subread only)', 'subread')
   .option('--de-tool <tool>', 'DE analysis tool: edger or deseq2', 'edger')
   .option('--threads <n>', 'Number of threads', '4')
-  .option('--staged', 'Use staged architecture (4-stage pipeline with agent checkpoints)')
-  .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (for experiments)')
-  .option('--force-automation', 'Skip all agents, use template-based AUTOMATION only (no-agent baseline)')
-  .option('--sequential-chain', 'Use sequential chain mode: GPT-5.2 → Gemini → Claude (experimental)')
+  .option('--staged', 'Use staged architecture (4-stage pipeline with agent checkpoints) - REQUIRED for ICML experiments')
+  .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (ICML baseline #2-3)')
+  .option('--force-automation', 'Skip all agents, use template-based decisions only (ICML baseline #1)')
+  .option('--sequential-chain', 'Use sequential chain mode: GPT-5.2 → Gemini → Claude (ICML experiment #5)')
   .option('--verbose', 'Verbose output', false)
   .action(async (input, options) => {
     console.log('🧬 GeneExpert Multi-Agent RNA-seq Analysis');
@@ -53,6 +74,22 @@ program
     // Validate input directory
     if (!fs.existsSync(input)) {
       console.error(`❌ Error: Input directory not found: ${input}`);
+      process.exit(1);
+    }
+
+    // Validate required flags for staged mode
+    if (options.staged && (!options.controlKeyword || !options.treatmentKeyword)) {
+      console.error('');
+      console.error('❌ Error: --staged mode requires both --control-keyword and --treatment-keyword');
+      console.error('');
+      console.error('Example:');
+      console.error('  geneexpert analyze data/DA0036 -o results/test \\');
+      console.error('    --organism mouse --staged \\');
+      console.error('    --control-keyword "cont" \\');
+      console.error('    --treatment-keyword "ips"');
+      console.error('');
+      console.error('The keywords are used to identify control vs treatment samples from filenames.');
+      console.error('');
       process.exit(1);
     }
 
@@ -82,14 +119,70 @@ program
       verbose: options.verbose
     };
 
+    // Detect experimental mode
+    let experimentalMode = 'Unknown';
+    let modeNumber = 0;
+
+    if (!options.staged) {
+      experimentalMode = 'Legacy Monolithic (not for ICML experiments)';
+      console.log('⚠️  WARNING: You are using the old monolithic architecture.');
+      console.log('   For ICML experiments, use --staged flag!');
+      console.log('');
+    } else {
+      // Detect which ICML experimental mode
+      if (options.forceAutomation) {
+        modeNumber = 1;
+        experimentalMode = 'No-Agent Baseline (template-based decisions)';
+        if (options.singleAgent || options.sequentialChain) {
+          console.log('⚠️  WARNING: --force-automation conflicts with --single-agent or --sequential-chain');
+          console.log('   Using: No-Agent mode (agents will be skipped)');
+          console.log('');
+        }
+      } else if (options.singleAgent) {
+        if (options.singleAgent === 'gpt5.2' || options.singleAgent === 'gpt4') {
+          modeNumber = 2;
+          experimentalMode = `Single-Agent: GPT-5.2 (all roles)`;
+        } else if (options.singleAgent === 'claude') {
+          modeNumber = 3;
+          experimentalMode = `Single-Agent: Claude (all roles)`;
+        } else if (options.singleAgent === 'gemini') {
+          modeNumber = 3;
+          experimentalMode = `Single-Agent: Gemini (all roles)`;
+        } else {
+          console.error(`❌ Error: Invalid --single-agent value: ${options.singleAgent}`);
+          console.error('   Valid options: gpt5.2, claude, gemini');
+          process.exit(1);
+        }
+        if (options.sequentialChain) {
+          console.log('⚠️  WARNING: --single-agent conflicts with --sequential-chain');
+          console.log('   Using: Single-agent mode (sequential chain will be ignored)');
+          console.log('');
+        }
+      } else if (options.sequentialChain) {
+        modeNumber = 5;
+        experimentalMode = 'Multi-Agent Sequential Chain (GPT-5.2 → Gemini → Claude)';
+      } else {
+        modeNumber = 4;
+        experimentalMode = 'Multi-Agent Parallel (default - independent voting)';
+      }
+    }
+
     console.log('📋 Configuration:');
     console.log(`   Input:      ${config.input}`);
     console.log(`   Output:     ${config.output}`);
     console.log(`   Organism:   ${config.organism}`);
     console.log(`   Comparison: ${config.comparison}`);
+    if (config.controlKeyword) {
+      console.log(`   Control:    ${config.controlKeyword}`);
+    }
+    if (config.treatmentKeyword) {
+      console.log(`   Treatment:  ${config.treatmentKeyword}`);
+    }
     console.log(`   Aligner:    ${config.aligner}`);
     console.log(`   DE Tool:    ${config.deTool}`);
     console.log(`   Architecture: ${options.staged ? 'Staged (4-stage checkpoints)' : 'Monolithic'}`);
+    console.log('');
+    console.log(`🔬 ICML Experiment Mode #${modeNumber}: ${experimentalMode}`);
     console.log('');
 
     try {
