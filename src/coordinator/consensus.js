@@ -3,6 +3,8 @@
  * Handles voting, disagreement analysis, and decision synthesis
  */
 
+import { extractDecisionFromResponse, normalizeDecision } from '../config/decision_vocabulary.js';
+
 // Number of agents in the voting system
 const TOTAL_AGENTS = 3;
 
@@ -37,24 +39,29 @@ export function analyzeAgreement(responses) {
 
 /**
  * Extract decision from agent response
- * Returns: 'approve', 'reject', 'uncertain', 'automation', 'adaptation', or null
+ * Returns: canonical decision string, 'approve', 'reject', 'uncertain', 'automation', 'adaptation', or null
+ *
+ * @param {Object} agentResponse - Agent response object
+ * @param {string} decisionType - Type of decision (e.g., 'stage1', 'stage2', 'approach_decision')
+ * @returns {string|null} - Canonical decision or voting category
  */
 export function extractDecision(agentResponse, decisionType = 'default') {
   if (!agentResponse.success || !agentResponse.content) {
     return null;
   }
 
-  const content = agentResponse.content.toLowerCase();
+  const content = agentResponse.content;
 
-  // For APPROACH decisions (automation vs adaptation)
+  // For APPROACH decisions (automation vs adaptation) - legacy support
   if (decisionType === 'approach_decision') {
+    const lowerContent = content.toLowerCase();
     // Check for ADAPTATION first (more specific, should take priority)
-    if (content.includes('adaptation') || content.includes('custom script') || content.includes('edge case')) {
+    if (lowerContent.includes('adaptation') || lowerContent.includes('custom script') || lowerContent.includes('edge case')) {
       return 'adaptation';
     }
 
     // Then check for AUTOMATION
-    if (content.includes('automation') || content.includes('standard pipeline') || content.includes('proceed with automation')) {
+    if (lowerContent.includes('automation') || lowerContent.includes('standard pipeline') || lowerContent.includes('proceed with automation')) {
       return 'automation';
     }
 
@@ -62,60 +69,113 @@ export function extractDecision(agentResponse, decisionType = 'default') {
     return 'automation';
   }
 
-  // For standard decisions (approve/reject)
+  // For staged decisions, use canonical vocabulary
+  if (decisionType.startsWith('stage') || ['stage1', 'stage2', 'stage3_de_method', 'stage3_outlier_action', 'stage4'].includes(decisionType)) {
+    // Try to extract canonical decision using vocabulary system
+    const canonicalDecision = extractDecisionFromResponse(content, decisionType);
+
+    if (canonicalDecision) {
+      // Map canonical decisions to voting categories for consensus mechanism
+      return mapCanonicalToVoteCategory(canonicalDecision, decisionType);
+    }
+  }
+
+  // Fallback: generic approval/rejection detection
+  const lowerContent = content.toLowerCase();
+
   // Look for clear approval signals
   if (
-    content.includes('approve') ||
-    content.includes('proceed') ||
-    content.includes('looks good') ||
-    content.includes('acceptable') ||
-    content.match(/\b(yes|correct|fine)\b/) ||
-    // Stage-specific keywords
-    content.includes('pass_all') ||  // Stage 2: PASS_ALL
-    content.includes('decision: pass') ||  // Stage 1/3/4: PASS
-    content.includes('pass_with_warning') ||  // Stage 1: PASS_WITH_WARNING
-    // Stage 3: DE method keywords (BOTH are valid "proceed" decisions)
-    content.includes('de_method: simpleedger') ||  // Stage 3: Standard DE (no batch correction)
-    content.includes('de_method: batch_effect_edger') ||  // Stage 3: DE with batch correction
-    // Stage 3: Outlier action keywords (BOTH are valid "proceed" decisions)
-    content.includes('outlier_action: keep_all') ||  // Stage 3: Keep all samples
-    content.includes('outlier_action: remove_outliers')  // Stage 3: Remove outliers
+    lowerContent.includes('approve') ||
+    lowerContent.includes('proceed') ||
+    lowerContent.includes('looks good') ||
+    lowerContent.includes('acceptable') ||
+    lowerContent.match(/\b(yes|correct|fine)\b/)
   ) {
     return 'approve';
   }
 
   // Look for clear rejection signals
   if (
-    content.includes('reject') ||
-    content.includes('do not proceed') ||
-    content.includes('not acceptable') ||
-    content.includes('incorrect') ||
-    content.match(/\b(no|wrong|bad)\b/) ||
-    // Stage-specific keywords
-    content.includes('decision: fail') ||  // Stage 1: FAIL
-    content.includes('decision: abort')  // Stage 2: ABORT
+    lowerContent.includes('reject') ||
+    lowerContent.includes('do not proceed') ||
+    lowerContent.includes('not acceptable') ||
+    lowerContent.includes('incorrect') ||
+    lowerContent.match(/\b(no|wrong|bad)\b/)
   ) {
     return 'reject';
   }
 
-  // Stage 2 special case: REMOVE_SAMPLES (contextual - could be approve or uncertain)
-  // Treat as 'uncertain' to trigger further review
-  if (content.includes('remove_samples')) {
-    return 'uncertain';
-  }
-
   // Look for uncertainty
   if (
-    content.includes('uncertain') ||
-    content.includes('unclear') ||
-    content.includes('need more') ||
-    content.includes('investigate') ||
-    content.includes('check')
+    lowerContent.includes('uncertain') ||
+    lowerContent.includes('unclear') ||
+    lowerContent.includes('need more') ||
+    lowerContent.includes('investigate') ||
+    lowerContent.includes('check')
   ) {
     return 'uncertain';
   }
 
   // Default to uncertain if no clear signal
+  return 'uncertain';
+}
+
+/**
+ * Map canonical decisions to voting categories for consensus
+ *
+ * @param {string} canonicalDecision - Canonical decision from vocabulary
+ * @param {string} stage - Stage identifier
+ * @returns {string} - Voting category: 'approve', 'reject', or 'uncertain'
+ */
+function mapCanonicalToVoteCategory(canonicalDecision, stage) {
+  // Stage 1: PASS/PASS_WITH_WARNING = approve, FAIL = reject
+  if (stage === 'stage1') {
+    if (canonicalDecision === 'PASS' || canonicalDecision === 'PASS_WITH_WARNING') {
+      return 'approve';
+    }
+    if (canonicalDecision === 'FAIL') {
+      return 'reject';
+    }
+  }
+
+  // Stage 2: PASS_ALL = approve, REMOVE_SAMPLES = uncertain (needs user decision), ABORT = reject
+  if (stage === 'stage2') {
+    if (canonicalDecision === 'PASS_ALL') {
+      return 'approve';
+    }
+    if (canonicalDecision === 'REMOVE_SAMPLES') {
+      return 'uncertain';  // Requires user review
+    }
+    if (canonicalDecision === 'ABORT') {
+      return 'reject';
+    }
+  }
+
+  // Stage 3 DE method: both simpleEdger and batch_effect_edger are "approve" (proceed with chosen method)
+  if (stage === 'stage3_de_method') {
+    if (canonicalDecision === 'simpleEdger' || canonicalDecision === 'batch_effect_edger') {
+      return 'approve';
+    }
+  }
+
+  // Stage 3 outlier: both KEEP_ALL and REMOVE_OUTLIERS are "approve" (proceed with chosen action)
+  if (stage === 'stage3_outlier_action') {
+    if (canonicalDecision === 'KEEP_ALL' || canonicalDecision === 'REMOVE_OUTLIERS') {
+      return 'approve';
+    }
+  }
+
+  // Stage 4: APPROVE = approve, REQUEST_REANALYSIS = reject
+  if (stage === 'stage4') {
+    if (canonicalDecision === 'APPROVE') {
+      return 'approve';
+    }
+    if (canonicalDecision === 'REQUEST_REANALYSIS') {
+      return 'reject';
+    }
+  }
+
+  // Default: uncertain
   return 'uncertain';
 }
 

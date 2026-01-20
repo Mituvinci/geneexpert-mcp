@@ -434,7 +434,7 @@ Focus on biological insight and interpretation.
     console.log('');
 
     // Generate decision_id
-    const decision_id = `${this.currentDataset || 'unknown'}_stage1_validation`;
+    const decision_id = `${this.currentDataset || 'unknown'}_stage1`;
 
     // Format output for agents
     const formattedOutput = formatStageOutputForAgents(1, stage1Output, dataInfo);
@@ -444,7 +444,7 @@ Focus on biological insight and interpretation.
       1,
       formattedOutput,
       { stage1Output, dataInfo },
-      'stage_checkpoint',
+      'stage1',
       decision_id
     );
 
@@ -471,25 +471,28 @@ Focus on biological insight and interpretation.
   shouldProceedFromStage1(consensus) {
     const decision = consensus.decision.toLowerCase();
 
-    // PASS or PASS_WITH_WARNING -> proceed
-    if (decision.includes('pass')) {
+    // Approve = proceed (agents agreed on PASS or PASS_WITH_WARNING)
+    if (decision === 'approve') {
       return true;
     }
 
-    // FAIL -> don't proceed
-    if (decision.includes('fail')) {
+    // Reject = don't proceed (agents agreed on FAIL)
+    if (decision === 'reject') {
       return false;
     }
 
-    // Check votes - majority PASS means proceed
-    if (consensus.votes) {
-      const passVotes = (consensus.votes.pass || 0) + (consensus.votes.pass_with_warning || 0);
-      const failVotes = consensus.votes.fail || 0;
-      return passVotes > failVotes;
+    // User decision required = don't proceed automatically
+    if (decision.includes('user_decision')) {
+      return false;
     }
 
-    // Default: proceed if confidence is high enough
-    return consensus.confidence >= 0.5;
+    // Check votes - majority approve means proceed
+    if (consensus.votes && consensus.votes.approve >= 2) {
+      return true;
+    }
+
+    // Default: don't proceed without clear consensus
+    return false;
   }
 
   /**
@@ -504,7 +507,7 @@ Focus on biological insight and interpretation.
     console.log('');
 
     // Generate decision_id
-    const decision_id = `${this.currentDataset || 'unknown'}_stage2_alignment`;
+    const decision_id = `${this.currentDataset || 'unknown'}_stage2`;
 
     // Format output for agents
     const formattedOutput = formatStageOutputForAgents(2, stage2Output, dataInfo);
@@ -514,7 +517,7 @@ Focus on biological insight and interpretation.
       2,
       formattedOutput,
       { stage2Output, dataInfo },
-      'stage_checkpoint',
+      'stage2',
       decision_id
     );
 
@@ -544,11 +547,21 @@ Focus on biological insight and interpretation.
     let samplesToRemove = [];
     let proceed = true;
 
-    if (decision.includes('abort')) {
+    // Approve = proceed with all samples (agents agreed on PASS_ALL)
+    if (decision === 'approve') {
+      proceed = true;
+      samplesToRemove = [];
+    }
+    // Reject = abort pipeline (agents agreed on ABORT)
+    else if (decision === 'reject') {
       proceed = false;
-    } else if (decision.includes('remove')) {
+      samplesToRemove = [];
+    }
+    // User decision required = check what agents recommended
+    else if (decision.includes('user_decision')) {
       // Extract samples to remove from agent responses
       samplesToRemove = this.extractSamplesToRemove(responses);
+      proceed = true;  // Proceed but may need to remove samples
     }
 
     return { proceed, samplesToRemove };
@@ -603,7 +616,7 @@ Focus on biological insight and interpretation.
     console.log('');
 
     // Generate decision_id
-    const decision_id = `${this.currentDataset || 'unknown'}_stage3_qc`;
+    const decision_id = `${this.currentDataset || 'unknown'}_stage3`;
 
     // Format output for agents
     const formattedOutput = formatStageOutputForAgents(3, stage3Output, dataInfo);
@@ -641,7 +654,7 @@ Focus on biological insight and interpretation.
       3,
       formattedOutput,
       { stage3Output, dataInfo, images: pcaImages },
-      'stage_checkpoint',
+      'stage3_de_method',
       decision_id
     );
 
@@ -752,7 +765,7 @@ Focus on biological insight and interpretation.
     console.log('');
 
     // Generate decision_id
-    const decision_id = `${this.currentDataset || 'unknown'}_stage4_de_analysis`;
+    const decision_id = `${this.currentDataset || 'unknown'}_stage4`;
 
     // Format output for agents
     const formattedOutput = formatStageOutputForAgents(4, stage4Output, dataInfo);
@@ -762,7 +775,7 @@ Focus on biological insight and interpretation.
       4,
       formattedOutput,
       { stage4Output, dataInfo },
-      'stage_checkpoint',
+      'stage4',
       decision_id
     );
 

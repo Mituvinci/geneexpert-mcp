@@ -369,10 +369,22 @@ node bin/geneexpert.js analyze <dataset> \
 - Error reduction (baseline errors - multi-agent errors) / baseline errors
 - Success rate (successful analyses / total)
 - Cost efficiency (total cost / successes)
-- Inter-agent agreement (Cohen's kappa)
+- Inter-agent agreement (Cohen's kappa for multi-agent modes)
 - User input frequency (% decisions requiring user input)
-- Error propagation rate (sequential mode only)
+- Error propagation rate (sequential mode - measures if later agents correct or amplify first agent's errors)
 - Reasoning quality (qualitative assessment)
+
+**Evaluation Script:**
+```bash
+# Calculate all metrics
+node bin/evaluate.js metrics
+
+# Compare parallel vs sequential
+node bin/evaluate.js compare
+
+# Export results to CSV
+node bin/evaluate.js metrics --output results.csv
+```
 
 ---
 
