@@ -103,10 +103,9 @@ export function generateStage1Script(dataInfo, config, outputPath) {
   scriptLines.push('for zipfile in "$OUTPUT_DIR/stage1_validation/fastqc_results"/*_fastqc.zip; do');
   scriptLines.push('  if [ -f "$zipfile" ]; then');
   scriptLines.push('    sample=$(basename "$zipfile" _fastqc.zip)');
-  scriptLines.push('    # Extract summary.txt from zip');
-  scriptLines.push('    unzip -p "$zipfile" "*/summary.txt" 2>/dev/null | \\');
-  scriptLines.push('    awk -v sample="$sample" \'BEGIN{ORS=","} {print $1} END{print "\\n"}\' | \\');
-  scriptLines.push('    sed "s/^/$sample,/" >> "$OUTPUT_DIR/stage1_validation/fastqc_summary.csv"');
+  scriptLines.push('    # Extract summary.txt from zip and format as CSV (collect all results on one line)');
+  scriptLines.push('    results=$(unzip -p "$zipfile" "*/summary.txt" 2>/dev/null | awk \'{printf "%s,", $1}\')');
+  scriptLines.push('    echo "${sample},${results}" >> "$OUTPUT_DIR/stage1_validation/fastqc_summary.csv"');
   scriptLines.push('  fi');
   scriptLines.push('done');
   scriptLines.push('');
@@ -268,9 +267,11 @@ export function parseStage1Output(outputDir) {
         if (values[j] === 'WARN') hasWarnings = true;
       }
 
-      // Add to per_sample if exists
+      // Add to per_sample if exists (try with and without .fastq.gz extension)
       if (result.per_sample[sample]) {
         result.per_sample[sample].fastqc = fastqcResults[sample];
+      } else if (result.per_sample[`${sample}.fastq.gz`]) {
+        result.per_sample[`${sample}.fastq.gz`].fastqc = fastqcResults[sample];
       }
     }
 
@@ -375,7 +376,20 @@ export function formatStage1ForAgents(parsedOutput, dataInfo) {
   for (const [sample, data] of Object.entries(parsedOutput.per_sample)) {
     const reads = data.reads ? data.reads.toLocaleString() : 'N/A';
     const validation = data.status || 'unknown';
-    const fastqc = data.fastqc?.per_base_quality || 'N/A';
+
+    // Determine overall FastQC status from all modules
+    let fastqc = 'N/A';
+    if (data.fastqc) {
+      const modules = Object.values(data.fastqc);
+      if (modules.some(m => m === 'FAIL')) {
+        fastqc = 'FAIL';
+      } else if (modules.some(m => m === 'WARN')) {
+        fastqc = 'WARN';
+      } else if (modules.every(m => m === 'PASS')) {
+        fastqc = 'PASS';
+      }
+    }
+
     lines.push(`| ${sample} | ${reads} | ${validation} | ${fastqc} |`);
   }
   lines.push('');

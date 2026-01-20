@@ -333,6 +333,105 @@ export async function callAllAgents(prompt, options = {}) {
 }
 
 // ============================================
+// Sequential Chain (NEW - for ICML comparison)
+// ============================================
+
+/**
+ * Call agents sequentially: GPT-5.2 → Gemini → Claude
+ * Each agent sees previous agents' responses
+ *
+ * Flow: Stats (GPT-5.2) → Biology (Gemini) → Pipeline (Claude)
+ * Claude acts as synthesis agent with full context
+ */
+export async function callAllAgentsSequential(prompt, options = {}) {
+  console.log('[Sequential Chain Mode] Calling agents in sequence: GPT-5.2 → Gemini → Claude');
+  console.log('[Sequential Chain] Each agent will see previous responses for informed synthesis');
+  console.log('');
+
+  // STEP 1: Stats Agent (GPT-5.2) - First assessment
+  console.log('[Step 1/3] GPT-5.2 (Stats Agent) - Statistical assessment...');
+  const gpt5Result = await callGPT5(prompt, {
+    systemPrompt: options.gpt5_2_SystemPrompt,
+    ...options.gpt5_2_Options
+  });
+
+  console.log('[GPT-5.2 Stats Agent] ' + (gpt5Result.success ? '✓ Response received' : '✗ Failed'));
+  if (gpt5Result.success && gpt5Result.content) {
+    console.log('-'.repeat(60));
+    console.log(gpt5Result.content);
+    console.log('-'.repeat(60));
+  }
+  console.log('');
+
+  // STEP 2: Biology Agent (Gemini) - Receives GPT-5.2's assessment
+  console.log('[Step 2/3] Gemini (Biology Agent) - Biological interpretation...');
+  console.log('[Gemini] Receiving Stats Agent assessment for context');
+
+  // Build augmented prompt with GPT-5.2's response
+  const geminiAugmentedPrompt = gpt5Result.success
+    ? `${prompt}\n\n---\n\n**STATS AGENT ASSESSMENT (GPT-5.2):**\n\n${gpt5Result.content}\n\n---\n\nConsider the Stats Agent's statistical perspective above while providing your biological interpretation. You may agree or disagree with their assessment based on biological reasoning.`
+    : prompt; // If GPT-5.2 failed, proceed with original prompt
+
+  const geminiResult = await callGemini(geminiAugmentedPrompt, {
+    systemPrompt: options.geminiSystemPrompt,
+    ...options.geminiOptions
+  });
+
+  console.log('[Gemini Biology Agent] ' + (geminiResult.success ? '✓ Response received' : '✗ Failed'));
+  if (geminiResult.success && geminiResult.content) {
+    console.log('-'.repeat(60));
+    console.log(geminiResult.content);
+    console.log('-'.repeat(60));
+  }
+  console.log('');
+
+  // STEP 3: Pipeline Agent (Claude) - Receives BOTH GPT-5.2 and Gemini assessments
+  console.log('[Step 3/3] Claude (Pipeline Agent) - Technical synthesis...');
+  console.log('[Claude] Receiving Stats + Biology assessments for final synthesis');
+
+  // Build fully augmented prompt with both previous responses
+  let claudeAugmentedPrompt = prompt;
+
+  if (gpt5Result.success || geminiResult.success) {
+    claudeAugmentedPrompt += `\n\n---\n\n**PREVIOUS AGENT ASSESSMENTS:**\n\n`;
+
+    if (gpt5Result.success) {
+      claudeAugmentedPrompt += `**1. STATS AGENT (GPT-5.2) - Statistical Perspective:**\n\n${gpt5Result.content}\n\n---\n\n`;
+    }
+
+    if (geminiResult.success) {
+      claudeAugmentedPrompt += `**2. BIOLOGY AGENT (Gemini) - Biological Perspective:**\n\n${geminiResult.content}\n\n---\n\n`;
+    }
+
+    claudeAugmentedPrompt += `As the Pipeline Agent, synthesize the statistical and biological perspectives above and provide your final technical decision. Consider both assessments but make your own independent judgment based on pipeline requirements and technical feasibility.`;
+  }
+
+  const claudeResult = await callClaude(claudeAugmentedPrompt, {
+    systemPrompt: options.claudeSystemPrompt,
+    ...options.claudeOptions
+  });
+
+  console.log('[Claude Pipeline Agent] ' + (claudeResult.success ? '✓ Response received' : '✗ Failed'));
+  if (claudeResult.success && claudeResult.content) {
+    console.log('-'.repeat(60));
+    console.log(claudeResult.content);
+    console.log('-'.repeat(60));
+  }
+  console.log('');
+
+  console.log('[Sequential Chain] All 3 agents completed');
+  console.log('');
+
+  return {
+    gpt5_2: gpt5Result,
+    claude: claudeResult,
+    gemini: geminiResult,
+    allSuccessful: gpt5Result.success && claudeResult.success && geminiResult.success,
+    sequentialMode: true
+  };
+}
+
+// ============================================
 // Agent-Specific Helpers
 // ============================================
 

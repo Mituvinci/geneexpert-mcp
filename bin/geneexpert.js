@@ -43,6 +43,7 @@ program
   .option('--staged', 'Use staged architecture (4-stage pipeline with agent checkpoints)')
   .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (for experiments)')
   .option('--force-automation', 'Skip all agents, use template-based AUTOMATION only (no-agent baseline)')
+  .option('--sequential-chain', 'Use sequential chain mode: GPT-5.2 → Gemini → Claude (experimental)')
   .option('--verbose', 'Verbose output', false)
   .action(async (input, options) => {
     console.log('🧬 GeneExpert Multi-Agent RNA-seq Analysis');
@@ -77,6 +78,7 @@ program
       threads: parseInt(options.threads),
       singleAgent: options.singleAgent, // For experimental comparisons
       forceAutomation: options.forceAutomation, // Skip agents, use template only
+      sequentialChain: options.sequentialChain, // NEW: Sequential chain mode
       verbose: options.verbose
     };
 
@@ -103,7 +105,8 @@ program
           treatmentKeyword: config.treatmentKeyword,
           verbose: config.verbose,
           singleAgent: config.singleAgent,
-          forceAutomation: config.forceAutomation
+          forceAutomation: config.forceAutomation,
+          sequentialChain: config.sequentialChain  // NEW: Pass sequential chain flag
         });
         await executor.run();
       } else {

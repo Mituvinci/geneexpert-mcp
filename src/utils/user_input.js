@@ -28,17 +28,37 @@ export async function askYesNo(question, defaultAnswer = true) {
   const defaultStr = defaultAnswer ? 'Y/n' : 'y/N';
 
   return new Promise((resolve) => {
-    rl.question(`${question} [${defaultStr}]: `, (answer) => {
-      rl.close();
+    const askQuestion = () => {
+      rl.question(`${question} [${defaultStr}]: `, (answer) => {
+        // Empty input → use default
+        if (!answer || answer.trim() === '') {
+          rl.close();
+          resolve(defaultAnswer);
+          return;
+        }
 
-      if (!answer || answer.trim() === '') {
-        resolve(defaultAnswer);
-        return;
-      }
+        const normalized = answer.trim().toLowerCase();
 
-      const normalized = answer.trim().toLowerCase();
-      resolve(normalized === 'y' || normalized === 'yes');
-    });
+        // Validate: must be y/yes/n/no
+        if (normalized === 'y' || normalized === 'yes') {
+          rl.close();
+          resolve(true);
+          return;
+        } else if (normalized === 'n' || normalized === 'no') {
+          rl.close();
+          resolve(false);
+          return;
+        } else {
+          console.log('');
+          console.log('❌ Invalid input! Please enter "y" (yes) or "n" (no).');
+          console.log('');
+          askQuestion();  // Loop: ask again
+          return;
+        }
+      });
+    };
+
+    askQuestion();  // Start the loop
   });
 }
 
@@ -62,23 +82,33 @@ export async function askChoice(question, options, defaultIndex = 0) {
   console.log('');
 
   return new Promise((resolve) => {
-    rl.question(`Enter choice [1-${options.length}] (default: ${defaultIndex + 1}): `, (answer) => {
-      rl.close();
+    const askQuestion = () => {
+      rl.question(`Enter choice [1-${options.length}] (default: ${defaultIndex + 1}): `, (answer) => {
+        // Empty input → use default
+        if (!answer || answer.trim() === '') {
+          rl.close();
+          resolve({ index: defaultIndex, value: options[defaultIndex] });
+          return;
+        }
 
-      if (!answer || answer.trim() === '') {
-        resolve({ index: defaultIndex, value: options[defaultIndex] });
-        return;
-      }
+        const choice = parseInt(answer.trim(), 10);
 
-      const choice = parseInt(answer.trim(), 10);
-      if (isNaN(choice) || choice < 1 || choice > options.length) {
-        console.log(`Invalid choice, using default: ${options[defaultIndex]}`);
-        resolve({ index: defaultIndex, value: options[defaultIndex] });
-        return;
-      }
+        // Validate: must be number within range
+        if (isNaN(choice) || choice < 1 || choice > options.length) {
+          console.log('');
+          console.log(`❌ Invalid input! Please enter a number between 1 and ${options.length}.`);
+          console.log('');
+          askQuestion();  // Loop: ask again
+          return;
+        }
 
-      resolve({ index: choice - 1, value: options[choice - 1] });
-    });
+        // Valid input
+        rl.close();
+        resolve({ index: choice - 1, value: options[choice - 1] });
+      });
+    };
+
+    askQuestion();  // Start the loop
   });
 }
 
@@ -154,15 +184,15 @@ export async function handleStage1UserDecision(reviewResult, stage1Output) {
   // Show what each agent said
   console.log('--- Agent Recommendations ---');
   if (reviewResult.responses.gpt5_2.success) {
-    const gptResponse = reviewResult.responses.gpt5_2.response;
+    const gptResponse = reviewResult.responses.gpt5_2.content;
     console.log(`GPT-5.2 (Stats): ${extractDecisionSummary(gptResponse)}`);
   }
   if (reviewResult.responses.claude.success) {
-    const claudeResponse = reviewResult.responses.claude.response;
+    const claudeResponse = reviewResult.responses.claude.content;
     console.log(`Claude (Pipeline): ${extractDecisionSummary(claudeResponse)}`);
   }
   if (reviewResult.responses.gemini.success) {
-    const geminiResponse = reviewResult.responses.gemini.response;
+    const geminiResponse = reviewResult.responses.gemini.content;
     console.log(`Gemini (Biology): ${extractDecisionSummary(geminiResponse)}`);
   }
   console.log('');
@@ -195,13 +225,13 @@ export async function handleStage1UserDecision(reviewResult, stage1Output) {
     console.log('=== Full Agent Responses ===');
     console.log('');
     console.log('--- GPT-5.2 (Statistics Agent) ---');
-    console.log(reviewResult.responses.gpt5_2.response || 'No response');
+    console.log(reviewResult.responses.gpt5_2.content || 'No response');
     console.log('');
     console.log('--- Claude (Pipeline Agent) ---');
-    console.log(reviewResult.responses.claude.response || 'No response');
+    console.log(reviewResult.responses.claude.content || 'No response');
     console.log('');
     console.log('--- Gemini (Biology Agent) ---');
-    console.log(reviewResult.responses.gemini.response || 'No response');
+    console.log(reviewResult.responses.gemini.content || 'No response');
     console.log('');
 
     // Ask again
@@ -256,13 +286,13 @@ export async function handleStage2UserDecision(reviewResult, stage2Output) {
   // Show agent recommendations
   console.log('--- Agent Recommendations ---');
   if (reviewResult.responses.gpt5_2.success) {
-    console.log(`GPT-5.2 (Stats): ${extractDecisionSummary(reviewResult.responses.gpt5_2.response)}`);
+    console.log(`GPT-5.2 (Stats): ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
   }
   if (reviewResult.responses.claude.success) {
-    console.log(`Claude (Pipeline): ${extractDecisionSummary(reviewResult.responses.claude.response)}`);
+    console.log(`Claude (Pipeline): ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
   }
   if (reviewResult.responses.gemini.success) {
-    console.log(`Gemini (Biology): ${extractDecisionSummary(reviewResult.responses.gemini.response)}`);
+    console.log(`Gemini (Biology): ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
   }
   console.log('');
 
@@ -282,13 +312,13 @@ export async function handleStage2UserDecision(reviewResult, stage2Output) {
     console.log('=== Full Agent Responses ===');
     console.log('');
     console.log('--- GPT-5.2 (Statistics Agent) ---');
-    console.log(reviewResult.responses.gpt5_2.response || 'No response');
+    console.log(reviewResult.responses.gpt5_2.content || 'No response');
     console.log('');
     console.log('--- Claude (Pipeline Agent) ---');
-    console.log(reviewResult.responses.claude.response || 'No response');
+    console.log(reviewResult.responses.claude.content || 'No response');
     console.log('');
     console.log('--- Gemini (Biology Agent) ---');
-    console.log(reviewResult.responses.gemini.response || 'No response');
+    console.log(reviewResult.responses.gemini.content || 'No response');
     console.log('');
 
     // Ask again without VIEW DETAILS option
@@ -363,13 +393,13 @@ export async function handleStage3UserDecision(reviewResult, stage3Output) {
   // Show agent recommendations
   console.log('--- Agent Recommendations ---');
   if (reviewResult.responses.gpt5_2.success) {
-    console.log(`GPT-5.2 (Stats): ${extractDecisionSummary(reviewResult.responses.gpt5_2.response)}`);
+    console.log(`GPT-5.2 (Stats): ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
   }
   if (reviewResult.responses.claude.success) {
-    console.log(`Claude (Pipeline): ${extractDecisionSummary(reviewResult.responses.claude.response)}`);
+    console.log(`Claude (Pipeline): ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
   }
   if (reviewResult.responses.gemini.success) {
-    console.log(`Gemini (Biology): ${extractDecisionSummary(reviewResult.responses.gemini.response)}`);
+    console.log(`Gemini (Biology): ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
   }
   console.log('');
 
@@ -390,13 +420,13 @@ export async function handleStage3UserDecision(reviewResult, stage3Output) {
     console.log('=== Full Agent Responses ===');
     console.log('');
     console.log('--- GPT-5.2 (Statistics Agent) ---');
-    console.log(reviewResult.responses.gpt5_2.response || 'No response');
+    console.log(reviewResult.responses.gpt5_2.content || 'No response');
     console.log('');
     console.log('--- Claude (Pipeline Agent) ---');
-    console.log(reviewResult.responses.claude.response || 'No response');
+    console.log(reviewResult.responses.claude.content || 'No response');
     console.log('');
     console.log('--- Gemini (Biology Agent) ---');
-    console.log(reviewResult.responses.gemini.response || 'No response');
+    console.log(reviewResult.responses.gemini.content || 'No response');
     console.log('');
 
     // Ask again without VIEW DETAILS option
@@ -490,8 +520,8 @@ function extractDecisionSummary(response) {
     return 'ABORT';
   }
 
-  // Return first 100 chars if no pattern found
-  return response.substring(0, 100).replace(/\n/g, ' ') + '...';
+  // Return full response (no truncation) if no pattern found
+  return response;
 }
 
 export default {

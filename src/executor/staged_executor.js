@@ -64,6 +64,7 @@ export class StagedExecutor {
     this.dryRun = options.dryRun || false;
     this.singleAgent = options.singleAgent || null;
     this.forceAutomation = options.forceAutomation || false;
+    this.sequentialChain = options.sequentialChain || false;  // NEW: Sequential chain mode
 
     // State tracking
     this.stageResults = {
@@ -78,7 +79,8 @@ export class StagedExecutor {
     // Initialize coordinator
     this.coordinator = new Coordinator({
       verbose: this.verbose,
-      singleAgent: this.singleAgent
+      singleAgent: this.singleAgent,
+      sequentialChain: this.sequentialChain  // NEW: Pass sequential chain flag
     });
 
     // Logger will be initialized when we have output dir

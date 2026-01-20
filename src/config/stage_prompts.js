@@ -13,6 +13,8 @@
  * 4. DE Analysis - Run differential expression (uses Stage 3 decision)
  */
 
+import path from 'path';
+
 // ============================================
 // STAGE 1: FASTQ VALIDATION
 // ============================================
@@ -621,30 +623,55 @@ function formatStage4Output(output, dataInfo) {
 - Organism: ${dataInfo.organism || 'unknown'}
 - Total Genes Tested: ${output.total_genes_tested?.toLocaleString() || 'unknown'}
 
-### DE Results Summary
-- Total DEGs (FDR < ${output.fdr_threshold}): ${output.total_degs}
-- Up-regulated: ${output.num_degs_up}
-- Down-regulated: ${output.num_degs_down}
-${output.fc_range[0] !== null ? `- LogFC Range: ${output.fc_range[0].toFixed(2)} to ${output.fc_range[1].toFixed(2)}` : ''}
+### Classification Results (Lab Thresholds: FDR<0.05, |logFC|>0.585)
+- Failed to Downregulate (positive logFC, significant): ${output.classifications?.failed2DownRegulate || 0}
+- Failed to Upregulate (negative logFC, significant): ${output.classifications?.failed2UpRegulate || 0}
+- No Change: ${output.classifications?.nchg || 0}
 
-### Top Up-Regulated Genes
+### Distribution Statistics
+**FDR Distribution:**
+- Genes with FDR < 0.05: ${output.fdr_distribution?.fdr_0_05 || 0}
+- Genes with FDR < 0.10: ${output.fdr_distribution?.fdr_0_10 || 0}
+- Genes with FDR < 0.20: ${output.fdr_distribution?.fdr_0_20 || 0}
+
+**LogFC Distribution:**
+- Genes with |logFC| > 0.5: ${output.logfc_distribution?.abs_logfc_0_5 || 0}
+- Genes with |logFC| > 1.0: ${output.logfc_distribution?.abs_logfc_1_0 || 0}
+- Genes with |logFC| > 2.0: ${output.logfc_distribution?.abs_logfc_2_0 || 0}
+- LogFC Range: ${output.logfc_range?.[0] || 'N/A'} to ${output.logfc_range?.[1] || 'N/A'}
+- Mean |logFC|: ${output.logfc_mean_abs || 'N/A'}
+
+### Top 10 Genes by P-value (Most Promising)
+${output.top_genes_by_pvalue?.length > 0
+    ? output.top_genes_by_pvalue.slice(0, 10).map(g => `- ${g.name}: logFC=${g.logFC}, P=${g.pvalue}, FDR=${g.fdr}`).join('\n')
+    : 'No genes with valid p-values'}
+
+### Top Classified Genes
+**Top 5 Failed2DownRegulate (if any):**
 ${output.top_up_genes?.length > 0
     ? output.top_up_genes.slice(0, 5).map(g => `- ${g.name}: LogFC=${g.logFC}, FDR=${g.fdr}`).join('\n')
     : 'None'}
 
-### Top Down-Regulated Genes
+**Top 5 Failed2UpRegulate (if any):**
 ${output.top_down_genes?.length > 0
     ? output.top_down_genes.slice(0, 5).map(g => `- ${g.name}: LogFC=${g.logFC}, FDR=${g.fdr}`).join('\n')
     : 'None'}
 
 ### Output Files
-- DE Results: ${output.de_results_file ? path.basename(output.de_results_file) : 'N/A'}
-- Final Results: ${output.final_results_file ? path.basename(output.final_results_file) : 'N/A'}
+- DE Results CSV: ${output.de_results_file ? path.basename(output.de_results_file) : 'N/A'}
+- Final Excel (with formulas): ${output.final_results_file ? path.basename(output.final_results_file) : 'N/A'}
+- MA Plot (PDF): ${output.maplot_pdf ? path.basename(output.maplot_pdf) : 'N/A'}
+- MA Plot (JPEG): ${output.maplot_jpg ? path.basename(output.maplot_jpg) : 'N/A'}
 
 ### Analysis Status
 - Overall Status: ${output.overall_status}
 ${output.warnings?.length > 0 ? `- Warnings: ${output.warnings.join('; ')}` : ''}
 ${output.errors?.length > 0 ? `- Errors: ${output.errors.join('; ')}` : ''}
+
+### Suggested Thresholds
+If results seem suboptimal, you may suggest adjusted thresholds:
+- Current: FDR=0.05, logFC=0.585 (1.5-fold), logCPM=0
+- Consider: Relaxing FDR to 0.10 for exploratory analysis, or tightening logFC to 1.0 (2-fold) for stricter criteria
 `;
 }
 

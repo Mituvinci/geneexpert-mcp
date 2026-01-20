@@ -69,7 +69,17 @@ export function extractDecision(agentResponse, decisionType = 'default') {
     content.includes('proceed') ||
     content.includes('looks good') ||
     content.includes('acceptable') ||
-    content.match(/\b(yes|correct|fine)\b/)
+    content.match(/\b(yes|correct|fine)\b/) ||
+    // Stage-specific keywords
+    content.includes('pass_all') ||  // Stage 2: PASS_ALL
+    content.includes('decision: pass') ||  // Stage 1/3/4: PASS
+    content.includes('pass_with_warning') ||  // Stage 1: PASS_WITH_WARNING
+    // Stage 3: DE method keywords (BOTH are valid "proceed" decisions)
+    content.includes('de_method: simpleedger') ||  // Stage 3: Standard DE (no batch correction)
+    content.includes('de_method: batch_effect_edger') ||  // Stage 3: DE with batch correction
+    // Stage 3: Outlier action keywords (BOTH are valid "proceed" decisions)
+    content.includes('outlier_action: keep_all') ||  // Stage 3: Keep all samples
+    content.includes('outlier_action: remove_outliers')  // Stage 3: Remove outliers
   ) {
     return 'approve';
   }
@@ -79,11 +89,19 @@ export function extractDecision(agentResponse, decisionType = 'default') {
     content.includes('reject') ||
     content.includes('do not proceed') ||
     content.includes('not acceptable') ||
-    content.includes('remove') ||
     content.includes('incorrect') ||
-    content.match(/\b(no|wrong|bad)\b/)
+    content.match(/\b(no|wrong|bad)\b/) ||
+    // Stage-specific keywords
+    content.includes('decision: fail') ||  // Stage 1: FAIL
+    content.includes('decision: abort')  // Stage 2: ABORT
   ) {
     return 'reject';
+  }
+
+  // Stage 2 special case: REMOVE_SAMPLES (contextual - could be approve or uncertain)
+  // Treat as 'uncertain' to trigger further review
+  if (content.includes('remove_samples')) {
+    return 'uncertain';
   }
 
   // Look for uncertainty

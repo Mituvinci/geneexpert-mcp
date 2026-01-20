@@ -10,6 +10,7 @@ import {
   callClaude,
   callGemini,
   callAllAgents,
+  callAllAgentsSequential,  // NEW: For sequential chain mode
   askStatsAgent,
   askPipelineAgent,
   askQCAgent,
@@ -33,6 +34,7 @@ export class Coordinator {
   constructor(options = {}) {
     this.verbose = options.verbose || false;
     this.singleAgent = options.singleAgent || null;  // For experimental single-agent mode
+    this.sequentialChain = options.sequentialChain || false;  // NEW: For sequential chain mode
     this.sessionHistory = [];
     this.currentDataset = null;  // Set when analysis starts, used for decision_id generation
     this.stepCounter = 0;        // Tracks pipeline step for unique decision_ids
@@ -387,7 +389,10 @@ Focus on biological insight and interpretation.
     }
 
     // Call all agents with stage-specific prompts (and images)
-    const responses = await callAllAgents(stageOutput, agentOptions);
+    // Choose parallel or sequential mode based on flag
+    const responses = this.sequentialChain
+      ? await callAllAgentsSequential(stageOutput, agentOptions)  // Sequential: GPT-5.2 → Gemini → Claude
+      : await callAllAgents(stageOutput, agentOptions);            // Parallel: All at once (default)
 
     // Log responses
     this.log(`GPT-5.2: ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
@@ -611,11 +616,20 @@ Focus on biological insight and interpretation.
       try {
         const imageBuffer = fs.readFileSync(stage3Output.pca_plot_path);
         const base64Image = imageBuffer.toString('base64');
+
+        // Detect media type from file extension
+        let mediaType = 'application/pdf';  // Default
+        if (stage3Output.pca_plot_path.endsWith('.jpg') || stage3Output.pca_plot_path.endsWith('.jpeg')) {
+          mediaType = 'image/jpeg';
+        } else if (stage3Output.pca_plot_path.endsWith('.png')) {
+          mediaType = 'image/png';
+        }
+
         pcaImages.push({
           data: base64Image,
-          mediaType: 'application/pdf'
+          mediaType: mediaType
         });
-        console.log('[Coordinator] PCA plot loaded successfully');
+        console.log(`[Coordinator] PCA plot loaded successfully (${mediaType})`);
       } catch (error) {
         console.log(`[Coordinator] Warning: Could not read PCA plot: ${error.message}`);
       }
@@ -635,15 +649,22 @@ Focus on biological insight and interpretation.
     const { deMethod, batchSpecification, outlierAction, outliersToRemove } =
       this.parseStage3Decision(result.consensus, result.responses);
 
+    // Determine if we should proceed to Stage 4
+    // For Stage 3: proceed if consensus is 'approve' (agents chose a DE method)
+    // Both simpleEdger and batch_effect_edger are valid "proceed" decisions
+    const proceed = result.consensus.decision.toLowerCase() === 'approve';
+
     console.log('[Coordinator] Stage 3 Review Complete');
     console.log(`[Coordinator] DE Method: ${deMethod}`);
     console.log(`[Coordinator] Batch Specification: ${batchSpecification || 'N/A'}`);
     console.log(`[Coordinator] Outlier Action: ${outlierAction}`);
     console.log(`[Coordinator] Outliers to Remove: ${outliersToRemove.length > 0 ? outliersToRemove.join(', ') : 'None'}`);
+    console.log(`[Coordinator] Proceed to Stage 4: ${proceed ? 'YES' : 'NO'}`);
     console.log('');
 
     return {
       ...result,
+      proceed,
       deMethod,
       batchSpecification,
       outlierAction,

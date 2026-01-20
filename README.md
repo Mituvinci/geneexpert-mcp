@@ -57,6 +57,25 @@ node bin/geneexpert.js analyze data/your_input_folder \
 4. Stage 4: DE Analysis - Agents review differential expression results
 5. User input tracked when agents can't reach consensus (critical for research evaluation)
 
+### NEW: Two Multi-Agent Modes
+
+**Parallel Independent Voting (Default):**
+```bash
+# All agents respond simultaneously with independent perspectives
+node bin/geneexpert.js analyze data/your_input \
+  --staged --organism mouse --output results/parallel
+```
+
+**Sequential Chain (Experimental):**
+```bash
+# Agents respond sequentially: GPT-5.2 → Gemini → Claude
+# Each agent sees previous responses for informed synthesis
+node bin/geneexpert.js analyze data/your_input \
+  --staged --sequential-chain --organism mouse --output results/sequential
+```
+
+**Research Question:** Does sequential information passing improve decisions, or does parallel independent voting reduce errors better?
+
 
 ---
 
@@ -207,9 +226,31 @@ Outputs: stage4_de_analysis/ with DE results CSV, final Excel file
   - Validates biological assumptions, gene patterns, QC criteria
   - Pure reasoning, no tool access
 
+**Two Multi-Agent Modes (NEW):**
+
+**Mode 1: Parallel Independent Voting (Default)**
+```
+All 3 agents receive SAME input → Respond simultaneously → Majority vote
+- Fast execution (1 round of API calls)
+- True independent perspectives
+- Reduces anchoring bias
+- Default behavior (no flag needed)
+```
+
+**Mode 2: Sequential Chain (Experimental - NEW!)**
+```
+GPT-5.2 (Stats) → Gemini (Biology) → Claude (Pipeline)
+- Each agent sees previous responses
+- Claude synthesizes with full context
+- Slower (3x sequential calls)
+- More informed decisions
+- Use flag: --sequential-chain
+```
+
 **Consensus Voting Rules:**
-- **Standard decisions**: Majority vote (2/3 required)
-- **Sample removal**: Unanimous (3/3 required)
+- **Parallel mode**: Majority vote (2/3 required)
+- **Sequential mode**: Final agent (Claude) makes synthesis decision
+- **Sample removal**: Unanimous (3/3 required) in parallel mode
 - **No consensus**: Escalate to user, track user input for evaluation
 
 **User Input Tracking (Critical for Research):**
@@ -261,10 +302,13 @@ Outputs: stage4_de_analysis/ with DE results CSV, final Excel file
    - Test individual stages: `test_stage1.js`, `test_stage2.js`, etc.
    - Skip agent review: `--force-automation` flag
    - Single-agent baseline: `--single-agent gpt5.2|claude|gemini`
+   - Sequential chain mode: `--sequential-chain` flag (NEW!)
 
 ---
 
 ## Experimental Modes (Research Evaluation)
+
+GeneExpert supports 5 experimental systems for ICML 2026 evaluation:
 
 ### System 1: No-Agent (Template Only)
 ```bash
@@ -282,6 +326,7 @@ node bin/geneexpert.js analyze <dataset> \
   --single-agent gpt5.2 \
   --output results/single_gpt
 ```
+GPT-5.2 performs ALL roles: statistics + pipeline + biology.
 
 ### System 3: Single-Agent (Claude)
 ```bash
@@ -290,13 +335,24 @@ node bin/geneexpert.js analyze <dataset> \
   --single-agent claude \
   --output results/single_claude
 ```
+Claude performs ALL roles: statistics + pipeline + biology.
 
-### System 4: Multi-Agent (Our System)
+### System 4: Multi-Agent Parallel (Default)
 ```bash
 node bin/geneexpert.js analyze <dataset> \
   --staged \
-  --output results/multi_agent
+  --output results/multi_agent_parallel
 ```
+3 agents review simultaneously with independent voting.
+
+### System 5: Multi-Agent Sequential Chain (NEW!)
+```bash
+node bin/geneexpert.js analyze <dataset> \
+  --staged \
+  --sequential-chain \
+  --output results/multi_agent_sequential
+```
+3 agents review sequentially: GPT-5.2 → Gemini → Claude (informed synthesis).
 
 **Evaluation Metrics:**
 - Decision accuracy (correct decisions / total)
@@ -305,6 +361,8 @@ node bin/geneexpert.js analyze <dataset> \
 - Cost efficiency (total cost / successes)
 - Inter-agent agreement (Cohen's kappa)
 - User input frequency (% decisions requiring user input)
+- Error propagation rate (sequential mode only)
+- Reasoning quality (qualitative assessment)
 
 ---
 
@@ -433,27 +491,34 @@ tail -f results/my_analysis/stage*_log.txt
    - Early issue detection (catch problems in Stage 2, not Stage 4)
    - Progressive refinement (remove outliers before DE analysis)
 
-2. **User-in-Loop Tracking**
+2. **Parallel vs Sequential Multi-Agent Comparison (NEW!)**
+   - **Parallel mode**: Independent voting by all agents simultaneously
+   - **Sequential mode**: Information passing (GPT-5.2 → Gemini → Claude)
+   - Research question: Does sequential synthesis improve decisions or does parallel independence reduce errors?
+   - Empirical comparison of two multi-agent architectures
+
+3. **User-in-Loop Tracking**
    - JSON logs track when user input required
    - Enables empirical analysis of human-AI collaboration
    - Metrics: autonomy rate, agreement rate, impact on success
 
-3. **Multi-Model Consensus**
+4. **Multi-Model Consensus**
    - Different foundation models (GPT-5.2, Claude Sonnet 4.5, Gemini Pro)
    - Voting system with confidence quantification
    - Disagreement signals uncertainty, triggers user input
 
-4. **Condorcet's Jury Theorem Validation**
+5. **Condorcet's Jury Theorem Validation**
    - If each agent >50% accurate, ensemble >single agent
    - Empirical measurement of error reduction
    - Statistical significance testing
 
-5. **Decision-Level Evaluation**
+6. **Decision-Level Evaluation**
    - Not just final success/failure
    - Track correctness of intermediate decisions
    - Measure impact of each stage's agent review
+   - Evaluate error propagation in sequential mode
 
-**Status:** Staged architecture complete, ready for comprehensive evaluation (Jan 18, 2026)
+**Status:** Staged architecture complete with Sequential Chain mode, ready for comprehensive evaluation (Jan 19, 2026)
 
 ---
 
@@ -466,9 +531,10 @@ MIT
 ## Links
 
 - **GitHub:** https://github.com/Mituvinci/geneexpert-mcp
-- **Status:** Staged architecture complete - Ready for research experiments
-- 
+- **Status:** Staged architecture complete with Sequential Chain mode
+- **Datasets:** 9 experimental datasets ready (3 Clean, 2 Batch, 2 Contamination, 1 Lab, 1 E.coli)
+- **Experiments:** 45 total (5 systems × 9 datasets) for ICML 2026
 
 ---
 
-**Ready to validate multi-agent intelligence through staged RNA-seq analysis!**
+**Ready to compare Parallel vs Sequential multi-agent architectures for RNA-seq analysis!**
