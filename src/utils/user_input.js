@@ -524,6 +524,20 @@ function extractDecisionSummary(response) {
   return response;
 }
 
+/**
+ * Ask user to confirm removal of outlier samples
+ * @param {Array<string>} outlierSamples - List of outlier sample names
+ * @returns {Promise<boolean>} - True if user confirms removal, false otherwise
+ */
+export async function confirmOutlierRemoval(outlierSamples) {
+  if (!outlierSamples || outlierSamples.length === 0) {
+    return false;
+  }
+
+  const question = `\nRemove ${outlierSamples.length} outlier sample(s) before DE analysis?`;
+  return askYesNo(question, true);  // Default: yes (recommend removal)
+}
+
 export default {
   askYesNo,
   askChoice,
@@ -531,5 +545,6 @@ export default {
   askMultiSelect,
   handleStage1UserDecision,
   handleStage2UserDecision,
-  handleStage3UserDecision
+  handleStage3UserDecision,
+  confirmOutlierRemoval
 };

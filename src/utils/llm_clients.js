@@ -12,6 +12,49 @@ import { getSystemPrompt } from '../config/prompts.js';
 dotenv.config();
 
 // ============================================
+// Retry Logic with Exponential Backoff
+// ============================================
+
+/**
+ * Retry a function with exponential backoff
+ * @param {Function} fn - Async function to retry
+ * @param {number} maxRetries - Maximum number of retries (default: 3)
+ * @param {number} initialDelay - Initial delay in ms (default: 1000)
+ * @returns {Promise} Result from fn
+ */
+async function retryWithBackoff(fn, maxRetries = 3, initialDelay = 1000) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      // Check if error is retryable (503, 429, network errors)
+      const isRetryable =
+        error.message?.includes('503') ||  // Service unavailable
+        error.message?.includes('429') ||  // Rate limit
+        error.message?.includes('overloaded') ||
+        error.message?.includes('timeout') ||
+        error.message?.includes('ECONNRESET') ||
+        error.message?.includes('ETIMEDOUT');
+
+      if (!isRetryable || attempt === maxRetries) {
+        throw error;  // Not retryable or max retries reached
+      }
+
+      // Exponential backoff: 1s, 2s, 4s, 8s, ...
+      const delay = initialDelay * Math.pow(2, attempt);
+      console.log(`[Retry] Attempt ${attempt + 1}/${maxRetries} failed. Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+// ============================================
 // OpenAI Client (GPT-5.2 for Stats Agent)
 // ============================================
 
@@ -21,37 +64,40 @@ const openai = new OpenAI({
 
 export async function callGPT5(prompt, options = {}) {
   try {
-    // Build user message content (text + optional images)
-    let userContent = prompt;
-    if (options.images && options.images.length > 0) {
-      // Vision mode: create multimodal content
-      userContent = [
-        { type: 'text', text: prompt }
-      ];
-      for (const img of options.images) {
-        userContent.push({
-          type: 'image_url',
-          image_url: {
-            url: `data:${img.mediaType};base64,${img.data}`
-          }
-        });
-      }
-    }
-
-    const response = await openai.chat.completions.create({
-      model: options.model || 'gpt-5.2-2025-12-11',
-      messages: [
-        {
-          role: 'system',
-          content: options.systemPrompt || 'You are a statistical expert for bioinformatics analysis. Focus on statistical rigor, threshold validation, and outlier detection.'
-        },
-        {
-          role: 'user',
-          content: userContent
+    // Wrap API call with retry logic
+    const response = await retryWithBackoff(async () => {
+      // Build user message content (text + optional images)
+      let userContent = prompt;
+      if (options.images && options.images.length > 0) {
+        // Vision mode: create multimodal content
+        userContent = [
+          { type: 'text', text: prompt }
+        ];
+        for (const img of options.images) {
+          userContent.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${img.mediaType};base64,${img.data}`
+            }
+          });
         }
-      ],
-      temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
-      max_completion_tokens: options.maxTokens || 2000,  // GPT-5 uses max_completion_tokens
+      }
+
+      return await openai.chat.completions.create({
+        model: options.model || 'gpt-5.2-2025-12-11',
+        messages: [
+          {
+            role: 'system',
+            content: options.systemPrompt || 'You are a statistical expert for bioinformatics analysis. Focus on statistical rigor, threshold validation, and outlier detection.'
+          },
+          {
+            role: 'user',
+            content: userContent
+          }
+        ],
+        temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
+        max_completion_tokens: options.maxTokens || 2000,  // GPT-5 uses max_completion_tokens
+      });
     });
 
     return {
@@ -82,36 +128,39 @@ const anthropic = new Anthropic({
 
 export async function callClaude(prompt, options = {}) {
   try {
-    // Build user message content (text + optional images)
-    let userContent = prompt;
-    if (options.images && options.images.length > 0) {
-      // Vision mode: create multimodal content array
-      userContent = [
-        { type: 'text', text: prompt }
-      ];
-      for (const img of options.images) {
-        userContent.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: img.mediaType,
-            data: img.data
-          }
-        });
-      }
-    }
-
-    const response = await anthropic.messages.create({
-      model: options.model || 'claude-sonnet-4-20250514',
-      max_tokens: options.maxTokens || 4096,
-      temperature: options.temperature || 0,
-      system: options.systemPrompt || 'You are a bioinformatics pipeline expert. Execute workflows, manage data processing, and ensure biological correctness.',
-      messages: [
-        {
-          role: 'user',
-          content: userContent
+    // Wrap API call with retry logic
+    const response = await retryWithBackoff(async () => {
+      // Build user message content (text + optional images)
+      let userContent = prompt;
+      if (options.images && options.images.length > 0) {
+        // Vision mode: create multimodal content array
+        userContent = [
+          { type: 'text', text: prompt }
+        ];
+        for (const img of options.images) {
+          userContent.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: img.mediaType,
+              data: img.data
+            }
+          });
         }
-      ]
+      }
+
+      return await anthropic.messages.create({
+        model: options.model || 'claude-sonnet-4-20250514',
+        max_tokens: options.maxTokens || 4096,
+        temperature: options.temperature || 0,
+        system: options.systemPrompt || 'You are a bioinformatics pipeline expert. Execute workflows, manage data processing, and ensure biological correctness.',
+        messages: [
+          {
+            role: 'user',
+            content: userContent
+          }
+        ]
+      });
     });
 
     return {
@@ -140,37 +189,41 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 export async function callGemini(prompt, options = {}) {
   try {
-    const model = genAI.getGenerativeModel({
-      model: options.model || 'models/gemini-2.5-flash'
+    // Wrap API call with retry logic
+    const result = await retryWithBackoff(async () => {
+      const model = genAI.getGenerativeModel({
+        model: options.model || 'models/gemini-2.5-flash'
+      });
+
+      // Add system instruction as first message since systemInstruction may not be supported
+      const fullPrompt = options.systemPrompt
+        ? `${options.systemPrompt}\n\n${prompt}`
+        : prompt;
+
+      // Build content (text + optional images)
+      let content = fullPrompt;
+      if (options.images && options.images.length > 0) {
+        // Vision mode: create multimodal parts
+        content = [
+          { text: fullPrompt }
+        ];
+        for (const img of options.images) {
+          content.push({
+            inlineData: {
+              mimeType: img.mediaType,
+              data: img.data
+            }
+          });
+        }
+      }
+
+      return await model.generateContent(content, {
+        generationConfig: {
+          temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
+        }
+      });
     });
 
-    // Add system instruction as first message since systemInstruction may not be supported
-    const fullPrompt = options.systemPrompt
-      ? `${options.systemPrompt}\n\n${prompt}`
-      : prompt;
-
-    // Build content (text + optional images)
-    let content = fullPrompt;
-    if (options.images && options.images.length > 0) {
-      // Vision mode: create multimodal parts
-      content = [
-        { text: fullPrompt }
-      ];
-      for (const img of options.images) {
-        content.push({
-          inlineData: {
-            mimeType: img.mediaType,
-            data: img.data
-          }
-        });
-      }
-    }
-
-    const result = await model.generateContent(content, {
-      generationConfig: {
-        temperature: options.temperature || 0, // Deterministic for reproducible scientific analysis
-      }
-    });
     const response = result.response;
 
     return {

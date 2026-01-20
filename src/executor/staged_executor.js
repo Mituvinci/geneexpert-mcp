@@ -473,6 +473,45 @@ export class StagedExecutor {
       this.log(`User decided: ${finalProceed ? 'PROCEED' : 'ABORT'}`);
     }
 
+    // 6b. Check if agents recommended removing outliers and ask user for confirmation
+    if (finalOutlierAction === 'REMOVE_OUTLIERS' && finalOutliersToRemove.length > 0 && !this.forceAutomation) {
+      console.log('');
+      console.log('='.repeat(60));
+      console.log('  OUTLIER DETECTION');
+      console.log('='.repeat(60));
+      console.log('');
+      console.log(`Agents detected ${finalOutliersToRemove.length} outlier sample(s):`);
+      finalOutliersToRemove.forEach((outlier, idx) => {
+        console.log(`  ${idx + 1}. ${outlier}`);
+      });
+      console.log('');
+      console.log('Removing outliers will help improve DE analysis quality,');
+      console.log('but will reduce sample size and statistical power.');
+      console.log('');
+
+      const { confirmOutlierRemoval } = await import('../utils/user_input.js');
+      const shouldRemove = await confirmOutlierRemoval(finalOutliersToRemove);
+
+      if (!shouldRemove) {
+        this.log('User chose to KEEP all samples (no outlier removal)');
+        finalOutlierAction = 'KEEP_ALL';
+        finalOutliersToRemove = [];
+      } else {
+        this.log(`User confirmed removal of ${finalOutliersToRemove.length} outlier(s)`);
+      }
+
+      if (!userDecision) {
+        userDecision = {
+          madeBy: 'user',
+          outlierRemovalConfirmed: shouldRemove,
+          outliersToRemove: shouldRemove ? finalOutliersToRemove : []
+        };
+      } else {
+        userDecision.outlierRemovalConfirmed = shouldRemove;
+        userDecision.outliersToRemove = shouldRemove ? finalOutliersToRemove : [];
+      }
+    }
+
     // 7. Log decision
     this.logger.logStageDecision(
       3, 'QC Assessment',
@@ -500,12 +539,48 @@ export class StagedExecutor {
       userDecision
     };
 
-    // 9. Update dataInfo if outliers removed
+    // 9. Update dataInfo and filter count/RPKM files if outliers removed
     if (finalOutliersToRemove.length > 0) {
       this.dataInfo.samples = this.dataInfo.samples.filter(
         s => !finalOutliersToRemove.includes(s.name)
       );
       this.log(`Removed ${finalOutliersToRemove.length} outlier(s) from analysis`);
+
+      // Helper function to filter CSV files
+      const filterCSV = (filePath, fileDesc) => {
+        if (fs.existsSync(filePath)) {
+          this.log(`Filtering ${fileDesc}...`);
+          const data = fs.readFileSync(filePath, 'utf-8').split('\n');
+
+          if (data.length > 0) {
+            // Parse header
+            const header = data[0].split(',');
+
+            // Find indices of columns to keep
+            const keepIndices = header.map((colName, idx) => {
+              // Keep first 2 columns (ID, Length or ID, GeneSymbol)
+              if (idx < 2) return true;
+              // Keep columns that are NOT in outlier list
+              return !finalOutliersToRemove.some(outlier => colName.includes(outlier));
+            });
+
+            // Filter all rows
+            const filteredData = data.map(line => {
+              const cols = line.split(',');
+              return cols.filter((_, idx) => keepIndices[idx]).join(',');
+            });
+
+            // Write filtered file
+            fs.writeFileSync(filePath, filteredData.join('\n'));
+            this.log(`  ${fileDesc} filtered: ${header.length - 2} → ${this.dataInfo.samples.length} samples`);
+          }
+        }
+      };
+
+      // Filter count and RPKM files
+      const stage3Dir = path.join(this.config.output, 'stage3_quantification');
+      filterCSV(path.join(stage3Dir, `${this.config.comparison}.count.filtered.csv`), 'count file');
+      filterCSV(path.join(stage3Dir, `${this.config.comparison}.rpkm.csv`), 'RPKM file');
     }
 
     console.log('');

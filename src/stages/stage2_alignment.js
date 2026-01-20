@@ -90,69 +90,122 @@ export function generateStage2Script(dataInfo, config, outputPath, stage1Decisio
   scriptLines.push('echo "Step 2.1: Aligning reads to reference genome..."');
   scriptLines.push(`echo "  Genome: $GENOME"`);
   scriptLines.push(`echo "  Index: $INDEX_PATH/$GENOME"`);
+  scriptLines.push(`echo "  Input: $INPUT_DIR"`);
+  scriptLines.push(`echo "  Output: $OUTPUT_DIR/stage2_alignment/bam_files/"`);
   scriptLines.push('echo ""');
   scriptLines.push('');
 
-  scriptLines.push('cd "$INPUT_DIR"');
-  scriptLines.push('');
-
   if (dataInfo.pairedEnd) {
-    // Paired-end alignment
-    scriptLines.push('# Run alignment for paired-end samples');
-    scriptLines.push('echo "Aligning paired-end samples..."');
-    scriptLines.push('for i in *_R1_001.fastq.gz; do');
+    // Paired-end alignment with progress tracking
+    scriptLines.push('# Calculate total size and estimate time');
+    scriptLines.push('echo "Calculating file sizes and estimating alignment time..."');
+    scriptLines.push('total_samples=$(ls "$INPUT_DIR/"*_R1_001.fastq.gz 2>/dev/null | wc -l)');
+    scriptLines.push('total_size_bytes=0');
+    scriptLines.push('for i in "$INPUT_DIR/"*_R1_001.fastq.gz; do');
     scriptLines.push('  fname=$(basename "$i" _R1_001.fastq.gz)');
-    scriptLines.push('  echo "  Aligning: $fname"');
+    scriptLines.push('  size_r1=$(stat -c%s "$INPUT_DIR/${fname}_R1_001.fastq.gz" 2>/dev/null || stat -f%z "$INPUT_DIR/${fname}_R1_001.fastq.gz" 2>/dev/null)');
+    scriptLines.push('  size_r2=$(stat -c%s "$INPUT_DIR/${fname}_R2_001.fastq.gz" 2>/dev/null || stat -f%z "$INPUT_DIR/${fname}_R2_001.fastq.gz" 2>/dev/null)');
+    scriptLines.push('  total_size_bytes=$((total_size_bytes + size_r1 + size_r2))');
+    scriptLines.push('done');
+    scriptLines.push('total_size_gb=$(awk "BEGIN {printf \\"%.1f\\", $total_size_bytes / 1024 / 1024 / 1024}")');
+    scriptLines.push('estimated_minutes=$(awk "BEGIN {printf \\"%.0f\\", $total_size_gb * 2.5}")');
+    scriptLines.push('if [ "$estimated_minutes" -lt 1 ]; then estimated_minutes=1; fi');
+    scriptLines.push('echo "Total samples: $total_samples"');
+    scriptLines.push('echo "Total data size: ${total_size_gb} GB"');
+    scriptLines.push('echo "Estimated time: ~${estimated_minutes} minutes (running in parallel)"');
+    scriptLines.push('echo ""');
+    scriptLines.push('');
+    scriptLines.push('start_time=$(date +%s)');
+    scriptLines.push('current_sample=0');
+    scriptLines.push('');
+    scriptLines.push('# Run alignment for paired-end samples');
+    scriptLines.push('for i in "$INPUT_DIR/"*_R1_001.fastq.gz; do');
+    scriptLines.push('  fname=$(basename "$i" _R1_001.fastq.gz)');
+    scriptLines.push('  current_sample=$((current_sample + 1))');
+    scriptLines.push('  size_r1=$(stat -c%s "$INPUT_DIR/${fname}_R1_001.fastq.gz" 2>/dev/null || stat -f%z "$INPUT_DIR/${fname}_R1_001.fastq.gz" 2>/dev/null)');
+    scriptLines.push('  size_r2=$(stat -c%s "$INPUT_DIR/${fname}_R2_001.fastq.gz" 2>/dev/null || stat -f%z "$INPUT_DIR/${fname}_R2_001.fastq.gz" 2>/dev/null)');
+    scriptLines.push('  sample_size_gb=$(awk "BEGIN {printf \\"%.1f\\", ($size_r1 + $size_r2) / 1024 / 1024 / 1024}")');
+    scriptLines.push('  sample_est_min=$(awk "BEGIN {printf \\"%.1f\\", $sample_size_gb * 2.5}")');
+    scriptLines.push('  echo "[$current_sample/$total_samples] Aligning $fname (${sample_size_gb} GB, ~${sample_est_min} min)..."');
     scriptLines.push('  subread-align -t 0 \\');
     scriptLines.push('    -i "$INDEX_PATH/$GENOME" \\');
-    scriptLines.push('    -r "${fname}_R1_001.fastq.gz" \\');
-    scriptLines.push('    -R "${fname}_R2_001.fastq.gz" \\');
+    scriptLines.push('    -r "$INPUT_DIR/${fname}_R1_001.fastq.gz" \\');
+    scriptLines.push('    -R "$INPUT_DIR/${fname}_R2_001.fastq.gz" \\');
     scriptLines.push('    -T 8 \\');
-    scriptLines.push('    -o "${fname}.bam" &> "${fname}.log" &');
+    scriptLines.push('    -o "$OUTPUT_DIR/stage2_alignment/bam_files/${fname}.bam" &> "$OUTPUT_DIR/stage2_alignment/bam_files/${fname}.log" &');
     scriptLines.push('done');
     scriptLines.push('');
     scriptLines.push('# Wait for all alignment jobs to complete');
-    scriptLines.push('echo "Waiting for alignment jobs to complete..."');
+    scriptLines.push('echo ""');
+    scriptLines.push('echo "Waiting for all $total_samples alignment jobs to complete..."');
     scriptLines.push('wait');
-    scriptLines.push('echo "All alignment jobs completed."');
+    scriptLines.push('end_time=$(date +%s)');
+    scriptLines.push('elapsed=$((end_time - start_time))');
+    scriptLines.push('elapsed_min=$((elapsed / 60))');
+    scriptLines.push('elapsed_sec=$((elapsed % 60))');
+    scriptLines.push('echo "All alignment jobs completed in ${elapsed_min}m ${elapsed_sec}s"');
+    scriptLines.push('echo ""');
   } else {
-    // Single-end alignment
-    scriptLines.push('# Run alignment for single-end samples');
-    scriptLines.push('echo "Aligning single-end samples..."');
-    scriptLines.push('for i in *.fastq.gz; do');
+    // Single-end alignment with progress tracking
+    scriptLines.push('# Calculate total size and estimate time');
+    scriptLines.push('echo "Calculating file sizes and estimating alignment time..."');
+    scriptLines.push('total_samples=$(ls "$INPUT_DIR/"*.fastq.gz 2>/dev/null | grep -v "_R2_" | wc -l)');
+    scriptLines.push('total_size_bytes=0');
+    scriptLines.push('for i in "$INPUT_DIR/"*.fastq.gz; do');
     scriptLines.push('  fname=$(basename "$i" .fastq.gz)');
-    scriptLines.push('  # Skip R2 files if present');
     scriptLines.push('  if [[ "$fname" == *"_R2_"* ]]; then continue; fi');
-    scriptLines.push('  echo "  Aligning: $fname"');
+    scriptLines.push('  size=$(stat -c%s "$i" 2>/dev/null || stat -f%z "$i" 2>/dev/null)');
+    scriptLines.push('  total_size_bytes=$((total_size_bytes + size))');
+    scriptLines.push('done');
+    scriptLines.push('total_size_gb=$(awk "BEGIN {printf \\"%.1f\\", $total_size_bytes / 1024 / 1024 / 1024}")');
+    scriptLines.push('estimated_minutes=$(awk "BEGIN {printf \\"%.0f\\", $total_size_gb * 2.5}")');
+    scriptLines.push('if [ "$estimated_minutes" -lt 1 ]; then estimated_minutes=1; fi');
+    scriptLines.push('echo "Total samples: $total_samples"');
+    scriptLines.push('echo "Total data size: ${total_size_gb} GB"');
+    scriptLines.push('echo "Estimated time: ~${estimated_minutes} minutes (running in parallel)"');
+    scriptLines.push('echo ""');
+    scriptLines.push('');
+    scriptLines.push('start_time=$(date +%s)');
+    scriptLines.push('current_sample=0');
+    scriptLines.push('');
+    scriptLines.push('# Run alignment for single-end samples');
+    scriptLines.push('for i in "$INPUT_DIR/"*.fastq.gz; do');
+    scriptLines.push('  fname=$(basename "$i" .fastq.gz)');
+    scriptLines.push('  if [[ "$fname" == *"_R2_"* ]]; then continue; fi');
+    scriptLines.push('  current_sample=$((current_sample + 1))');
+    scriptLines.push('  size=$(stat -c%s "$i" 2>/dev/null || stat -f%z "$i" 2>/dev/null)');
+    scriptLines.push('  sample_size_gb=$(awk "BEGIN {printf \\"%.1f\\", $size / 1024 / 1024 / 1024}")');
+    scriptLines.push('  sample_est_min=$(awk "BEGIN {printf \\"%.1f\\", $sample_size_gb * 2.5}")');
+    scriptLines.push('  echo "[$current_sample/$total_samples] Aligning $fname (${sample_size_gb} GB, ~${sample_est_min} min)..."');
     scriptLines.push('  subread-align -t 0 \\');
     scriptLines.push('    -i "$INDEX_PATH/$GENOME" \\');
-    scriptLines.push('    -r "${fname}.fastq.gz" \\');
+    scriptLines.push('    -r "$INPUT_DIR/${fname}.fastq.gz" \\');
     scriptLines.push('    -T 8 \\');
-    scriptLines.push('    -o "${fname}.bam" &> "${fname}.log" &');
+    scriptLines.push('    -o "$OUTPUT_DIR/stage2_alignment/bam_files/${fname}.bam" &> "$OUTPUT_DIR/stage2_alignment/bam_files/${fname}.log" &');
     scriptLines.push('done');
     scriptLines.push('');
     scriptLines.push('# Wait for all alignment jobs to complete');
-    scriptLines.push('echo "Waiting for alignment jobs to complete..."');
+    scriptLines.push('echo ""');
+    scriptLines.push('echo "Waiting for all $total_samples alignment jobs to complete..."');
     scriptLines.push('wait');
-    scriptLines.push('echo "All alignment jobs completed."');
+    scriptLines.push('end_time=$(date +%s)');
+    scriptLines.push('elapsed=$((end_time - start_time))');
+    scriptLines.push('elapsed_min=$((elapsed / 60))');
+    scriptLines.push('elapsed_sec=$((elapsed % 60))');
+    scriptLines.push('echo "All alignment jobs completed in ${elapsed_min}m ${elapsed_sec}s"');
+    scriptLines.push('echo ""');
   }
 
   scriptLines.push('');
-  scriptLines.push('# Move BAM files and logs to output directory');
-  scriptLines.push('echo "Moving BAM files to output directory..."');
-  scriptLines.push('mv *.bam "$OUTPUT_DIR/stage2_alignment/bam_files/" 2>/dev/null || true');
-  scriptLines.push('mv *.log "$OUTPUT_DIR/stage2_alignment/bam_files/" 2>/dev/null || true');
-  scriptLines.push('cd -');
-  scriptLines.push('');
-
-  // Verify BAM files exist
-  scriptLines.push('# Verify BAM files were created');
+  scriptLines.push('# Verify BAM files were created successfully');
+  scriptLines.push('echo "Verifying BAM files..."');
   scriptLines.push('bam_count=$(ls "$OUTPUT_DIR/stage2_alignment/bam_files/"*.bam 2>/dev/null | wc -l)');
   scriptLines.push('if [ "$bam_count" -eq 0 ]; then');
-  scriptLines.push('  echo "ERROR: No BAM files created!"');
+  scriptLines.push('  echo "ERROR: No BAM files created by subread-align!"');
+  scriptLines.push('  echo "Check alignment logs in: $OUTPUT_DIR/stage2_alignment/bam_files/"');
   scriptLines.push('  exit 1');
   scriptLines.push('fi');
-  scriptLines.push('echo "Created $bam_count BAM files"');
+  scriptLines.push('echo "Successfully created $bam_count BAM files in $OUTPUT_DIR/stage2_alignment/bam_files/"');
   scriptLines.push('');
 
   // Step 2: Alignment QC
