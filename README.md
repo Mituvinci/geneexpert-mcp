@@ -302,7 +302,17 @@ GPT-5.2 (Stats) → Gemini (Biology) → Claude (Pipeline)
    - Test individual stages: `test_stage1.js`, `test_stage2.js`, etc.
    - Skip agent review: `--force-automation` flag
    - Single-agent baseline: `--single-agent gpt5.2|claude|gemini`
-   - Sequential chain mode: `--sequential-chain` flag (NEW!)
+   - Sequential chain mode: `--sequential-chain` flag
+
+8. **Hybrid Approach with Lab-Standard Formulas (NEW - Jan 19, 2026)**
+   - **Excel File Generation:** Creates XLSX with dynamic formulas and thresholds
+   - **Expr Formula:** Checks if gene is expressed (max group average logRPKM > 2 AND logCPM > 0)
+   - **CG Classification:** Categorizes genes as failed2DownRegulate, failed2UpRegulate, or nchg
+   - **Auto-Counting:** Formula-based counts for each classification category
+   - **Lab Thresholds:** FDR=0.05, logCPM=0, logFC=0.585 (1.5-fold), logRPKM=2
+   - **MA Plot Visualization:** Generated with customizable thresholds, PDF + JPEG formats
+   - **Enhanced Agent Summaries:** Distribution statistics, top genes by p-value, classification counts
+   - **Agent-Driven Decisions:** Agents can suggest threshold adjustments based on data characteristics
 
 ---
 
@@ -398,34 +408,49 @@ node bin/geneexpert.js analyze <dataset> \
 
 ---
 
-## Development Status (Jan 18, 2026)
+## Development Status (Jan 19, 2026)
 
-### STAGED ARCHITECTURE COMPLETE - Ready for Research Experiments
+### ALL 4 STAGES TESTED - READY FOR ICML EXPERIMENTS
 
-**Completed (Jan 18, 2026):**
-- Stage 1: FASTQ Validation module (generateStage1Script, parseStage1Output, formatStage1ForAgents)
-- Stage 2: Alignment + QC module (with sample removal logic)
-- Stage 3: Quantification + PCA QC module (outlier detection, batch effect detection, DE method selection)
-- Stage 4: DE Analysis module (simpleEdger vs batch_effect_edger)
+**Completed (Jan 19, 2026):**
+- Stage 1: FASTQ Validation (tested, working)
+- Stage 2: Alignment + QC (tested, working)
+- Stage 3: Quantification + PCA QC (tested, working, PDF to JPEG conversion)
+- Stage 4: DE Analysis (tested, working, Hybrid Approach implemented)
 - Staged executor (orchestrates all 4 stages with agent checkpoints)
 - User input tracking (JSON logs with user_input_required flag)
 - Test scripts for all 4 stages (test_stage1.js, test_stage2.js, test_stage3.js, test_stage4.js)
-- --staged flag in bin/geneexpert.js
-- Fixed controlKeyword/treatmentKeyword passing to featureCounts
-- Fixed RPKM.R argument (only takes input CSV, not genome build)
-- Fixed entrz.R argument (genome build mm10/hg38, not organism name)
+- Sequential Chain mode (--sequential-chain flag)
+- Hybrid Approach with lab-standard Excel formulas
+- Enhanced agent summaries with distribution statistics
 
-**Bugs Fixed (Jan 18, 2026):**
-- Module not found 'csv-parser' in stage3_quantification_qc.js
-- Conda activation MKL_INTERFACE_LAYER unbound variable error
-- RPKM.R receiving wrong number of arguments
-- entrz.R receiving organism name instead of genome build
+**Hybrid Approach Features (Jan 19, 2026):**
+- **Excel Formulas:** Expr (expression check), CG (gene classification)
+- **Thresholds:** FDR=0.05, logCPM=0, logFC=0.585 (1.5-fold), logRPKM=2
+- **Classifications:** failed2DownRegulate, failed2UpRegulate, nchg with auto-counts
+- **MA Plot Generation:** PDF for user viewing, JPEG for agent analysis
+- **Enhanced Agent Summaries:**
+  - FDR distribution (genes at 0.05, 0.10, 0.20, 0.50)
+  - logFC distribution (genes at |FC| > 0.5, 1.0, 2.0)
+  - Top 10 genes by p-value (most promising candidates)
+  - Classification counts and suggested threshold adjustments
+- **Files:** merge_results.R, stage4_de_analysis.js, maplot.R
+
+**Bugs Fixed (Jan 19, 2026):**
+- Stage 4: COMPARISON variable escaping in bash template
+- Stage 4: Missing path import in stage_prompts.js
+- Stage 4: Parser now counts all genes including NA values
+- maplot.R: Changed to read.csv() for CSV files
+- Consensus mechanism recognizes stage-specific keywords (PASS_ALL, ABORT, REMOVE_SAMPLES)
+- FastQC results parsing with sample name matching
+- Agent recommendations display fixed (content vs response)
+- PDF to JPEG conversion for PCA plots (GPT/Claude compatibility)
 
 **Next Steps:**
-- Run comprehensive experiments (4 systems x multiple datasets)
+- Run full ICML experiments (45 analyses: 5 systems × 9 datasets)
+- Use properly powered datasets (15-20M reads/sample, n>=3 per group)
 - Calculate evaluation metrics and statistical tests
-- Analyze user-in-loop impact on success rates
-- Prepare research publication
+- Prepare ICML 2026 paper submission
 
 ---
 
