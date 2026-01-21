@@ -65,6 +65,8 @@ EXAMPLES:
   .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (ICML baseline #2-3)')
   .option('--force-automation', 'Skip all agents, use template-based decisions only (ICML baseline #1)')
   .option('--sequential-chain', 'Use sequential chain mode: GPT-5.2 → Gemini → Claude (ICML experiment #5)')
+  .option('--use-existing-fastqc <path>', 'Use existing FastQC outputs from preprocessing (saves time for ICML experiments)')
+  .option('--use-existing-bam <path>', 'Use existing BAM files from preprocessing (saves time for ICML experiments)')
   .option('--verbose', 'Verbose output', false)
   .action(async (input, options) => {
     console.log('🧬 GeneExpert Multi-Agent RNA-seq Analysis');
@@ -116,6 +118,8 @@ EXAMPLES:
       singleAgent: options.singleAgent, // For experimental comparisons
       forceAutomation: options.forceAutomation, // Skip agents, use template only
       sequentialChain: options.sequentialChain, // NEW: Sequential chain mode
+      useExistingFastqc: options.useExistingFastqc ? path.resolve(options.useExistingFastqc) : null, // Use preprocessed FastQC
+      useExistingBam: options.useExistingBam ? path.resolve(options.useExistingBam) : null, // Use preprocessed BAM
       verbose: options.verbose
     };
 
@@ -199,7 +203,9 @@ EXAMPLES:
           verbose: config.verbose,
           singleAgent: config.singleAgent,
           forceAutomation: config.forceAutomation,
-          sequentialChain: config.sequentialChain  // NEW: Pass sequential chain flag
+          sequentialChain: config.sequentialChain,  // NEW: Pass sequential chain flag
+          useExistingFastqc: config.useExistingFastqc,  // FIX: Pass preprocessed FastQC path
+          useExistingBam: config.useExistingBam  // FIX: Pass preprocessed BAM path
         });
         await executor.run();
       } else {

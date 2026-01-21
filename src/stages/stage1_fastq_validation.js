@@ -186,7 +186,7 @@ export function generateStage1Script(dataInfo, config, outputPath) {
 export function parseStage1Output(outputDir) {
   console.log('[Stage 1] Parsing output files...');
 
-  const stage1Dir = path.join(outputDir, 'stage1_validation');
+  const stage1Dir = path.join(outputDir, 'stage1_fastq_validation');
   const result = {
     validation_status: 'unknown',
     fastqc_status: 'unknown',

@@ -6,7 +6,7 @@
 # Automates running all 5 systems on a dataset
 #
 # Usage:
-#   bash bin/run_icml_experiment.sh GSE52778 human untreated Dex
+#   bash bin/run_icml_experiment.sh 1_GSE52778_pe_clean human untreated Dex
 #
 # Arguments:
 #   $1 = Dataset name (e.g., GSE52778)
@@ -71,6 +71,10 @@ node bin/geneexpert.js analyze "$DATASET_PATH" \
 echo "✓ Multi-agent Parallel complete"
 echo ""
 
+rm -f "$RESULTS_DIR/${DATASET}_parallel/stage2_alignment/bam_files/"*.{bam,vcf} 2>/dev/null
+
+
+
 # System 2: Multi-agent Sequential
 echo "--- System 2/5: Multi-agent Sequential ---"
 node bin/geneexpert.js analyze "$DATASET_PATH" \
@@ -82,6 +86,10 @@ node bin/geneexpert.js analyze "$DATASET_PATH" \
   --output "$RESULTS_DIR/${DATASET}_sequential"
 echo "✓ Multi-agent Sequential complete"
 echo ""
+
+
+rm -f "$RESULTS_DIR/${DATASET}_sequential/stage2_alignment/bam_files/"*.{bam,vcf} 2>/dev/null
+
 
 # System 3: Single-agent GPT-5.2
 echo "--- System 3/5: Single-agent GPT-5.2 ---"
@@ -95,6 +103,10 @@ node bin/geneexpert.js analyze "$DATASET_PATH" \
 echo "✓ Single-agent GPT-5.2 complete"
 echo ""
 
+
+rm -f "$RESULTS_DIR/${DATASET}_single_gpt/stage2_alignment/bam_files/"*.{bam,vcf} 2>/dev/null
+
+
 # System 4: Single-agent Claude
 echo "--- System 4/5: Single-agent Claude ---"
 node bin/geneexpert.js analyze "$DATASET_PATH" \
@@ -107,6 +119,10 @@ node bin/geneexpert.js analyze "$DATASET_PATH" \
 echo "✓ Single-agent Claude complete"
 echo ""
 
+
+rm -f "$RESULTS_DIR/${DATASET}_single_claude/stage2_alignment/bam_files/"*.{bam,vcf} 2>/dev/null
+
+
 # System 5: No-agent (force automation)
 echo "--- System 5/5: No-agent (Force Automation) ---"
 node bin/geneexpert.js analyze "$DATASET_PATH" \
@@ -118,6 +134,9 @@ node bin/geneexpert.js analyze "$DATASET_PATH" \
   --output "$RESULTS_DIR/${DATASET}_no_agent"
 echo "✓ No-agent complete"
 echo ""
+
+rm -f "$RESULTS_DIR/${DATASET}_no_agent/stage2_alignment/bam_files/"*.{bam,vcf} 2>/dev/null
+
 
 echo "======================================================================"
 echo "PHASE 2: CONVERT JSON → CSV (Easy Viewing)"
@@ -175,3 +194,4 @@ echo "  - ${DATASET}_cost_analysis.csv (cost breakdown)"
 echo "  - ${DATASET}_evaluation.csv (decision accuracy)"
 echo ""
 echo "======================================================================"
+

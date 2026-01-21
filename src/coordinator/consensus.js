@@ -191,6 +191,10 @@ function mapCanonicalToVoteCategory(canonicalDecision, stage) {
 export function vote(responses, decisionType = 'threshold') {
   const { gpt5_2, claude, gemini } = responses;
 
+  // Detect single-agent mode (exactly 2 agents skipped)
+  const skippedCount = [gpt5_2.skipped, claude.skipped, gemini.skipped].filter(Boolean).length;
+  const singleAgentMode = skippedCount === 2;
+
   // Extract decisions from each agent (pass decisionType for context)
   const decisions = {
     stats: extractDecision(gpt5_2, decisionType),
@@ -217,6 +221,29 @@ export function vote(responses, decisionType = 'threshold') {
       votes.null++;
     }
   });
+
+  // Single-agent mode: Accept the one agent's decision directly
+  if (singleAgentMode) {
+    const agentDecision = Object.values(decisions).find(d => d !== null);
+
+    if (agentDecision) {
+      return {
+        decision: agentDecision,
+        votes,
+        agentDecisions: decisions,
+        reasoning: `Single-agent decision: ${agentDecision}`,
+        singleAgentMode: true
+      };
+    } else {
+      return {
+        decision: 'user_decision_required',
+        votes,
+        agentDecisions: decisions,
+        reasoning: 'Single agent failed to provide decision',
+        singleAgentMode: true
+      };
+    }
+  }
 
   // Apply voting rules based on decision type
   let result;

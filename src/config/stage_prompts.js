@@ -501,6 +501,73 @@ export function getStagePrompts(stage) {
 }
 
 /**
+ * Get COMBINED prompt for single-agent mode (merges all 3 perspectives)
+ * Single agent must analyze from stats, pipeline, AND biology perspectives
+ *
+ * @param {number} stage - Stage number (1, 2, 3, 4)
+ * @returns {string} - Combined prompt with all three roles
+ */
+export function getCombinedStagePrompt(stage) {
+  const stagePrompts = {
+    1: STAGE_1_PROMPTS,
+    2: STAGE_2_PROMPTS,
+    3: STAGE_3_PROMPTS,
+    4: STAGE_4_PROMPTS
+  };
+
+  const prompts = stagePrompts[stage];
+  if (!prompts) {
+    throw new Error(`Unknown stage: ${stage}. Valid stages: 1, 2, 3, 4`);
+  }
+
+  // Merge all three prompts into one comprehensive prompt
+  const combined = `You are analyzing Stage ${stage} results from THREE perspectives: Statistical, Pipeline/Technical, and Biological.
+
+You must perform ALL THREE analyses below and produce a SINGLE final decision.
+
+═══════════════════════════════════════════════════════════════════
+PERSPECTIVE 1: STATISTICAL ANALYSIS
+═══════════════════════════════════════════════════════════════════
+
+${prompts.gpt5_2}
+
+═══════════════════════════════════════════════════════════════════
+PERSPECTIVE 2: PIPELINE/TECHNICAL ANALYSIS
+═══════════════════════════════════════════════════════════════════
+
+${prompts.claude}
+
+═══════════════════════════════════════════════════════════════════
+PERSPECTIVE 3: BIOLOGICAL ANALYSIS
+═══════════════════════════════════════════════════════════════════
+
+${prompts.gemini}
+
+═══════════════════════════════════════════════════════════════════
+FINAL OUTPUT FORMAT (REQUIRED)
+═══════════════════════════════════════════════════════════════════
+
+You MUST analyze from all three perspectives above, then provide ONE final decision using the EXACT format below:
+
+**Statistical Assessment:**
+[Your statistical analysis]
+
+**Pipeline/Technical Assessment:**
+[Your technical analysis]
+
+**Biological Assessment:**
+[Your biological analysis]
+
+**Final Decision:**
+Decision: [Use the decision format specified in the prompts above - e.g., PASS/PASS_WITH_WARNING/FAIL for Stage 1]
+Confidence: [HIGH / MEDIUM / LOW]
+Reasoning: [Synthesis across all three perspectives]
+`;
+
+  return combined;
+}
+
+/**
  * Format stage output for agent consumption
  * Creates a human-readable summary of stage output that agents can understand
  *
@@ -610,7 +677,7 @@ ${dataInfo.groups ? Object.entries(dataInfo.groups)
 ### Your Decision
 Based on your visual assessment of the PCA plot, determine:
 1. Whether batch effects are present
-2. Whether outliers should be removed
+2. Whether outliers should be removed (if so, specify EXACT sample names from the plot labels)
 3. Which DE analysis method is appropriate
 `;
 }
@@ -682,5 +749,6 @@ export default {
   STAGE_4_PROMPTS,
   getStagePrompt,
   getStagePrompts,
+  getCombinedStagePrompt,
   formatStageOutputForAgents
 };

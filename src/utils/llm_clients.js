@@ -251,7 +251,7 @@ export async function callGemini(prompt, options = {}) {
 export async function callAllAgents(prompt, options = {}) {
   const singleAgent = options.singleAgent;
 
-  // Single-agent mode for experiments (uses COMBINED prompt - agent does stats + pipeline + biology)
+  // Single-agent mode for experiments (agent performs all 3 roles with stage-specific format)
   if (singleAgent) {
     console.log(`[Single-Agent Mode] Using only ${singleAgent.toUpperCase()} agent...`);
     console.log('[Single-Agent] This agent will perform ALL roles: Statistical + Pipeline + Biological analysis');
@@ -260,12 +260,27 @@ export async function callAllAgents(prompt, options = {}) {
     let result;
     if (singleAgent === 'gpt5.2' || singleAgent === 'gpt4') {
       console.log('[GPT-5.2 Full-Stack Agent] Analyzing (Stats + Pipeline + Biology)...');
-      // Get COMBINED prompt for single-agent mode
-      const combinedPrompt = getSystemPrompt('gpt5.2', true);
-      result = await callGPT5(prompt, {
-        systemPrompt: combinedPrompt,
-        ...options.gpt5_2_Options
-      });
+
+      // CRITICAL FIX: Use stage-specific prompt if provided (for correct decision format)
+      // Orchestrator provides stage prompt as options.gpt5_2_SystemPrompt
+      const stagePrompt = options.gpt5_2_SystemPrompt;
+
+      if (stagePrompt) {
+        console.log('[GPT-5.2] Using stage-specific prompt (correct decision format)');
+        result = await callGPT5(prompt, {
+          systemPrompt: stagePrompt,
+          ...options.gpt5_2_Options
+        });
+      } else {
+        // Fallback to legacy combined prompt (for non-staged usage)
+        console.log('[GPT-5.2] Using legacy combined prompt (fallback)');
+        const combinedPrompt = getSystemPrompt('gpt5.2', true);
+        result = await callGPT5(prompt, {
+          systemPrompt: combinedPrompt,
+          ...options.gpt5_2_Options
+        });
+      }
+
       console.log('[GPT-5.2 Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
       if (result.success && result.content) {
         console.log('-'.repeat(60));
@@ -283,12 +298,27 @@ export async function callAllAgents(prompt, options = {}) {
       };
     } else if (singleAgent === 'claude') {
       console.log('[Claude Full-Stack Agent] Analyzing (Stats + Pipeline + Biology + MCP Tools)...');
-      // Get COMBINED prompt for single-agent mode (includes MCP tool usage)
-      const combinedPrompt = getSystemPrompt('claude', true);
-      result = await callClaude(prompt, {
-        systemPrompt: combinedPrompt,
-        ...options.claudeOptions
-      });
+
+      // CRITICAL FIX: Use stage-specific prompt if provided (for correct decision format)
+      // Orchestrator provides stage prompt as options.claudeSystemPrompt
+      const stagePrompt = options.claudeSystemPrompt;
+
+      if (stagePrompt) {
+        console.log('[Claude] Using stage-specific prompt (correct decision format)');
+        result = await callClaude(prompt, {
+          systemPrompt: stagePrompt,
+          ...options.claudeOptions
+        });
+      } else {
+        // Fallback to legacy combined prompt (for non-staged usage)
+        console.log('[Claude] Using legacy combined prompt (fallback)');
+        const combinedPrompt = getSystemPrompt('claude', true);
+        result = await callClaude(prompt, {
+          systemPrompt: combinedPrompt,
+          ...options.claudeOptions
+        });
+      }
+
       console.log('[Claude Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
       if (result.success && result.content) {
         console.log('-'.repeat(60));
@@ -306,12 +336,27 @@ export async function callAllAgents(prompt, options = {}) {
       };
     } else if (singleAgent === 'gemini') {
       console.log('[Gemini Full-Stack Agent] Analyzing (Stats + Pipeline + Biology)...');
-      // Get COMBINED prompt for single-agent mode
-      const combinedPrompt = getSystemPrompt('gemini', true);
-      result = await callGemini(prompt, {
-        systemPrompt: combinedPrompt,
-        ...options.geminiOptions
-      });
+
+      // CRITICAL FIX: Use stage-specific prompt if provided (for correct decision format)
+      // Orchestrator provides stage prompt as options.geminiSystemPrompt
+      const stagePrompt = options.geminiSystemPrompt;
+
+      if (stagePrompt) {
+        console.log('[Gemini] Using stage-specific prompt (correct decision format)');
+        result = await callGemini(prompt, {
+          systemPrompt: stagePrompt,
+          ...options.geminiOptions
+        });
+      } else {
+        // Fallback to legacy combined prompt (for non-staged usage)
+        console.log('[Gemini] Using legacy combined prompt (fallback)');
+        const combinedPrompt = getSystemPrompt('gemini', true);
+        result = await callGemini(prompt, {
+          systemPrompt: combinedPrompt,
+          ...options.geminiOptions
+        });
+      }
+
       console.log('[Gemini Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
       if (result.success && result.content) {
         console.log('-'.repeat(60));

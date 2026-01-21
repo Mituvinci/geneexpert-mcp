@@ -176,20 +176,40 @@ echo "========================================"
 echo "Cleanup: Deleting BAM files to save space"
 echo "========================================"
 BAM_DIR="${outputDir}/stage2_alignment/bam_files"
+echo "[DEBUG] BAM_DIR set to: \$BAM_DIR"
+
 if [ -d "\$BAM_DIR" ]; then
+  echo "[DEBUG] BAM directory exists"
   BAM_COUNT=\$(find "\$BAM_DIR" -name "*.bam" | wc -l)
   BAM_SIZE=\$(du -sh "\$BAM_DIR" 2>/dev/null | cut -f1)
 
   echo "Found \$BAM_COUNT BAM files (\$BAM_SIZE total)"
-  echo "Deleting BAM files..."
+  echo "Deleting BAM files and VCF files..."
 
+  echo "[DEBUG] Running: find \"\$BAM_DIR\" -name \"*.bam\" -delete"
   find "\$BAM_DIR" -name "*.bam" -delete
-  find "\$BAM_DIR" -name "*.bam.bai" -delete 2>/dev/null
+  echo "[DEBUG] BAM files deleted"
 
-  echo "BAM files deleted successfully"
+  echo "[DEBUG] Running: find \"\$BAM_DIR\" -name \"*.bam.bai\" -delete"
+  find "\$BAM_DIR" -name "*.bam.bai" -delete 2>/dev/null
+  echo "[DEBUG] BAI files deleted"
+
+  echo "[DEBUG] Running: find \"\$BAM_DIR\" -name \"*.indel.vcf\" -delete"
+  find "\$BAM_DIR" -name "*.indel.vcf" -delete 2>/dev/null
+  echo "[DEBUG] VCF files deleted"
+
+  # Verify deletion
+  REMAINING_BAM=\$(find "\$BAM_DIR" -name "*.bam" | wc -l)
+  echo "[DEBUG] Remaining BAM files after deletion: \$REMAINING_BAM"
+
+  echo "✓ BAM and VCF files deleted successfully"
 else
-  echo "BAM directory not found: \$BAM_DIR"
+  echo "[ERROR] BAM directory not found: \$BAM_DIR"
+  echo "[DEBUG] Checking if parent directory exists..."
+  ls -ld "\$(dirname \"\$BAM_DIR\")" 2>&1 || echo "[DEBUG] Parent directory also doesn't exist"
 fi
+
+echo "[DEBUG] Cleanup section completed"
 
 echo ""
 echo "========================================"
@@ -252,6 +272,7 @@ export function parseStage3Output(outputDir) {
     genes_detected: 0,
     recommendation: '',
     pca_plot_path: null,  // Path to PCA plot JPEG for agent review (PDF kept for user)
+    sample_dictionary: null,  // Sample name dictionary (A1->full_name, B1->full_name, etc.)
     warnings: [],
     errors: []
   };
@@ -364,7 +385,15 @@ export function parseStage3Output(outputDir) {
       result.warnings.push('JPEG conversion failed - using PDF (may not work for all agents)');
     }
 
-    // 7. Set default recommendation if not found
+    // 7. Read sample name dictionary (A1->full_name, B1->full_name)
+    const dictionaryPath = path.join(stage3Dir, `${comparison}_sample_dictionary.txt`);
+    if (fs.existsSync(dictionaryPath)) {
+      result.sample_dictionary = fs.readFileSync(dictionaryPath, 'utf-8');
+    } else {
+      result.warnings.push('Sample dictionary not found - agents will see full sample names in plot');
+    }
+
+    // 8. Set default recommendation if not found
     if (!result.recommendation) {
       if (result.overall_status === 'PASS') {
         result.recommendation = 'No issues detected. Proceed with simpleEdger (standard DE analysis).';
@@ -433,8 +462,19 @@ export function formatStage3ForAgents(parsedOutput, dataInfo) {
 
   let formatted = `# Stage 3: Quantification + QC Assessment Results\n\n`;
 
-  formatted += `**IMPORTANT:** A PCA plot (PC1 vs PC2) will be provided as a PDF attachment.\n`;
+  formatted += `**IMPORTANT:** A PCA plot (PC1 vs PC2) will be provided as an image attachment.\n`;
   formatted += `You must VISUALLY EXAMINE the PCA plot to assess batch effects and outliers.\n\n`;
+
+  // Sample Name Dictionary (if available)
+  if (parsedOutput.sample_dictionary) {
+    formatted += `## SAMPLE NAME DICTIONARY\n\n`;
+    formatted += `**CRITICAL:** The PCA plot uses SHORT LABELS (A1, A2, B1, B2, etc.) for clarity.\n`;
+    formatted += `Use this dictionary to identify the FULL sample names:\n\n`;
+    formatted += `\`\`\`\n`;
+    formatted += parsedOutput.sample_dictionary;
+    formatted += `\`\`\`\n\n`;
+    formatted += `When reporting outliers, you MUST specify BOTH the plot label (e.g., "B1") AND the full sample name from the dictionary.\n\n`;
+  }
 
   // Dataset overview
   formatted += `## Dataset Overview\n`;
@@ -444,11 +484,14 @@ export function formatStage3ForAgents(parsedOutput, dataInfo) {
   formatted += `- Sequencing Type: ${dataInfo.pairedEnd ? 'Paired-end' : 'Single-end'}\n`;
   formatted += `\n`;
 
-  // Sample Groups
+  // Sample Groups (keep for reference, but note they're in the dictionary now)
   formatted += `## Sample Groups\n`;
   for (const [group, sampleNames] of Object.entries(groups)) {
     formatted += `- ${group}: ${sampleNames.length} samples\n`;
-    formatted += `  (${sampleNames.join(', ')})\n`;
+    if (!parsedOutput.sample_dictionary) {
+      // Only show full names if no dictionary (fallback)
+      formatted += `  (${sampleNames.join(', ')})\n`;
+    }
   }
   formatted += `\n`;
 
@@ -489,10 +532,16 @@ export function formatStage3ForAgents(parsedOutput, dataInfo) {
   formatted += `---\n\n`;
   formatted += `## Your Task\n\n`;
   formatted += `Based on your VISUAL INSPECTION of the PCA plot, determine:\n`;
-  formatted += `1. Whether batch effects are present\n`;
-  formatted += `2. Whether any samples are outliers\n`;
+  formatted += `1. Whether batch effects are present (look for sub-clusters within groups)\n`;
+  formatted += `2. Whether any samples are outliers (samples far from their group cluster)\n`;
   formatted += `3. Which DE analysis method to use (simpleEdger or batch_effect_edger)\n`;
-  formatted += `4. Whether to keep all samples or remove outliers\n`;
+  formatted += `4. Whether to keep all samples or remove outliers\n\n`;
+
+  if (parsedOutput.sample_dictionary) {
+    formatted += `**REMINDER:** When identifying outliers, use the Sample Name Dictionary above to provide:\n`;
+    formatted += `- The plot label (e.g., "A1", "B2")\n`;
+    formatted += `- The full sample name (e.g., "GSM1275870_N052611_untreated")\n\n`;
+  }
 
   return formatted;
 }

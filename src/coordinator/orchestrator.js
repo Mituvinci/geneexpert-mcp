@@ -25,7 +25,7 @@ import {
 } from './consensus.js';
 
 import { getMultiAgentPrompts } from '../config/prompts.js';
-import { getStagePrompts, formatStageOutputForAgents } from '../config/stage_prompts.js';
+import { getStagePrompts, getCombinedStagePrompt, formatStageOutputForAgents } from '../config/stage_prompts.js';
 
 /**
  * Main Coordinator Class
@@ -42,9 +42,11 @@ export class Coordinator {
 
   /**
    * Set current dataset for decision_id tracking
+   * Strips system suffixes to keep decision IDs consistent with ground_truth.json
    */
   setDataset(datasetName) {
-    this.currentDataset = datasetName;
+    // Strip system suffixes: _parallel, _single_claude, _single_gpt, _single_gemini, _no_agent, _sequential
+    this.currentDataset = datasetName.replace(/_(parallel|single_claude|single_gpt|single_gemini|no_agent|sequential)$/, '');
     this.stepCounter = 0;  // Reset step counter for new dataset
   }
 
@@ -375,11 +377,28 @@ Focus on biological insight and interpretation.
     // Get stage-specific prompts
     const stagePrompts = getStagePrompts(stage);
 
-    // Build options with images (if provided)
+    // Build options
     const agentOptions = {
-      singleAgent: this.singleAgent,
-      ...stagePrompts
+      singleAgent: this.singleAgent
     };
+
+    // CRITICAL: For single-agent mode, use COMBINED prompt (all 3 perspectives)
+    // For multi-agent mode, use separate prompts (one perspective each)
+    if (this.singleAgent) {
+      // Single-agent: Get combined prompt that merges all 3 perspectives
+      const combinedPrompt = getCombinedStagePrompt(stage);
+
+      // Provide combined prompt for all three agent options
+      // (only the selected agent will be called, but we structure it this way for consistency)
+      agentOptions.gpt5_2_SystemPrompt = combinedPrompt;
+      agentOptions.claudeSystemPrompt = combinedPrompt;
+      agentOptions.geminiSystemPrompt = combinedPrompt;
+    } else {
+      // Multi-agent mode: separate prompts (each agent sees only their role)
+      agentOptions.gpt5_2_SystemPrompt = stagePrompts.gpt5_2_SystemPrompt;
+      agentOptions.claudeSystemPrompt = stagePrompts.claudeSystemPrompt;
+      agentOptions.geminiSystemPrompt = stagePrompts.geminiSystemPrompt;
+    }
 
     // Add images to each agent's options if available
     if (context.images && context.images.length > 0) {

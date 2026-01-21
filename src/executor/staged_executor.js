@@ -65,6 +65,8 @@ export class StagedExecutor {
     this.singleAgent = options.singleAgent || null;
     this.forceAutomation = options.forceAutomation || false;
     this.sequentialChain = options.sequentialChain || false;  // NEW: Sequential chain mode
+    this.useExistingFastqc = options.useExistingFastqc || null;  // FIX: Use preprocessed FastQC
+    this.useExistingBam = options.useExistingBam || null;  // FIX: Use preprocessed BAM
 
     // State tracking
     this.stageResults = {
@@ -180,7 +182,9 @@ export class StagedExecutor {
       controlKeyword: this.controlKeyword,
       treatmentKeyword: this.treatmentKeyword,
       singleAgent: this.singleAgent,
-      forceAutomation: this.forceAutomation
+      forceAutomation: this.forceAutomation,
+      useExistingFastqc: this.useExistingFastqc,  // FIX: Use preprocessed FastQC
+      useExistingBam: this.useExistingBam  // FIX: Use preprocessed BAM
     };
 
     // Initialize logger
@@ -231,23 +235,50 @@ export class StagedExecutor {
     const absOutputDir = path.resolve(this.outputDir);
     const scriptPath = path.resolve(absOutputDir, `stage_1_${this.comparison}.sh`);
 
-    // 1. Generate script
-    this.log('Generating Stage 1 script...');
-    generateStage1Script(this.dataInfo, this.config, scriptPath);
-    this.log(`Script: ${scriptPath}`);
+    // Check if using existing FastQC outputs (preprocessing mode)
+    if (this.config.useExistingFastqc) {
+      console.log('📋 Using existing FastQC outputs (preprocessing mode)');
+      console.log(`   Source: ${this.config.useExistingFastqc}`);
+      console.log('');
 
-    if (this.dryRun) {
-      this.log('DRY RUN - Script generated but not executed');
-      return { proceed: true, dryRun: true };
-    }
+      const sourceDir = this.config.useExistingFastqc;
+      const targetDir = path.join(absOutputDir, 'stage1_fastq_validation');
 
-    // 2. Execute script
-    this.log('Executing Stage 1 script...');
-    const execResult = this.executeScript(scriptPath, 'FASTQ validation + FastQC');
+      // Create target directory
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
 
-    if (!execResult.success) {
-      console.error(`Stage 1 execution failed: ${execResult.error}`);
-      return { proceed: false, error: execResult.error };
+      // Copy FastQC outputs
+      this.log('Copying FastQC outputs from preprocessing...');
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`cp -r "${sourceDir}"/* "${targetDir}"/`, { stdio: 'inherit' });
+        this.log('FastQC outputs copied successfully');
+      } catch (error) {
+        console.error(`Failed to copy FastQC outputs: ${error.message}`);
+        return { proceed: false, error: error.message };
+      }
+    } else {
+      // Normal mode: generate and execute script
+      // 1. Generate script
+      this.log('Generating Stage 1 script...');
+      generateStage1Script(this.dataInfo, this.config, scriptPath);
+      this.log(`Script: ${scriptPath}`);
+
+      if (this.dryRun) {
+        this.log('DRY RUN - Script generated but not executed');
+        return { proceed: true, dryRun: true };
+      }
+
+      // 2. Execute script
+      this.log('Executing Stage 1 script...');
+      const execResult = this.executeScript(scriptPath, 'FASTQ validation + FastQC');
+
+      if (!execResult.success) {
+        console.error(`Stage 1 execution failed: ${execResult.error}`);
+        return { proceed: false, error: execResult.error };
+      }
     }
 
     // 3. Parse output
@@ -312,23 +343,62 @@ export class StagedExecutor {
     const absOutputDir = path.resolve(this.outputDir);
     const scriptPath = path.resolve(absOutputDir, `stage_2_${this.comparison}.sh`);
 
-    // 1. Generate script (pass stage1 decision for context)
-    this.log('Generating Stage 2 script...');
-    generateStage2Script(this.dataInfo, this.config, scriptPath, this.stageResults.stage1);
-    this.log(`Script: ${scriptPath}`);
+    // Check if using existing BAM files (preprocessing mode)
+    if (this.config.useExistingBam) {
+      console.log('📋 Using existing BAM files (preprocessing mode)');
+      console.log(`   Source: ${this.config.useExistingBam}`);
+      console.log('');
 
-    if (this.dryRun) {
-      this.log('DRY RUN - Script generated but not executed');
-      return { proceed: true, dryRun: true };
-    }
+      const sourceDir = this.config.useExistingBam;
+      const targetDir = path.join(absOutputDir, 'stage2_alignment', 'bam_files');
+      const targetQcDir = path.join(absOutputDir, 'stage2_alignment', 'alignment_qc');
 
-    // 2. Execute script (longer timeout for alignment)
-    this.log('Executing Stage 2 script (this may take 10-30+ minutes)...');
-    const execResult = this.executeScript(scriptPath, 'Alignment + QC', 7200000); // 2 hour timeout
+      // Create target directories
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      if (!fs.existsSync(targetQcDir)) {
+        fs.mkdirSync(targetQcDir, { recursive: true });
+      }
 
-    if (!execResult.success) {
-      console.error(`Stage 2 execution failed: ${execResult.error}`);
-      return { proceed: false, error: execResult.error };
+      // Copy BAM files
+      this.log('Copying BAM files from preprocessing...');
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`cp -r "${sourceDir}"/*.bam "${targetDir}"/`, { stdio: 'inherit' });
+        execSync(`cp -r "${sourceDir}"/*.log "${targetDir}"/`, { stdio: 'inherit' });
+
+        // Copy alignment QC if exists
+        const sourceQcDir = path.join(path.dirname(sourceDir), 'alignment_qc');
+        if (fs.existsSync(sourceQcDir)) {
+          execSync(`cp -r "${sourceQcDir}"/* "${targetQcDir}"/`, { stdio: 'inherit' });
+        }
+
+        this.log('BAM files and QC outputs copied successfully');
+      } catch (error) {
+        console.error(`Failed to copy BAM files: ${error.message}`);
+        return { proceed: false, error: error.message };
+      }
+    } else {
+      // Normal mode: generate and execute script
+      // 1. Generate script (pass stage1 decision for context)
+      this.log('Generating Stage 2 script...');
+      generateStage2Script(this.dataInfo, this.config, scriptPath, this.stageResults.stage1);
+      this.log(`Script: ${scriptPath}`);
+
+      if (this.dryRun) {
+        this.log('DRY RUN - Script generated but not executed');
+        return { proceed: true, dryRun: true };
+      }
+
+      // 2. Execute script (longer timeout for alignment)
+      this.log('Executing Stage 2 script (this may take 10-30+ minutes)...');
+      const execResult = this.executeScript(scriptPath, 'Alignment + QC', 7200000); // 2 hour timeout
+
+      if (!execResult.success) {
+        console.error(`Stage 2 execution failed: ${execResult.error}`);
+        return { proceed: false, error: execResult.error };
+      }
     }
 
     // 3. Parse output
@@ -433,6 +503,16 @@ export class StagedExecutor {
     const stage3Output = parseStage3Output(absOutputDir);
     this.log(`Status: ${stage3Output.overall_status}`);
 
+    // Notify user about sample dictionary file (for interpreting PCA plot labels)
+    if (stage3Output.sample_dictionary) {
+      console.log('');
+      console.log('📋 Sample Dictionary Created:');
+      const dictPath = path.join(absOutputDir, 'stage3_quantification', `${this.comparison}_sample_dictionary.txt`);
+      console.log(`   ${dictPath}`);
+      console.log('   (Maps short PCA labels A1, B1... to full sample names)');
+      console.log('');
+    }
+
     // 4. Skip agents if forceAutomation
     if (this.forceAutomation) {
       this.log('FORCE AUTOMATION - Skipping agent review');
@@ -496,8 +576,12 @@ export class StagedExecutor {
         this.log('User chose to KEEP all samples (no outlier removal)');
         finalOutlierAction = 'KEEP_ALL';
         finalOutliersToRemove = [];
+        // Proceed anyway (keeping all samples is valid)
+        finalProceed = true;
       } else {
         this.log(`User confirmed removal of ${finalOutliersToRemove.length} outlier(s)`);
+        // CRITICAL FIX: User confirmed outlier removal, so proceed to Stage 4
+        finalProceed = true;
       }
 
       if (!userDecision) {
@@ -541,10 +625,39 @@ export class StagedExecutor {
 
     // 9. Update dataInfo and filter count/RPKM files if outliers removed
     if (finalOutliersToRemove.length > 0) {
+      // Parse sample dictionary to convert short labels (A1, B1) to full names
+      const stage3Dir = path.join(this.config.output, 'stage3_quantification');
+      const dictionaryPath = path.join(stage3Dir, `${this.config.comparison}_sample_dictionary.csv`);
+
+      let shortLabelToFullName = {};
+      if (fs.existsSync(dictionaryPath)) {
+        const dictData = fs.readFileSync(dictionaryPath, 'utf-8').split('\n');
+        // Parse CSV: short_label,full_name,group
+        for (let i = 1; i < dictData.length; i++) {
+          const line = dictData[i].trim();
+          if (!line) continue;
+          const [shortLabel, fullName] = line.split(',');
+          if (shortLabel && fullName) {
+            shortLabelToFullName[shortLabel.trim()] = fullName.trim();
+          }
+        }
+      }
+
+      // Convert short labels to full names (if agents used short labels)
+      const fullOutlierNames = finalOutliersToRemove.map(outlier => {
+        // If outlier looks like a short label (A1, B2, etc.), convert to full name
+        if (shortLabelToFullName[outlier]) {
+          this.log(`Converting short label "${outlier}" → "${shortLabelToFullName[outlier]}"`);
+          return shortLabelToFullName[outlier];
+        }
+        // Otherwise, assume it's already a full name
+        return outlier;
+      });
+
       this.dataInfo.samples = this.dataInfo.samples.filter(
-        s => !finalOutliersToRemove.includes(s.name)
+        s => !fullOutlierNames.includes(s.name)
       );
-      this.log(`Removed ${finalOutliersToRemove.length} outlier(s) from analysis`);
+      this.log(`Removed ${fullOutlierNames.length} outlier(s) from analysis`);
 
       // Helper function to filter CSV files
       const filterCSV = (filePath, fileDesc) => {
@@ -560,8 +673,8 @@ export class StagedExecutor {
             const keepIndices = header.map((colName, idx) => {
               // Keep first 2 columns (ID, Length or ID, GeneSymbol)
               if (idx < 2) return true;
-              // Keep columns that are NOT in outlier list
-              return !finalOutliersToRemove.some(outlier => colName.includes(outlier));
+              // Keep columns that are NOT in outlier list (use full names)
+              return !fullOutlierNames.some(outlier => colName.includes(outlier));
             });
 
             // Filter all rows
@@ -577,8 +690,7 @@ export class StagedExecutor {
         }
       };
 
-      // Filter count and RPKM files
-      const stage3Dir = path.join(this.config.output, 'stage3_quantification');
+      // Filter count and RPKM files (reuse stage3Dir from above)
       filterCSV(path.join(stage3Dir, `${this.config.comparison}.count.filtered.csv`), 'count file');
       filterCSV(path.join(stage3Dir, `${this.config.comparison}.rpkm.csv`), 'RPKM file');
     }
