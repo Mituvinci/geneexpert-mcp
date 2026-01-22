@@ -51,6 +51,48 @@ export const DECISION_VOCABULARY = {
       APPROVE: ['approve', 'approved', 'accept', 'looks good', 'results acceptable', 'pass'],
       REQUEST_REANALYSIS: ['request_reanalysis', 'request reanalysis', 'reanalyze', 're-analyze', 'redo', 'reject']
     }
+  },
+
+  // ===== scRNA-seq Stages =====
+
+  // scRNA Stage 2: QC Filtering
+  scrna_stage2: {
+    canonical: ['PROCEED', 'PROCEED_WITH_WARNING', 'STOP_AND_REVIEW'],
+    synonyms: {
+      PROCEED: ['proceed', 'pass', 'approve', 'accept', 'looks good', 'continue'],
+      PROCEED_WITH_WARNING: ['proceed_with_warning', 'proceed with warning', 'warning', 'borderline', 'caution'],
+      STOP_AND_REVIEW: ['stop_and_review', 'stop and review', 'stop', 'reject', 'abort', 'flag', 'concerning']
+    }
+  },
+
+  // scRNA Stage 2: QC Threshold Recommendation
+  scrna_stage2_thresholds: {
+    canonical: ['SET_THRESHOLDS', 'USE_DEFAULT_THRESHOLDS', 'INSUFFICIENT_DATA'],
+    synonyms: {
+      SET_THRESHOLDS: ['set_thresholds', 'set thresholds', 'custom thresholds', 'recommend thresholds', 'adaptive'],
+      USE_DEFAULT_THRESHOLDS: ['use_default', 'default thresholds', 'standard', 'typical'],
+      INSUFFICIENT_DATA: ['insufficient', 'too few cells', 'abort', 'stop', 'reject']
+    }
+  },
+
+  // scRNA Stage 4: PCA + PC Selection
+  scrna_stage4: {
+    canonical: ['USE_DEFAULT', 'SELECT_PC_RANGE', 'STOP_AND_REVIEW'],
+    synonyms: {
+      USE_DEFAULT: ['use_default', 'use default', 'default', 'standard', '1-20', 'pc 1-20'],
+      SELECT_PC_RANGE: ['select_pc_range', 'select pc range', 'custom range', 'specify pcs'],
+      STOP_AND_REVIEW: ['stop_and_review', 'stop and review', 'stop', 'reject', 'abort', 'concerning']
+    }
+  },
+
+  // scRNA Stage 5: Clustering + Markers
+  scrna_stage5: {
+    canonical: ['ACCEPT_CLUSTERING', 'ADJUST_RESOLUTION', 'FLAG_SUSPICIOUS'],
+    synonyms: {
+      ACCEPT_CLUSTERING: ['accept_clustering', 'accept clustering', 'accept', 'approve', 'looks good', 'proceed'],
+      ADJUST_RESOLUTION: ['adjust_resolution', 'adjust resolution', 'change resolution', 'tune resolution', 'modify'],
+      FLAG_SUSPICIOUS: ['flag_suspicious', 'flag suspicious', 'suspicious', 'concerning', 'reject', 'problematic']
+    }
   }
 };
 

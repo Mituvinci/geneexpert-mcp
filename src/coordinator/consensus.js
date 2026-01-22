@@ -70,7 +70,7 @@ export function extractDecision(agentResponse, decisionType = 'default') {
   }
 
   // For staged decisions, use canonical vocabulary
-  if (decisionType.startsWith('stage') || ['stage1', 'stage2', 'stage3_de_method', 'stage3_outlier_action', 'stage4'].includes(decisionType)) {
+  if (decisionType.startsWith('stage') || decisionType.startsWith('scrna_stage') || ['stage1', 'stage2', 'stage3_de_method', 'stage3_outlier_action', 'stage4'].includes(decisionType)) {
     // Try to extract canonical decision using vocabulary system
     const canonicalDecision = extractDecisionFromResponse(content, decisionType);
 
@@ -171,6 +171,51 @@ function mapCanonicalToVoteCategory(canonicalDecision, stage) {
       return 'approve';
     }
     if (canonicalDecision === 'REQUEST_REANALYSIS') {
+      return 'reject';
+    }
+  }
+
+  // ===== scRNA Stages =====
+
+  // scRNA Stage 2 Thresholds: QC Threshold Recommendation
+  if (stage === 'scrna_stage2_thresholds') {
+    if (canonicalDecision === 'SET_THRESHOLDS' || canonicalDecision === 'USE_DEFAULT_THRESHOLDS') {
+      return 'approve';  // Both are valid, just different thresholds
+    }
+    if (canonicalDecision === 'INSUFFICIENT_DATA') {
+      return 'reject';
+    }
+  }
+
+  // scRNA Stage 2: QC Filtering (DEPRECATED - now handled by stage2_thresholds)
+  if (stage === 'scrna_stage2') {
+    if (canonicalDecision === 'PROCEED' || canonicalDecision === 'PROCEED_WITH_WARNING') {
+      return 'approve';
+    }
+    if (canonicalDecision === 'STOP_AND_REVIEW') {
+      return 'reject';
+    }
+  }
+
+  // scRNA Stage 4: PCA + PC Selection
+  if (stage === 'scrna_stage4') {
+    if (canonicalDecision === 'USE_DEFAULT' || canonicalDecision === 'SELECT_PC_RANGE') {
+      return 'approve';  // Both are valid, just different PC ranges
+    }
+    if (canonicalDecision === 'STOP_AND_REVIEW') {
+      return 'reject';
+    }
+  }
+
+  // scRNA Stage 5: Clustering
+  if (stage === 'scrna_stage5') {
+    if (canonicalDecision === 'ACCEPT_CLUSTERING') {
+      return 'approve';
+    }
+    if (canonicalDecision === 'ADJUST_RESOLUTION') {
+      return 'uncertain';  // May need user input for new resolution
+    }
+    if (canonicalDecision === 'FLAG_SUSPICIOUS') {
       return 'reject';
     }
   }

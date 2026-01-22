@@ -1,4 +1,4 @@
-# GeneExpert: Multi-Agent RNA-seq Analysis System
+# PolyLLM-BioMCP : Poly-Foundational LLM Agent Orchestration for RNA-seq Upstream Intelligence
 
 **Staged Multi-Agent Pipeline** where GPT-5.2, Claude Sonnet 4.5, and Gemini Pro collaborate at decision checkpoints throughout RNA-seq analysis.
 
@@ -374,7 +374,7 @@ node bin/geneexpert.js analyze <dataset> \
 - Error propagation rate (sequential mode - measures if later agents correct or amplify first agent's errors)
 - Reasoning quality (qualitative assessment)
 
-**Evaluation Script:**
+**Evaluation Scripts:**
 ```bash
 # Calculate all metrics
 node bin/evaluate.js metrics
@@ -384,6 +384,12 @@ node bin/evaluate.js compare
 
 # Export results to CSV
 node bin/evaluate.js metrics --output results.csv
+
+# Analyze costs from experiment logs
+node bin/analyze_costs.js generate --results experiments/results --output costs.csv
+
+# Filter cost analysis by system
+node bin/analyze_costs.js generate --results experiments/results --system multi-agent-parallel
 ```
 
 ---
@@ -391,7 +397,11 @@ node bin/evaluate.js metrics --output results.csv
 ## Project Structure
 
 ```
-├── bin/geneexpert.js                    # CLI entry point (--staged flag)
+├── bin/
+│   ├── geneexpert.js                    # CLI entry point (--staged flag)
+│   ├── evaluate.js                      # Evaluation metrics calculator
+│   ├── analyze_costs.js                 # Cost analysis from experiment logs
+│   └── json_to_csv.js                   # JSON to CSV converter
 ├── src/
 │   ├── executor/
 │   │   └── staged_executor.js           # 4-stage orchestration

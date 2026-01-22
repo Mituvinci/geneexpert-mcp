@@ -26,6 +26,12 @@ import {
 
 import { getMultiAgentPrompts } from '../config/prompts.js';
 import { getStagePrompts, getCombinedStagePrompt, formatStageOutputForAgents } from '../config/stage_prompts.js';
+import {
+  SCRNA_STAGE_2_THRESHOLD_PROMPTS,
+  SCRNA_STAGE_2_PROMPTS,
+  SCRNA_STAGE_4_PROMPTS,
+  SCRNA_STAGE_5_PROMPTS
+} from '../config/scrna_stage_prompts.js';
 
 /**
  * Main Coordinator Class
@@ -897,6 +903,458 @@ Focus on biological insight and interpretation.
         votes: h.consensus.votes,
         agentDecisions: h.consensus.agentDecisions
       }));
+  }
+
+  /**
+   * ===================================================================
+   * scRNA-seq SPECIFIC REVIEW METHODS
+   * ===================================================================
+   */
+
+  /**
+   * Review scRNA Stage 2: QC Filtering
+   * Stats Agent decides: PROCEED / PROCEED_WITH_WARNING / STOP_AND_REVIEW
+   */
+  /**
+   * Review scRNA Stage 1 Output: Recommend QC Thresholds (NEW)
+   * ALL 3 AGENTS (Stats, Pipeline, Biology) recommend thresholds BEFORE filtering
+   */
+  async reviewScRNAStage1ForThresholds(stage1Output, dataInfo) {
+    this.log('[Coordinator] Reviewing scRNA Stage 1 (QC Metrics) - Recommending Thresholds...');
+
+    // Format data for agents
+    const formattedOutput = `# scRNA-seq QC Metrics (Stage 1 - Before Filtering)
+
+## Dataset Overview
+- Organism: ${dataInfo.organism || 'unknown'}
+- Tissue: ${dataInfo.tissue || 'unknown (please infer from context if possible)'}
+- Total Cells: ${stage1Output.cells_total}
+- Total Genes: ${stage1Output.genes_total}
+
+## QC Metric Distributions
+- **Median Features/Cell**: ${stage1Output.nFeature_median} genes
+- **Median UMI Count/Cell**: ${stage1Output.nCount_median} UMIs
+- **Median % Mitochondrial**: ${stage1Output.percent_mt_median.toFixed(2)}%
+
+## Full QC Summary (JSON)
+\`\`\`json
+${JSON.stringify(stage1Output, null, 2)}
+\`\`\`
+
+## Your Task
+Based on these QC metrics, recommend filtering thresholds that balance:
+1. **Quality control**: Remove low-quality cells (empty droplets, dying cells, doublets)
+2. **Cell preservation**: Keep enough high-quality cells for downstream analysis
+3. **Biological context**: Consider tissue-specific patterns (e.g., brain has higher MT%)
+
+**Important**: This is a ${stage1Output.cells_total < 1000 ? 'SMALL' : stage1Output.cells_total < 5000 ? 'MEDIUM' : 'LARGE'} dataset. ${stage1Output.cells_total < 1000 ? 'Use LENIENT thresholds to preserve cells.' : ''}
+
+## Threshold Parameters to Recommend
+- **nFeature_min**: Minimum genes per cell (typical: 200-1000)
+- **nFeature_max**: Maximum genes per cell (typical: 5000-15000)
+- **percent_mt_max**: Maximum % mitochondrial (typical: 10-30%, tissue-dependent)`;
+
+    // Build agent options
+    const agentOptions = {
+      singleAgent: this.singleAgent,
+      gpt5_2_SystemPrompt: SCRNA_STAGE_2_THRESHOLD_PROMPTS.gpt5_2,
+      claudeSystemPrompt: SCRNA_STAGE_2_THRESHOLD_PROMPTS.claude,
+      geminiSystemPrompt: SCRNA_STAGE_2_THRESHOLD_PROMPTS.gemini
+    };
+
+    // Call agents
+    const responses = this.sequentialChain
+      ? await callAllAgentsSequential(formattedOutput, agentOptions)
+      : await callAllAgents(formattedOutput, agentOptions);
+
+    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+
+    // Parse threshold recommendations from each agent
+    const thresholds = {
+      gpt5_2: this._parseThresholds(responses.gpt5_2),
+      claude: this._parseThresholds(responses.claude),
+      gemini: this._parseThresholds(responses.gemini)
+    };
+
+    // Use AVERAGE of agent recommendations (similar to PC selection)
+    const avgThresholds = {
+      nFeature_min: Math.round((thresholds.gpt5_2.nFeature_min + thresholds.claude.nFeature_min + thresholds.gemini.nFeature_min) / 3),
+      nFeature_max: Math.round((thresholds.gpt5_2.nFeature_max + thresholds.claude.nFeature_max + thresholds.gemini.nFeature_max) / 3),
+      percent_mt_max: Math.round((thresholds.gpt5_2.percent_mt_max + thresholds.claude.percent_mt_max + thresholds.gemini.percent_mt_max) / 3)
+    };
+
+    // Synthesize consensus
+    const consensus = synthesizeConsensus(responses, 'scrna_stage2_thresholds', null);
+
+    // Map vote category back to canonical decision
+    let canonicalDecision = 'SET_THRESHOLDS';  // Default
+    if (consensus.decision === 'approve') {
+      canonicalDecision = 'SET_THRESHOLDS';  // Either custom or default thresholds
+    } else if (consensus.decision === 'reject') {
+      canonicalDecision = 'INSUFFICIENT_DATA';
+    }
+
+    this.log(`[Coordinator] scRNA Stage 2 Threshold Consensus: ${canonicalDecision}`);
+    this.log(`[Coordinator] Average Thresholds: nFeature ${avgThresholds.nFeature_min}-${avgThresholds.nFeature_max}, MT% <${avgThresholds.percent_mt_max}%`);
+
+    return {
+      decision: canonicalDecision,
+      thresholds: avgThresholds,
+      reasoning: consensus.summary,
+      confidence: consensus.confidence,
+      agentResponses: responses,
+      consensus,
+      individualThresholds: thresholds
+    };
+  }
+
+  /**
+   * Helper: Parse thresholds from agent response
+   */
+  _parseThresholds(agentResponse) {
+    if (!agentResponse.success || !agentResponse.content) {
+      // Return conservative defaults if agent failed
+      return { nFeature_min: 200, nFeature_max: 6000, percent_mt_max: 20 };
+    }
+
+    const content = agentResponse.content;
+
+    // Extract thresholds using regex
+    const nFeatureMinMatch = content.match(/nFeature_min:\s*(\d+)/i);
+    const nFeatureMaxMatch = content.match(/nFeature_max:\s*(\d+)/i);
+    const percentMtMaxMatch = content.match(/percent_mt_max:\s*(\d+)/i);
+
+    return {
+      nFeature_min: nFeatureMinMatch ? parseInt(nFeatureMinMatch[1]) : 200,
+      nFeature_max: nFeatureMaxMatch ? parseInt(nFeatureMaxMatch[1]) : 6000,
+      percent_mt_max: percentMtMaxMatch ? parseInt(percentMtMaxMatch[1]) : 20
+    };
+  }
+
+  /**
+   * Review scRNA Stage 2: QC Filtering (DEPRECATED - now just applies agent thresholds)
+   * ALL 3 AGENTS (Stats, Pipeline, Biology) vote on filtering quality
+   */
+  async reviewScRNAStage2(stage2Output, dataInfo) {
+    this.log('[Coordinator] Reviewing scRNA Stage 2 (QC Filtering) with ALL 3 AGENTS...');
+
+    // Format data for agents
+    const context = {
+      organism: dataInfo.organism || 'unknown',
+      tissue: dataInfo.tissue || 'unknown',
+      cells_before: stage2Output.cells_before_filtering,
+      cells_after: stage2Output.cells_after_filtering,
+      percent_removed: stage2Output.percent_removed
+    };
+
+    const formattedOutput = `# scRNA-seq QC Filtering Results
+
+## Dataset Context
+- Organism: ${context.organism}
+- Tissue: ${context.tissue || 'Not specified'}
+- Technology: 10x Genomics Chromium
+
+## Filtering Summary
+- Cells Before Filtering: ${context.cells_before?.toLocaleString() || 'N/A'}
+- Cells After Filtering: ${context.cells_after?.toLocaleString() || 'N/A'}
+- Percent Removed: ${context.percent_removed?.toFixed(1) || 'N/A'}%
+
+## QC Metrics (JSON)
+\`\`\`json
+${JSON.stringify(stage2Output, null, 2)}
+\`\`\`
+
+## Your Task
+Evaluate whether the QC filtering is appropriate for this scRNA-seq dataset.
+
+**Allowed Decisions:**
+- PROCEED
+- PROCEED_WITH_WARNING
+- STOP_AND_REVIEW`;
+
+    // Build agent options with scRNA Stage 2 prompts
+    const agentOptions = {
+      singleAgent: this.singleAgent,
+      gpt5_2_SystemPrompt: SCRNA_STAGE_2_PROMPTS.gpt5_2,
+      claudeSystemPrompt: SCRNA_STAGE_2_PROMPTS.claude,
+      geminiSystemPrompt: SCRNA_STAGE_2_PROMPTS.gemini
+    };
+
+    // Call agents (parallel or sequential based on flag)
+    const responses = this.sequentialChain
+      ? await callAllAgentsSequential(formattedOutput, agentOptions)
+      : await callAllAgents(formattedOutput, agentOptions);
+
+    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+
+    // Synthesize consensus
+    const consensus = synthesizeConsensus(responses, 'scrna_stage2', null);
+
+    // Map vote category back to canonical decision for scRNA
+    let canonicalDecision = 'STOP_AND_REVIEW';  // Default
+    if (consensus.decision === 'approve') {
+      // Check if any agent said PROCEED_WITH_WARNING
+      const hasWarning = [responses.gpt5_2, responses.claude, responses.gemini].some(r =>
+        r.content && r.content.includes('PROCEED_WITH_WARNING')
+      );
+      canonicalDecision = hasWarning ? 'PROCEED_WITH_WARNING' : 'PROCEED';
+    } else if (consensus.decision === 'reject') {
+      canonicalDecision = 'STOP_AND_REVIEW';
+    }
+
+    this.log(`[Coordinator] scRNA Stage 2 Consensus: ${canonicalDecision} (vote: ${consensus.decision})`);
+
+    return {
+      decision: canonicalDecision,
+      reasoning: consensus.summary,
+      confidence: consensus.confidence,
+      agentResponses: responses,
+      consensus
+    };
+  }
+
+  /**
+   * Review scRNA Stage 4: PCA + PC Selection
+   * Stats Agent decides: USE_DEFAULT / SELECT_PC_RANGE / STOP_AND_REVIEW
+   */
+  /**
+   * Review scRNA Stage 4: PCA + PC Selection
+   * ALL 3 AGENTS vote on optimal PC range
+   */
+  async reviewScRNAStage4(stage4Output, dataInfo) {
+    this.log('[Coordinator] Reviewing scRNA Stage 4 (PCA) with ALL 3 AGENTS...');
+
+    // Calculate cumulative variance
+    const pcVariance = stage4Output.pc_variance_percent || [];
+    const cumVariance = [];
+    let sum = 0;
+    for (let i = 0; i < Math.min(pcVariance.length, 30); i++) {
+      sum += pcVariance[i];
+      cumVariance.push(sum.toFixed(2));
+    }
+
+    // Format data for agents
+    const formattedOutput = `# scRNA-seq PCA Results
+
+## Dataset Context
+- Organism: ${dataInfo.organism || 'unknown'}
+- Tissue: ${dataInfo.tissue || 'unknown'}
+- Total Cells: ${stage4Output.n_cells || 'N/A'}
+
+## PCA Variance Summary
+**Individual PC Variance (first 20 PCs):**
+${pcVariance.slice(0, 20).map((v, i) => `PC ${i + 1}: ${v.toFixed(2)}%`).join('\n')}
+
+**Cumulative Variance:**
+- PC 1-10: ${cumVariance[9] || 'N/A'}%
+- PC 1-20: ${cumVariance[19] || 'N/A'}%
+- PC 1-30: ${cumVariance[29] || 'N/A'}%
+
+## Full Data (JSON)
+\`\`\`json
+${JSON.stringify({ pc_variance_percent: pcVariance.slice(0, 50), cumulative_variance: cumVariance }, null, 2)}
+\`\`\`
+
+## Your Task
+Based on the variance explained, select an appropriate PC range (min_pc to max_pc) for downstream clustering and UMAP.
+
+**Allowed Decisions:**
+- USE_DEFAULT (use PCs 1-20)
+- SELECT_PC_RANGE (specify custom min_pc and max_pc)
+- STOP_AND_REVIEW (if variance pattern is concerning)`;
+
+    // Build agent options with scRNA Stage 4 prompts
+    const agentOptions = {
+      singleAgent: this.singleAgent,
+      gpt5_2_SystemPrompt: SCRNA_STAGE_4_PROMPTS.gpt5_2,
+      claudeSystemPrompt: SCRNA_STAGE_4_PROMPTS.claude,
+      geminiSystemPrompt: SCRNA_STAGE_4_PROMPTS.gemini
+    };
+
+    // Call agents
+    const responses = this.sequentialChain
+      ? await callAllAgentsSequential(formattedOutput, agentOptions)
+      : await callAllAgents(formattedOutput, agentOptions);
+
+    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+
+    // Parse PC selections from each agent
+    const pcSelections = {
+      gpt5_2: this._parsePCSelection(responses.gpt5_2),
+      claude: this._parsePCSelection(responses.claude),
+      gemini: this._parsePCSelection(responses.gemini)
+    };
+
+    // Use AVERAGE (not median) of max_pc from all 3 agents
+    const maxPCs = [pcSelections.gpt5_2.max_pc, pcSelections.claude.max_pc, pcSelections.gemini.max_pc];
+    const avgMaxPC = Math.round(maxPCs.reduce((a, b) => a + b, 0) / maxPCs.length);
+
+    const consensus = synthesizeConsensus(responses, 'scrna_stage4', null);
+
+    // Map vote category back to canonical decision
+    let canonicalDecision = 'SELECT_PC_RANGE';  // Default to success (all agents likely gave valid PC ranges)
+    if (consensus.decision === 'reject') {
+      canonicalDecision = 'STOP_AND_REVIEW';
+    } else if (consensus.decision === 'approve' || consensus.decision === 'user_decision_required') {
+      // Either consensus approve, or no clear consensus but all gave valid PC ranges
+      canonicalDecision = 'SELECT_PC_RANGE';
+    }
+
+    this.log(`[Coordinator] scRNA Stage 4 Consensus: ${canonicalDecision} - PCs 1-${avgMaxPC} (average of ${maxPCs.join(', ')})`);
+    this.log(`[Coordinator] Voting result: ${consensus.decision}`);
+
+    return {
+      decision: canonicalDecision,
+      min_pc: 1,
+      max_pc: avgMaxPC,
+      reasoning: consensus.summary,
+      confidence: consensus.confidence,
+      agentResponses: responses,
+      consensus,
+      pcSelections
+    };
+  }
+
+  /**
+   * Helper: Parse PC selection from agent response
+   */
+  _parsePCSelection(response) {
+    let min_pc = 1;
+    let max_pc = 20;  // Default
+
+    if (!response.success) return { min_pc, max_pc };
+
+    try {
+      // Look for patterns like "max_pc: 25" or "PCs 1-30" or "use 1-25"
+      const content = response.content;
+
+      // Pattern 1: max_pc: 25
+      const maxPcMatch = content.match(/max_pc[:\s]+(\d+)/i);
+      if (maxPcMatch) {
+        max_pc = parseInt(maxPcMatch[1]);
+      }
+
+      // Pattern 2: PCs 1-30 or 1-25
+      const rangeMatch = content.match(/(?:PCs?|use|dims?)\s*(?:1-)?(\d+)/i);
+      if (rangeMatch && !maxPcMatch) {
+        max_pc = parseInt(rangeMatch[1]);
+      }
+
+      // Sanity check
+      if (max_pc < 10) max_pc = 10;
+      if (max_pc > 50) max_pc = 50;
+
+    } catch (error) {
+      this.log(`Warning: Failed to parse PC selection from agent: ${error.message}`);
+    }
+
+    return { min_pc, max_pc };
+  }
+
+  /**
+   * Review scRNA Stage 5: Clustering + Markers
+   * Pipeline Agent decides: ACCEPT_CLUSTERING / ADJUST_RESOLUTION / FLAG_SUSPICIOUS
+   */
+  /**
+   * Review scRNA Stage 5: Clustering + Markers
+   * ALL 3 AGENTS vote on clustering quality
+   */
+  async reviewScRNAStage5(stage5Output, dataInfo) {
+    this.log('[Coordinator] Reviewing scRNA Stage 5 (Clustering) with ALL 3 AGENTS...');
+
+    // Format cluster sizes
+    const clusterSizes = stage5Output.cluster_sizes || {};
+    const clusterSummary = Object.entries(clusterSizes)
+      .map(([cluster, size]) => `  Cluster ${cluster}: ${size} cells`)
+      .join('\n');
+
+    // Format data for agents
+    const formattedOutput = `# scRNA-seq Clustering Results
+
+## Dataset Context
+- Organism: ${dataInfo.organism || 'unknown'}
+- Tissue: ${dataInfo.tissue || 'unknown'}
+- Total Cells: ${stage5Output.n_cells || 'N/A'}
+- Number of Clusters: ${stage5Output.n_clusters || 'N/A'}
+
+## Cluster Size Distribution
+${clusterSummary}
+
+## Top Markers Per Cluster
+${stage5Output.top_markers_summary || '(See full JSON below)'}
+
+## Full Data (JSON)
+\`\`\`json
+${JSON.stringify(stage5Output, null, 2)}
+\`\`\`
+
+## Your Task
+Evaluate whether the clustering is biologically and technically valid.
+
+**Allowed Decisions:**
+- ACCEPT_CLUSTERING (clustering is good, proceed to analysis)
+- ADJUST_RESOLUTION (suggest increasing or decreasing resolution)
+- FLAG_SUSPICIOUS (major concerns about clustering quality)`;
+
+    // Build agent options with scRNA Stage 5 prompts
+    const agentOptions = {
+      singleAgent: this.singleAgent,
+      gpt5_2_SystemPrompt: SCRNA_STAGE_5_PROMPTS.gpt5_2,
+      claudeSystemPrompt: SCRNA_STAGE_5_PROMPTS.claude,
+      geminiSystemPrompt: SCRNA_STAGE_5_PROMPTS.gemini
+    };
+
+    // Call agents
+    const responses = this.sequentialChain
+      ? await callAllAgentsSequential(formattedOutput, agentOptions)
+      : await callAllAgents(formattedOutput, agentOptions);
+
+    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+
+    // Synthesize consensus
+    const consensus = synthesizeConsensus(responses, 'scrna_stage5', null);
+
+    // DEBUG: Log consensus details
+    console.log('\n[DEBUG] Stage 5 Consensus Details:');
+    console.log('  consensus.decision:', consensus.decision);
+    console.log('  consensus.votes:', JSON.stringify(consensus.votes));
+    console.log('  consensus.agentDecisions:', JSON.stringify(consensus.agentDecisions));
+
+    // Map vote category back to canonical decision
+    let canonicalDecision = 'FLAG_SUSPICIOUS';  // Default
+    if (consensus.decision === 'approve') {
+      canonicalDecision = 'ACCEPT_CLUSTERING';
+    } else if (consensus.decision === 'uncertain') {
+      canonicalDecision = 'ADJUST_RESOLUTION';
+    } else if (consensus.decision === 'reject') {
+      canonicalDecision = 'FLAG_SUSPICIOUS';
+    } else if (consensus.decision === 'user_decision_required') {
+      // If 2/3 agents approved, accept it anyway (lenient for API failures)
+      if (consensus.votes.approve >= 2) {
+        console.log('[DEBUG] Overriding user_decision_required: 2/3 agents approved');
+        canonicalDecision = 'ACCEPT_CLUSTERING';
+      } else {
+        canonicalDecision = 'FLAG_SUSPICIOUS';
+      }
+    }
+
+    this.log(`[Coordinator] scRNA Stage 5 Consensus: ${canonicalDecision} (vote: ${consensus.decision})`);
+
+    return {
+      decision: canonicalDecision,
+      reasoning: consensus.summary,
+      confidence: consensus.confidence,
+      agentResponses: responses,
+      consensus
+    };
   }
 }
 

@@ -38,7 +38,10 @@ async function retryWithBackoff(fn, maxRetries = 3, initialDelay = 1000) {
         error.message?.includes('overloaded') ||
         error.message?.includes('timeout') ||
         error.message?.includes('ECONNRESET') ||
-        error.message?.includes('ETIMEDOUT');
+        error.message?.includes('ETIMEDOUT') ||
+        error.message?.includes('fetch failed') ||  // Network fetch failure
+        error.message?.includes('ENOTFOUND') ||     // DNS lookup failed
+        error.message?.includes('ECONNREFUSED');    // Connection refused
 
       if (!isRetryable || attempt === maxRetries) {
         throw error;  // Not retryable or max retries reached
