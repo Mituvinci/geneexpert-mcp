@@ -201,6 +201,28 @@ async function main() {
   console.log('');
 
   // ===================================================================
+  // SAVE METADATA
+  // ===================================================================
+
+  console.log('[Metadata] Saving dataset metadata...');
+  const metadata = {
+    dataset_name: dataInfo.comparison,
+    organism: dataInfo.organism,
+    genome_build: organism === 'human' ? 'hg38' : (organism === 'mouse' ? 'mm10' : 'rn6'),
+    sequencing_type: dataInfo.pairedEnd ? 'paired-end' : 'single-end',
+    paired_end: dataInfo.pairedEnd,
+    num_samples: dataInfo.samples.length,
+    preprocessing_date: new Date().toISOString(),
+    samples: dataInfo.samples.map(s => s.name),
+    notes: 'Generated automatically by preprocess_dataset.js'
+  };
+
+  const metadataPath = path.join(outputDir, 'dataset_metadata.json');
+  fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+  console.log(`[Metadata] Saved to: ${metadataPath}`);
+  console.log('');
+
+  // ===================================================================
   // SUMMARY
   // ===================================================================
 

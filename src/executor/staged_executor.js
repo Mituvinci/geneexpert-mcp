@@ -39,6 +39,25 @@ import {
   formatStage4ForAgents
 } from '../stages/stage4_de_analysis.js';
 
+// scRNA-seq stages
+import {
+  generateStage3aScript,
+  parseStage3aOutput,
+  formatStage3aForAgents
+} from '../stages/stage3a_cell_cycle_scoring.js';
+
+import {
+  generateStage3bScript,
+  parseStage3bOutput,
+  formatStage3bForAgents
+} from '../stages/stage3b_cell_cycle_regression.js';
+
+import {
+  generateStage3cScript,
+  parseStage3cOutput,
+  formatStage3cForAgents
+} from '../stages/stage3c_clustering_umap.js';
+
 // Coordinator and utilities
 import { Coordinator } from '../coordinator/orchestrator.js';
 import { Logger } from '../utils/logger.js';
@@ -67,12 +86,16 @@ export class StagedExecutor {
     this.sequentialChain = options.sequentialChain || false;  // NEW: Sequential chain mode
     this.useExistingFastqc = options.useExistingFastqc || null;  // FIX: Use preprocessed FastQC
     this.useExistingBam = options.useExistingBam || null;  // FIX: Use preprocessed BAM
+    this.dataType = options.dataType || 'bulk';  // NEW: 'bulk' or 'scrna'
 
     // State tracking
     this.stageResults = {
       stage1: null,
       stage2: null,
       stage3: null,
+      stage3a: null,  // scRNA-seq: Cell cycle scoring
+      stage3b: null,  // scRNA-seq: Cell cycle regression
+      stage3c: null,  // scRNA-seq: Clustering + UMAP
       stage4: null
     };
     this.dataInfo = null;
@@ -104,9 +127,26 @@ export class StagedExecutor {
   detectDataInfo() {
     this.log(`Detecting data from: ${this.inputDir}`);
 
+    // FIRST: Check if we're using preprocessed BAM files (metadata might exist)
+    let pairedEndFromMetadata = null;
+    if (this.useExistingBam) {
+      // Metadata is in: preprocessing_dir/dataset_metadata.json
+      // BAM dir is:     preprocessing_dir/stage2_alignment/bam_files/
+      const metadataPath = path.join(path.dirname(path.dirname(this.useExistingBam)), 'dataset_metadata.json');
+      if (fs.existsSync(metadataPath)) {
+        try {
+          const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+          pairedEndFromMetadata = metadata.paired_end || metadata.pairedEnd;
+          this.log(`✓ Loaded metadata from preprocessing: ${metadata.sequencing_type || (pairedEndFromMetadata ? 'paired-end' : 'single-end')}`);
+        } catch (error) {
+          this.log(`Warning: Could not read metadata file: ${error.message}`);
+        }
+      }
+    }
+
     const files = fs.readdirSync(this.inputDir).filter(f => f.endsWith('.fastq.gz'));
     const samples = [];
-    const pairedEnd = files.some(f => f.includes('_R2_'));
+    const pairedEnd = pairedEndFromMetadata !== null ? pairedEndFromMetadata : files.some(f => f.includes('_R2_'));
 
     // Group files by sample
     const sampleMap = {};
@@ -157,7 +197,8 @@ export class StagedExecutor {
       comparison: this.comparison
     };
 
-    this.log(`Detected ${samples.length} samples (${pairedEnd ? 'paired-end' : 'single-end'})`);
+    const seqTypeSource = pairedEndFromMetadata !== null ? ' (from metadata)' : ' (from FASTQ detection)';
+    this.log(`Detected ${samples.length} samples (${pairedEnd ? 'paired-end' : 'single-end'}${seqTypeSource})`);
     this.log(`Groups: ${Object.keys(groups).map(g => `${g}(n=${groups[g].length})`).join(', ')}`);
 
     return this.dataInfo;
@@ -832,6 +873,243 @@ export class StagedExecutor {
   /**
    * Run the full pipeline
    */
+  /**
+   * Stage 3a: Cell Cycle Scoring (scRNA-seq only)
+   */
+  async runStage3a() {
+    console.log('');
+    console.log('='.repeat(60));
+    console.log('  STAGE 3a: Cell Cycle Scoring (scRNA-seq)');
+    console.log('='.repeat(60));
+    console.log('');
+
+    const absOutputDir = path.resolve(this.outputDir);
+    const scriptPath = path.resolve(absOutputDir, `stage_3a_${this.comparison}.sh`);
+
+    // 1. Generate script
+    this.log('Generating Stage 3a script...');
+    generateStage3aScript(this.dataInfo, this.config, scriptPath);
+    this.log(`Script: ${scriptPath}`);
+
+    if (this.dryRun) {
+      this.log('DRY RUN - Script generated but not executed');
+      return { proceed: true, dryRun: true };
+    }
+
+    // 2. Execute script
+    this.log('Executing Stage 3a script (cell cycle scoring)...');
+    const execResult = this.executeScript(scriptPath, 'Cell Cycle Scoring', 900000); // 15 min timeout
+
+    if (!execResult.success) {
+      console.error(`Stage 3a execution failed: ${execResult.error}`);
+      return { proceed: false, error: execResult.error };
+    }
+
+    // 3. Parse output
+    this.log('Parsing Stage 3a output...');
+    const stage3aOutput = parseStage3aOutput(absOutputDir, this.comparison);
+    this.log(`Status: ${stage3aOutput.overall_status}`);
+
+    // 4. Agent review (informational only - always proceeds)
+    if (!this.forceAutomation) {
+      this.log('Calling agents for Stage 3a review (informational only)...');
+      const formattedOutput = formatStage3aForAgents(stage3aOutput, this.dataInfo);
+
+      // Add PCA plot as image
+      const images = stage3aOutput.pca_plot_path ? [{ path: stage3aOutput.pca_plot_path }] : [];
+
+      await this.coordinator.consultAgentsWithStagePrompts(
+        '3a',
+        formattedOutput,
+        { stage3aOutput, dataInfo: this.dataInfo, images },
+        'stage3a',
+        `${this.comparison}_stage3a`
+      );
+    }
+
+    // 5. Store result (always proceed to Stage 3b)
+    this.stageResults.stage3a = {
+      output: stage3aOutput,
+      proceed: true
+    };
+
+    console.log('');
+    console.log('✓ Stage 3a complete - Proceeding to Stage 3b (Cell Cycle Regression)');
+    return { proceed: true };
+  }
+
+  /**
+   * Stage 3b: Cell Cycle Regression (scRNA-seq only)
+   */
+  async runStage3b() {
+    console.log('');
+    console.log('='.repeat(60));
+    console.log('  STAGE 3b: Cell Cycle Regression (scRNA-seq)');
+    console.log('='.repeat(60));
+    console.log('');
+
+    const absOutputDir = path.resolve(this.outputDir);
+    const scriptPath = path.resolve(absOutputDir, `stage_3b_${this.comparison}.sh`);
+
+    // 1. Generate script (pass Stage 3a result for RDS path)
+    this.log('Generating Stage 3b script...');
+    generateStage3bScript(this.dataInfo, this.config, scriptPath, this.stageResults.stage3a?.output);
+    this.log(`Script: ${scriptPath}`);
+
+    if (this.dryRun) {
+      this.log('DRY RUN - Script generated but not executed');
+      return { proceed: true, dryRun: true };
+    }
+
+    // 2. Execute script
+    this.log('Executing Stage 3b script (cell cycle regression)...');
+    const execResult = this.executeScript(scriptPath, 'Cell Cycle Regression', 1200000); // 20 min timeout
+
+    if (!execResult.success) {
+      console.error(`Stage 3b execution failed: ${execResult.error}`);
+      return { proceed: false, error: execResult.error };
+    }
+
+    // 3. Parse output
+    this.log('Parsing Stage 3b output...');
+    const stage3bOutput = parseStage3bOutput(absOutputDir, this.comparison);
+    this.log(`Status: ${stage3bOutput.overall_status}`);
+    this.log(`Regression Status: ${stage3bOutput.regression_status}`);
+
+    // 4. Agent review (decision required)
+    let finalProceed = stage3bOutput.regression_status === 'SUCCESS';
+
+    if (!this.forceAutomation) {
+      this.log('Calling agents for Stage 3b review...');
+      const formattedOutput = formatStage3bForAgents(stage3bOutput, this.dataInfo);
+
+      // Add comparison plot as image
+      const images = stage3bOutput.comparison_plot_path ? [{ path: stage3bOutput.comparison_plot_path }] : [];
+
+      const reviewResult = await this.coordinator.consultAgentsWithStagePrompts(
+        '3b',
+        formattedOutput,
+        { stage3bOutput, dataInfo: this.dataInfo, images },
+        'stage3b',
+        `${this.comparison}_stage3b`
+      );
+
+      // Check consensus decision
+      const decision = reviewResult.consensus.decision.toUpperCase();
+      if (decision.includes('SUCCESS')) {
+        finalProceed = true;
+      } else if (decision.includes('PARTIAL')) {
+        console.log('⚠️  Regression partially successful - proceeding with caution');
+        finalProceed = true;
+      } else {
+        console.log('❌ Regression failed - aborting');
+        finalProceed = false;
+      }
+    }
+
+    // 5. Store result
+    this.stageResults.stage3b = {
+      output: stage3bOutput,
+      proceed: finalProceed
+    };
+
+    if (finalProceed) {
+      console.log('');
+      console.log('✓ Stage 3b complete - Proceeding to Stage 3c (Clustering + UMAP)');
+    }
+
+    return { proceed: finalProceed };
+  }
+
+  /**
+   * Stage 3c: Clustering + UMAP (scRNA-seq only)
+   */
+  async runStage3c() {
+    console.log('');
+    console.log('='.repeat(60));
+    console.log('  STAGE 3c: Clustering + UMAP (scRNA-seq)');
+    console.log('='.repeat(60));
+    console.log('');
+
+    const absOutputDir = path.resolve(this.outputDir);
+    const scriptPath = path.resolve(absOutputDir, `stage_3c_${this.comparison}.sh`);
+
+    // 1. Generate script (pass Stage 3b result for RDS path)
+    this.log('Generating Stage 3c script...');
+    generateStage3cScript(this.dataInfo, this.config, scriptPath, this.stageResults.stage3b?.output);
+    this.log(`Script: ${scriptPath}`);
+
+    if (this.dryRun) {
+      this.log('DRY RUN - Script generated but not executed');
+      return { proceed: true, dryRun: true };
+    }
+
+    // 2. Execute script
+    this.log('Executing Stage 3c script (clustering + UMAP)...');
+    const execResult = this.executeScript(scriptPath, 'Clustering + UMAP', 1800000); // 30 min timeout
+
+    if (!execResult.success) {
+      console.error(`Stage 3c execution failed: ${execResult.error}`);
+      return { proceed: false, error: execResult.error };
+    }
+
+    // 3. Parse output
+    this.log('Parsing Stage 3c output...');
+    const stage3cOutput = parseStage3cOutput(absOutputDir, this.comparison);
+    this.log(`Status: ${stage3cOutput.overall_status}`);
+    this.log(`Clusters found: ${stage3cOutput.n_clusters}`);
+
+    // 4. Agent review (decision required)
+    let finalProceed = stage3cOutput.overall_status === 'SUCCESS';
+
+    if (!this.forceAutomation) {
+      this.log('Calling agents for Stage 3c review...');
+      const formattedOutput = formatStage3cForAgents(stage3cOutput, this.dataInfo);
+
+      // Add both UMAP plots as images
+      const images = [];
+      if (stage3cOutput.umap_clusters_plot_path) {
+        images.push({ path: stage3cOutput.umap_clusters_plot_path });
+      }
+      if (stage3cOutput.umap_phase_plot_path) {
+        images.push({ path: stage3cOutput.umap_phase_plot_path });
+      }
+
+      const reviewResult = await this.coordinator.consultAgentsWithStagePrompts(
+        '3c',
+        formattedOutput,
+        { stage3cOutput, dataInfo: this.dataInfo, images },
+        'stage3c',
+        `${this.comparison}_stage3c`
+      );
+
+      // Check consensus decision
+      const decision = reviewResult.consensus.decision.toUpperCase();
+      if (decision.includes('APPROVE')) {
+        finalProceed = true;
+      } else if (decision.includes('ADJUST')) {
+        console.log('⚠️  Agents recommend adjusting resolution - proceeding anyway');
+        finalProceed = true;
+      } else {
+        console.log('❌ Clustering failed - aborting');
+        finalProceed = false;
+      }
+    }
+
+    // 5. Store result
+    this.stageResults.stage3c = {
+      output: stage3cOutput,
+      proceed: finalProceed
+    };
+
+    if (finalProceed) {
+      console.log('');
+      console.log('✓ Stage 3c complete - Proceeding to Stage 4 (Differential Expression)');
+    }
+
+    return { proceed: finalProceed };
+  }
+
   async run() {
     console.log('');
     console.log('#'.repeat(60));
@@ -841,6 +1119,7 @@ export class StagedExecutor {
     console.log(`Input:  ${this.inputDir}`);
     console.log(`Output: ${this.outputDir}`);
     console.log(`Organism: ${this.organism}`);
+    console.log(`Data Type: ${this.dataType.toUpperCase()}`);
     console.log(`Mode: ${this.forceAutomation ? 'AUTOMATION (no agents)' : this.singleAgent ? `SINGLE-AGENT (${this.singleAgent})` : 'MULTI-AGENT'}`);
     console.log('');
 
@@ -861,14 +1140,42 @@ export class StagedExecutor {
       return { success: false, failedAt: 2 };
     }
 
-    // Stage 3
-    const stage3Result = await this.runStage3();
-    if (!stage3Result.proceed) {
-      this.finalize(false, 'Stage 3 failed');
-      return { success: false, failedAt: 3 };
+    // Branch based on data type
+    if (this.dataType === 'scrna') {
+      // scRNA-seq pipeline: Stage 3a → 3b → 3c → 4
+      console.log('');
+      console.log('🔬 scRNA-seq Pipeline: Running cell cycle correction stages...');
+
+      // Stage 3a: Cell Cycle Scoring
+      const stage3aResult = await this.runStage3a();
+      if (!stage3aResult.proceed) {
+        this.finalize(false, 'Stage 3a failed');
+        return { success: false, failedAt: '3a' };
+      }
+
+      // Stage 3b: Cell Cycle Regression
+      const stage3bResult = await this.runStage3b();
+      if (!stage3bResult.proceed) {
+        this.finalize(false, 'Stage 3b failed');
+        return { success: false, failedAt: '3b' };
+      }
+
+      // Stage 3c: Clustering + UMAP
+      const stage3cResult = await this.runStage3c();
+      if (!stage3cResult.proceed) {
+        this.finalize(false, 'Stage 3c failed');
+        return { success: false, failedAt: '3c' };
+      }
+    } else {
+      // Bulk RNA-seq pipeline: Stage 3 → 4
+      const stage3Result = await this.runStage3();
+      if (!stage3Result.proceed) {
+        this.finalize(false, 'Stage 3 failed');
+        return { success: false, failedAt: 3 };
+      }
     }
 
-    // Stage 4
+    // Stage 4 (common for both bulk and scRNA-seq)
     const stage4Result = await this.runStage4();
     if (!stage4Result.proceed) {
       this.finalize(false, 'Stage 4 failed');
@@ -906,7 +1213,15 @@ export class StagedExecutor {
     console.log('Stage Summary:');
     console.log(`  Stage 1 (FASTQ Validation): ${this.stageResults.stage1?.proceed ? 'PASS' : 'FAIL/SKIP'}`);
     console.log(`  Stage 2 (Alignment QC):     ${this.stageResults.stage2?.proceed ? 'PASS' : 'FAIL/SKIP'}`);
-    console.log(`  Stage 3 (Quantification):   ${this.stageResults.stage3?.proceed ? 'PASS' : 'FAIL/SKIP'}`);
+
+    if (this.dataType === 'scrna') {
+      console.log(`  Stage 3a (Cell Cycle Score): ${this.stageResults.stage3a?.proceed ? 'PASS' : 'FAIL/SKIP'}`);
+      console.log(`  Stage 3b (Cell Cycle Regr):  ${this.stageResults.stage3b?.proceed ? 'PASS' : 'FAIL/SKIP'}`);
+      console.log(`  Stage 3c (Clustering/UMAP):  ${this.stageResults.stage3c?.proceed ? 'PASS' : 'FAIL/SKIP'}`);
+    } else {
+      console.log(`  Stage 3 (Quantification):   ${this.stageResults.stage3?.proceed ? 'PASS' : 'FAIL/SKIP'}`);
+    }
+
     console.log(`  Stage 4 (DE Analysis):      ${this.stageResults.stage4?.proceed ? 'PASS' : 'FAIL/SKIP'}`);
     console.log('');
 

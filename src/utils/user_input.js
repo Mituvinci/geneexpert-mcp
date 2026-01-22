@@ -538,6 +538,275 @@ export async function confirmOutlierRemoval(outlierSamples) {
   return askYesNo(question, true);  // Default: yes (recommend removal)
 }
 
+/**
+ * ============================================================================
+ * scRNA-seq SPECIFIC USER DECISION HANDLERS
+ * ============================================================================
+ */
+
+/**
+ * Handle user decision for scRNA Stage 2 (QC Thresholds)
+ * Called when agents disagree on QC filtering thresholds
+ */
+export async function handleScRNAStage2UserDecision(reviewResult, stage1Output) {
+  console.log('');
+  console.log('='.repeat(60));
+  console.log('  USER DECISION REQUIRED - QC Thresholds');
+  console.log('='.repeat(60));
+  console.log('');
+  console.log('The agents disagreed on QC filtering thresholds.');
+  console.log('');
+
+  // Extract threshold recommendations from each agent
+  const gptThresholds = extractThresholds(reviewResult.responses.gpt5_2?.content);
+  const claudeThresholds = extractThresholds(reviewResult.responses.claude?.content);
+  const geminiThresholds = extractThresholds(reviewResult.responses.gemini?.content);
+
+  console.log('--- Agent Recommendations ---');
+  console.log('');
+  console.log('GPT-5.2 (Stats Agent):');
+  console.log(`  nFeature: ${gptThresholds.nFeature_min} - ${gptThresholds.nFeature_max}`);
+  console.log(`  %MT max: ${gptThresholds.percent_mt_max}%`);
+  console.log('');
+  console.log('Claude (Pipeline Agent):');
+  console.log(`  nFeature: ${claudeThresholds.nFeature_min} - ${claudeThresholds.nFeature_max}`);
+  console.log(`  %MT max: ${claudeThresholds.percent_mt_max}%`);
+  console.log('');
+  console.log('Gemini (Biology Agent):');
+  console.log(`  nFeature: ${geminiThresholds.nFeature_min} - ${geminiThresholds.nFeature_max}`);
+  console.log(`  %MT max: ${geminiThresholds.percent_mt_max}%`);
+  console.log('');
+
+  console.log('--- Dataset Summary ---');
+  console.log(`Cells: ${stage1Output.n_cells || 'unknown'}`);
+  console.log(`Median nFeature: ${stage1Output.median_nFeature || 'unknown'}`);
+  console.log(`Median %MT: ${stage1Output.median_percent_mt || 'unknown'}%`);
+  console.log('');
+
+  const options = [
+    'Use GPT-5.2 thresholds (Statistics-focused)',
+    'Use Claude thresholds (Pipeline-focused)',
+    'Use Gemini thresholds (Biology-focused)',
+    'Use default conservative thresholds (200-6000, <10% MT)',
+    'ABORT - Review data manually'
+  ];
+
+  const choice = await askChoice('Which thresholds would you like to use?', options, 0);
+
+  if (choice.index === 4) {
+    return { proceed: false, reason: 'User aborted to review data manually' };
+  }
+
+  let selectedThresholds;
+  if (choice.index === 0) selectedThresholds = gptThresholds;
+  else if (choice.index === 1) selectedThresholds = claudeThresholds;
+  else if (choice.index === 2) selectedThresholds = geminiThresholds;
+  else selectedThresholds = { nFeature_min: 200, nFeature_max: 6000, percent_mt_max: 10 };
+
+  return {
+    proceed: true,
+    thresholds: selectedThresholds,
+    reason: `User selected: ${choice.value}`
+  };
+}
+
+/**
+ * Handle user decision for scRNA Stage 4 (PC Selection)
+ * Called when agents disagree on PC range
+ */
+export async function handleScRNAStage4UserDecision(reviewResult, stage4Output) {
+  console.log('');
+  console.log('='.repeat(60));
+  console.log('  USER DECISION REQUIRED - PC Range Selection');
+  console.log('='.repeat(60));
+  console.log('');
+  console.log('The agents disagreed on the optimal PC range for clustering.');
+  console.log('');
+
+  // Extract PC recommendations
+  const gptPC = extractPCRange(reviewResult.responses.gpt5_2?.content);
+  const claudePC = extractPCRange(reviewResult.responses.claude?.content);
+  const geminiPC = extractPCRange(reviewResult.responses.gemini?.content);
+
+  console.log('--- Agent Recommendations ---');
+  console.log('');
+  console.log(`GPT-5.2 (Stats): PCs 1-${gptPC.max_pc} (${gptPC.reasoning || 'no reasoning'})`);
+  console.log(`Claude (Pipeline): PCs 1-${claudePC.max_pc} (${claudePC.reasoning || 'no reasoning'})`);
+  console.log(`Gemini (Biology): PCs 1-${geminiPC.max_pc} (${geminiPC.reasoning || 'no reasoning'})`);
+  console.log('');
+
+  console.log('--- PCA Summary ---');
+  console.log(`PC1 variance: ${stage4Output.pc1_variance || 'unknown'}%`);
+  console.log(`Cumulative variance (PC20): ${stage4Output.cumulative_variance_pc20 || 'unknown'}%`);
+  console.log('');
+
+  const options = [
+    `Use GPT-5.2 recommendation (PCs 1-${gptPC.max_pc})`,
+    `Use Claude recommendation (PCs 1-${claudePC.max_pc})`,
+    `Use Gemini recommendation (PCs 1-${geminiPC.max_pc})`,
+    'Use default (PCs 1-20)',
+    'Enter custom PC range'
+  ];
+
+  const choice = await askChoice('Which PC range would you like to use?', options, 0);
+
+  let selectedPC;
+  if (choice.index === 0) selectedPC = gptPC;
+  else if (choice.index === 1) selectedPC = claudePC;
+  else if (choice.index === 2) selectedPC = geminiPC;
+  else if (choice.index === 3) selectedPC = { min_pc: 1, max_pc: 20 };
+  else {
+    // Custom range
+    const maxPC = await askText('Enter maximum PC (min will be 1):', '20');
+    selectedPC = { min_pc: 1, max_pc: parseInt(maxPC) };
+  }
+
+  return {
+    proceed: true,
+    pcSelection: selectedPC,
+    reason: `User selected: ${choice.value}`
+  };
+}
+
+/**
+ * Handle user decision for scRNA Stage 5 (Clustering)
+ * Called when agents flag suspicious clustering or disagree
+ */
+export async function handleScRNAStage5UserDecision(reviewResult, stage5Output) {
+  console.log('');
+  console.log('='.repeat(60));
+  console.log('  USER DECISION REQUIRED - Clustering Validation');
+  console.log('='.repeat(60));
+  console.log('');
+  console.log('Agents flagged concerns with the clustering results.');
+  console.log('');
+
+  // Show agent summaries
+  console.log('--- Agent Assessments ---');
+  console.log('');
+  if (reviewResult.responses.gpt5_2?.success) {
+    console.log('GPT-5.2 (Stats):');
+    console.log(`  ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
+    console.log('');
+  }
+  if (reviewResult.responses.claude?.success) {
+    console.log('Claude (Pipeline):');
+    console.log(`  ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
+    console.log('');
+  }
+  if (reviewResult.responses.gemini?.success) {
+    console.log('Gemini (Biology):');
+    console.log(`  ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
+    console.log('');
+  }
+
+  console.log('--- Clustering Summary ---');
+  console.log(`Number of clusters: ${stage5Output.n_clusters || 'unknown'}`);
+  console.log(`Cells clustered: ${stage5Output.n_cells || 'unknown'}`);
+  console.log(`Resolution: ${stage5Output.resolution || 'unknown'}`);
+  console.log('');
+
+  // Check if cell cycle is the issue
+  const cellCycleConcern = checkCellCycleConcern(reviewResult);
+
+  const options = cellCycleConcern
+    ? [
+        'PROCEED - Accept current clustering (cell cycle may be biologically relevant)',
+        'RE-CLUSTER - Run cell cycle correction and re-cluster (recommended)',
+        'VIEW DETAILS - Show full agent responses',
+        'ABORT - Stop and review manually'
+      ]
+    : [
+        'PROCEED - Accept current clustering',
+        'ADJUST RESOLUTION - Try different resolution parameter',
+        'VIEW DETAILS - Show full agent responses',
+        'ABORT - Stop and review manually'
+      ];
+
+  const choice = await askChoice('What would you like to do?', options, cellCycleConcern ? 1 : 0);
+
+  if (choice.index === 2) {
+    // Show full responses
+    console.log('');
+    console.log('=== Full Agent Responses ===');
+    console.log('');
+    console.log('--- GPT-5.2 ---');
+    console.log(reviewResult.responses.gpt5_2?.content || 'No response');
+    console.log('');
+    console.log('--- Claude ---');
+    console.log(reviewResult.responses.claude?.content || 'No response');
+    console.log('');
+    console.log('--- Gemini ---');
+    console.log(reviewResult.responses.gemini?.content || 'No response');
+    console.log('');
+
+    const finalChoice = await askChoice('After reviewing, what would you like to do?', options.slice(0, 2), 0);
+    return {
+      proceed: finalChoice.index === 0,
+      action: finalChoice.index === 0 ? 'accept' : (cellCycleConcern ? 'cell_cycle_correction' : 'adjust_resolution'),
+      reason: `User decision after viewing details: ${finalChoice.value}`
+    };
+  }
+
+  if (choice.index === 3 || (choice.index === 1 && !cellCycleConcern)) {
+    return { proceed: false, reason: 'User aborted to review manually' };
+  }
+
+  return {
+    proceed: choice.index === 0,
+    action: choice.index === 0 ? 'accept' : (cellCycleConcern ? 'cell_cycle_correction' : 'adjust_resolution'),
+    reason: `User decision: ${choice.value}`
+  };
+}
+
+/**
+ * Helper: Extract QC thresholds from agent response text
+ */
+function extractThresholds(responseText) {
+  if (!responseText) return { nFeature_min: 200, nFeature_max: 6000, percent_mt_max: 10 };
+
+  const minMatch = responseText.match(/nFeature[_\s]*min[:\s]*(\d+)/i);
+  const maxMatch = responseText.match(/nFeature[_\s]*max[:\s]*(\d+)/i);
+  const mtMatch = responseText.match(/percent[_\s]*mt[_\s]*max[:\s]*(\d+)/i);
+
+  return {
+    nFeature_min: minMatch ? parseInt(minMatch[1]) : 200,
+    nFeature_max: maxMatch ? parseInt(maxMatch[1]) : 6000,
+    percent_mt_max: mtMatch ? parseInt(mtMatch[1]) : 10
+  };
+}
+
+/**
+ * Helper: Extract PC range from agent response text
+ */
+function extractPCRange(responseText) {
+  if (!responseText) return { min_pc: 1, max_pc: 20, reasoning: 'default' };
+
+  const maxMatch = responseText.match(/max[_\s]*pc[:\s]*(\d+)/i);
+  const reasoningMatch = responseText.match(/Reasoning[:\s]*([^\n]{50,200})/i);
+
+  return {
+    min_pc: 1,
+    max_pc: maxMatch ? parseInt(maxMatch[1]) : 20,
+    reasoning: reasoningMatch ? reasoningMatch[1].trim() : 'See full response'
+  };
+}
+
+/**
+ * Helper: Check if agents flagged cell cycle concerns
+ */
+function checkCellCycleConcern(reviewResult) {
+  const allResponses = [
+    reviewResult.responses.gpt5_2?.content || '',
+    reviewResult.responses.claude?.content || '',
+    reviewResult.responses.gemini?.content || ''
+  ].join(' ').toLowerCase();
+
+  return allResponses.includes('cell cycle') ||
+         allResponses.includes('hist1') ||
+         allResponses.includes('proliferat');
+}
+
 export default {
   askYesNo,
   askChoice,
@@ -546,5 +815,8 @@ export default {
   handleStage1UserDecision,
   handleStage2UserDecision,
   handleStage3UserDecision,
-  confirmOutlierRemoval
+  confirmOutlierRemoval,
+  handleScRNAStage2UserDecision,
+  handleScRNAStage4UserDecision,
+  handleScRNAStage5UserDecision
 };

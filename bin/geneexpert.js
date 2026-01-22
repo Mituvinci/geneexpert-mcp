@@ -61,6 +61,7 @@ EXAMPLES:
   .option('--aligner <tool>', 'Alignment tool (subread only)', 'subread')
   .option('--de-tool <tool>', 'DE analysis tool: edger or deseq2', 'edger')
   .option('--threads <n>', 'Number of threads', '4')
+  .option('--data-type <type>', 'Data type: bulk (default) or scrna (single-cell)', 'bulk')
   .option('--staged', 'Use staged architecture (4-stage pipeline with agent checkpoints) - REQUIRED for ICML experiments')
   .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (ICML baseline #2-3)')
   .option('--force-automation', 'Skip all agents, use template-based decisions only (ICML baseline #1)')
@@ -115,6 +116,7 @@ EXAMPLES:
       aligner: options.aligner,
       deTool: options.deTool,
       threads: parseInt(options.threads),
+      dataType: options.dataType, // NEW: bulk or scrna
       singleAgent: options.singleAgent, // For experimental comparisons
       forceAutomation: options.forceAutomation, // Skip agents, use template only
       sequentialChain: options.sequentialChain, // NEW: Sequential chain mode
@@ -175,6 +177,7 @@ EXAMPLES:
     console.log(`   Input:      ${config.input}`);
     console.log(`   Output:     ${config.output}`);
     console.log(`   Organism:   ${config.organism}`);
+    console.log(`   Data Type:  ${config.dataType.toUpperCase()} ${config.dataType === 'scrna' ? '(single-cell)' : '(bulk)'}`);
     console.log(`   Comparison: ${config.comparison}`);
     if (config.controlKeyword) {
       console.log(`   Control:    ${config.controlKeyword}`);
@@ -200,6 +203,7 @@ EXAMPLES:
           comparison: config.comparison,
           controlKeyword: config.controlKeyword,
           treatmentKeyword: config.treatmentKeyword,
+          dataType: config.dataType,  // NEW: Pass data type (bulk or scrna)
           verbose: config.verbose,
           singleAgent: config.singleAgent,
           forceAutomation: config.forceAutomation,
