@@ -129,6 +129,7 @@ export class StagedExecutor {
 
     // FIRST: Check if we're using preprocessed BAM files (metadata might exist)
     let pairedEndFromMetadata = null;
+    let experimentalDesignFromMetadata = null;
     if (this.useExistingBam) {
       // Metadata is in: preprocessing_dir/dataset_metadata.json
       // BAM dir is:     preprocessing_dir/stage2_alignment/bam_files/
@@ -137,7 +138,11 @@ export class StagedExecutor {
         try {
           const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
           pairedEndFromMetadata = metadata.paired_end || metadata.pairedEnd;
+          experimentalDesignFromMetadata = metadata.experimental_design || null;
           this.log(`✓ Loaded metadata from preprocessing: ${metadata.sequencing_type || (pairedEndFromMetadata ? 'paired-end' : 'single-end')}`);
+          if (experimentalDesignFromMetadata && experimentalDesignFromMetadata.design) {
+            this.log(`✓ Experimental design: ${experimentalDesignFromMetadata.design}`);
+          }
         } catch (error) {
           this.log(`Warning: Could not read metadata file: ${error.message}`);
         }
@@ -194,7 +199,8 @@ export class StagedExecutor {
       pairedEnd,
       groups,
       organism: this.organism,
-      comparison: this.comparison
+      comparison: this.comparison,
+      experimental_design: experimentalDesignFromMetadata  // NEW: Store experimental design from metadata
     };
 
     const seqTypeSource = pairedEndFromMetadata !== null ? ' (from metadata)' : ' (from FASTQ detection)';
@@ -560,12 +566,25 @@ export class StagedExecutor {
       const proceed = stage3Output.overall_status !== 'ERROR';
       // Use defaults: simpleEdger if no batch effects, keep all samples
       const deMethod = stage3Output.batch_effect_detected ? 'batch_effect_edger' : 'simpleEdger';
+
+      // FIX: Automatically determine batch specification from metadata
+      let batchSpecification = 'auto';
+      if (deMethod === 'batch_effect_edger' && this.dataInfo.experimental_design) {
+        const design = this.dataInfo.experimental_design.design;
+        if (design === 'paired_subjects') {
+          batchSpecification = 'paired';
+          this.log(`✓ Auto-detected batch specification: paired (from experimental_design.design="${design}")`);
+        } else {
+          this.log(`⚠️ Unknown experimental design: ${design}, using auto batch detection`);
+        }
+      }
+
       this.stageResults.stage3 = {
         output: stage3Output,
         proceed,
         automated: true,
         deMethod,
-        batchSpecification: 'auto',
+        batchSpecification,
         outlierAction: 'KEEP_ALL',
         outliersToRemove: []
       };
@@ -592,6 +611,23 @@ export class StagedExecutor {
       finalOutlierAction = userDecision.outlierAction || finalOutlierAction;
       finalOutliersToRemove = userDecision.outliersToRemove || [];
       this.log(`User decided: ${finalProceed ? 'PROCEED' : 'ABORT'}`);
+    }
+
+    // FIX: Auto-detect batch specification from metadata if agents chose batch_effect_edger
+    if (finalDeMethod === 'batch_effect_edger' && (!finalBatchSpecification || finalBatchSpecification === 'auto')) {
+      if (this.dataInfo.experimental_design && this.dataInfo.experimental_design.design) {
+        const design = this.dataInfo.experimental_design.design;
+        if (design === 'paired_subjects') {
+          finalBatchSpecification = 'paired';
+          this.log(`✓ Auto-detected batch specification: paired (from experimental_design.design="${design}")`);
+        } else {
+          this.log(`⚠️ Unknown experimental design: ${design}, batch_effect_edgeR will use 'auto' (may fail)`);
+          finalBatchSpecification = 'auto';
+        }
+      } else {
+        this.log(`⚠️ No experimental design in metadata, batch_effect_edgeR will use 'auto' (may fail)`);
+        finalBatchSpecification = 'auto';
+      }
     }
 
     // 6b. Check if agents recommended removing outliers and ask user for confirmation

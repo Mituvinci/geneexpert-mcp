@@ -558,9 +558,9 @@ export async function handleScRNAStage2UserDecision(reviewResult, stage1Output) 
   console.log('');
 
   // Extract threshold recommendations from each agent
-  const gptThresholds = extractThresholds(reviewResult.responses.gpt5_2?.content);
-  const claudeThresholds = extractThresholds(reviewResult.responses.claude?.content);
-  const geminiThresholds = extractThresholds(reviewResult.responses.gemini?.content);
+  const gptThresholds = extractThresholds(reviewResult.agentResponses?.gpt5_2?.content);
+  const claudeThresholds = extractThresholds(reviewResult.agentResponses?.claude?.content);
+  const geminiThresholds = extractThresholds(reviewResult.agentResponses?.gemini?.content);
 
   console.log('--- Agent Recommendations ---');
   console.log('');
@@ -624,9 +624,9 @@ export async function handleScRNAStage4UserDecision(reviewResult, stage4Output) 
   console.log('');
 
   // Extract PC recommendations
-  const gptPC = extractPCRange(reviewResult.responses.gpt5_2?.content);
-  const claudePC = extractPCRange(reviewResult.responses.claude?.content);
-  const geminiPC = extractPCRange(reviewResult.responses.gemini?.content);
+  const gptPC = extractPCRange(reviewResult.agentResponses?.gpt5_2?.content);
+  const claudePC = extractPCRange(reviewResult.agentResponses?.claude?.content);
+  const geminiPC = extractPCRange(reviewResult.agentResponses?.gemini?.content);
 
   console.log('--- Agent Recommendations ---');
   console.log('');
@@ -684,19 +684,19 @@ export async function handleScRNAStage5UserDecision(reviewResult, stage5Output) 
   // Show agent summaries
   console.log('--- Agent Assessments ---');
   console.log('');
-  if (reviewResult.responses.gpt5_2?.success) {
+  if (reviewResult.agentResponses?.gpt5_2?.success) {
     console.log('GPT-5.2 (Stats):');
-    console.log(`  ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
+    console.log(`  ${extractDecisionSummary(reviewResult.agentResponses.gpt5_2.content)}`);
     console.log('');
   }
-  if (reviewResult.responses.claude?.success) {
+  if (reviewResult.agentResponses?.claude?.success) {
     console.log('Claude (Pipeline):');
-    console.log(`  ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
+    console.log(`  ${extractDecisionSummary(reviewResult.agentResponses.claude.content)}`);
     console.log('');
   }
-  if (reviewResult.responses.gemini?.success) {
+  if (reviewResult.agentResponses?.gemini?.success) {
     console.log('Gemini (Biology):');
-    console.log(`  ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
+    console.log(`  ${extractDecisionSummary(reviewResult.agentResponses.gemini.content)}`);
     console.log('');
   }
 
@@ -731,13 +731,13 @@ export async function handleScRNAStage5UserDecision(reviewResult, stage5Output) 
     console.log('=== Full Agent Responses ===');
     console.log('');
     console.log('--- GPT-5.2 ---');
-    console.log(reviewResult.responses.gpt5_2?.content || 'No response');
+    console.log(reviewResult.agentResponses?.gpt5_2?.content || 'No response');
     console.log('');
     console.log('--- Claude ---');
-    console.log(reviewResult.responses.claude?.content || 'No response');
+    console.log(reviewResult.agentResponses?.claude?.content || 'No response');
     console.log('');
     console.log('--- Gemini ---');
-    console.log(reviewResult.responses.gemini?.content || 'No response');
+    console.log(reviewResult.agentResponses?.gemini?.content || 'No response');
     console.log('');
 
     const finalChoice = await askChoice('After reviewing, what would you like to do?', options.slice(0, 2), 0);
@@ -797,9 +797,9 @@ function extractPCRange(responseText) {
  */
 function checkCellCycleConcern(reviewResult) {
   const allResponses = [
-    reviewResult.responses.gpt5_2?.content || '',
-    reviewResult.responses.claude?.content || '',
-    reviewResult.responses.gemini?.content || ''
+    reviewResult.agentResponses?.gpt5_2?.content || '',
+    reviewResult.agentResponses?.claude?.content || '',
+    reviewResult.agentResponses?.gemini?.content || ''
   ].join(' ').toLowerCase();
 
   return allResponses.includes('cell cycle') ||
