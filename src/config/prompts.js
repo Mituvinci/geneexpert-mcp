@@ -7,11 +7,11 @@
  */
 
 // ============================================
-// MULTI-AGENT MODE: Domain-Separated Prompts
+// ROLE-BASED PROMPTS (for role swapping)
 // ============================================
 
-export const MULTI_AGENT_PROMPTS = {
-  gpt5_2: `You are a statistical expert for genomics.
+export const ROLE_PROMPTS = {
+  stats: `You are a statistical expert for genomics.
 Your role is limited to statistical validity, uncertainty, and evaluation metrics.
 
 Rules:
@@ -24,7 +24,7 @@ Output:
 - A confidence level (HIGH / MEDIUM / LOW)
 - A brief statistical justification`,
 
-  claude: `You are a bioinformatics pipeline expert.
+  pipeline: `You are a bioinformatics pipeline expert.
 Your role is to assess technical feasibility, QC risks, and execution reliability.
 
 Rules:
@@ -37,7 +37,7 @@ Output:
 - Key technical risk factors
 - Confidence level`,
 
-  gemini: `You are a molecular biology expert.
+  biology: `You are a molecular biology expert.
 Your role is biological interpretation and experimental plausibility.
 
 Rules:
@@ -49,6 +49,16 @@ Output:
 - Biological assessment
 - Plausibility check
 - Confidence level`
+};
+
+// ============================================
+// MULTI-AGENT MODE: Default Agent-to-Role Mapping (backward compatibility)
+// ============================================
+
+export const MULTI_AGENT_PROMPTS = {
+  gpt5_2: ROLE_PROMPTS.stats,      // Default: GPT-5.2 = stats
+  claude: ROLE_PROMPTS.pipeline,    // Default: Claude = pipeline
+  gemini: ROLE_PROMPTS.biology      // Default: Gemini = biology
 };
 
 // ============================================
@@ -249,9 +259,10 @@ OUTPUT FORMAT (required)
  *
  * @param {string} agent - Agent name: 'gpt5.2', 'claude', 'gemini'
  * @param {boolean} isSingleAgent - True if in single-agent mode
+ * @param {string} role - Role assignment for multi-agent mode: 'stats', 'pipeline', 'biology'
  * @returns {string} - System prompt
  */
-export function getSystemPrompt(agent, isSingleAgent = false) {
+export function getSystemPrompt(agent, isSingleAgent = false, role = null) {
   if (isSingleAgent) {
     // Single-agent mode: Use combined prompt
     switch (agent) {
@@ -266,28 +277,64 @@ export function getSystemPrompt(agent, isSingleAgent = false) {
         throw new Error(`Unknown agent: ${agent}`);
     }
   } else {
-    // Multi-agent mode: Use domain-separated prompt
-    switch (agent) {
-      case 'gpt5.2':
-      case 'gpt4':
-        return MULTI_AGENT_PROMPTS.gpt5_2;
-      case 'claude':
-        return MULTI_AGENT_PROMPTS.claude;
-      case 'gemini':
-        return MULTI_AGENT_PROMPTS.gemini;
-      default:
-        throw new Error(`Unknown agent: ${agent}`);
+    // Multi-agent mode: Use role-based prompt if role provided, otherwise default mapping
+    if (role) {
+      if (!ROLE_PROMPTS[role]) {
+        throw new Error(`Unknown role: ${role}. Must be one of: stats, pipeline, biology`);
+      }
+      return ROLE_PROMPTS[role];
+    } else {
+      // Default backward-compatible behavior
+      switch (agent) {
+        case 'gpt5.2':
+        case 'gpt4':
+          return MULTI_AGENT_PROMPTS.gpt5_2;
+        case 'claude':
+          return MULTI_AGENT_PROMPTS.claude;
+        case 'gemini':
+          return MULTI_AGENT_PROMPTS.gemini;
+        default:
+          throw new Error(`Unknown agent: ${agent}`);
+      }
     }
   }
 }
 
 /**
  * Get all system prompts for multi-agent mode
+ * @param {Object} roleAssignments - Custom role assignments (optional)
+ * @param {string} roleAssignments.gptRole - Role for GPT-5.2: 'stats', 'pipeline', or 'biology'
+ * @param {string} roleAssignments.claudeRole - Role for Claude: 'stats', 'pipeline', or 'biology'
+ * @param {string} roleAssignments.geminiRole - Role for Gemini: 'stats', 'pipeline', or 'biology'
+ * @returns {Object} - System prompts for each agent
  */
-export function getMultiAgentPrompts() {
+export function getMultiAgentPrompts(roleAssignments = {}) {
+  // Default role assignments (backward compatible)
+  const gptRole = roleAssignments.gptRole || 'stats';
+  const claudeRole = roleAssignments.claudeRole || 'pipeline';
+  const geminiRole = roleAssignments.geminiRole || 'biology';
+
+  // Validate roles
+  const validRoles = ['stats', 'pipeline', 'biology'];
+  if (!validRoles.includes(gptRole)) {
+    throw new Error(`Invalid GPT role: ${gptRole}. Must be one of: ${validRoles.join(', ')}`);
+  }
+  if (!validRoles.includes(claudeRole)) {
+    throw new Error(`Invalid Claude role: ${claudeRole}. Must be one of: ${validRoles.join(', ')}`);
+  }
+  if (!validRoles.includes(geminiRole)) {
+    throw new Error(`Invalid Gemini role: ${geminiRole}. Must be one of: ${validRoles.join(', ')}`);
+  }
+
   return {
-    gpt5_2_SystemPrompt: MULTI_AGENT_PROMPTS.gpt5_2,
-    claudeSystemPrompt: MULTI_AGENT_PROMPTS.claude,
-    geminiSystemPrompt: MULTI_AGENT_PROMPTS.gemini
+    gpt5_2_SystemPrompt: ROLE_PROMPTS[gptRole],
+    claudeSystemPrompt: ROLE_PROMPTS[claudeRole],
+    geminiSystemPrompt: ROLE_PROMPTS[geminiRole],
+    // Also return role metadata for logging
+    roleAssignments: {
+      gpt5_2: gptRole,
+      claude: claudeRole,
+      gemini: geminiRole
+    }
   };
 }

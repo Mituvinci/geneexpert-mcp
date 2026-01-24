@@ -67,6 +67,11 @@ export class ScRNAExecutor {
     this.singleAgent = options.singleAgent || null;
     this.forceAutomation = options.forceAutomation || false;
     this.sequentialChain = options.sequentialChain || false;
+    this.roleAssignments = options.roleAssignments || {  // NEW: Role assignments for ablation study
+      gptRole: 'stats',
+      claudeRole: 'pipeline',
+      geminiRole: 'biology'
+    };
 
     // Stage results tracking
     this.stageResults = {
@@ -84,7 +89,8 @@ export class ScRNAExecutor {
     this.coordinator = new Coordinator({
       verbose: this.verbose,
       singleAgent: this.singleAgent,
-      sequentialChain: this.sequentialChain
+      sequentialChain: this.sequentialChain,
+      roleAssignments: this.roleAssignments  // NEW: Pass role assignments for ablation study
     });
 
     this.logger = null;
@@ -569,11 +575,16 @@ export class ScRNAExecutor {
     let userDecision = null;
     let finalProceed = reviewResult.decision === 'ACCEPT_CLUSTERING';
 
-    const needsUserInput = reviewResult.consensus.confidence < 0.7 ||
+    // FIX: Don't escalate if all 3 agents unanimously agreed to accept
+    const unanimousAccept = reviewResult.consensus.votes.approve === 3;
+
+    const needsUserInput = !unanimousAccept && (
+                           reviewResult.consensus.confidence < 0.7 ||
                            reviewResult.consensus.decision.toLowerCase().includes('user_decision') ||
                            reviewResult.decision === 'FLAG_SUSPICIOUS' ||
                            reviewResult.decision === 'ADJUST_RESOLUTION' ||
-                           reviewResult.consensus.votes.reject >= 2;
+                           reviewResult.consensus.votes.reject >= 2
+                           );
 
     if (needsUserInput) {
       this.log('Clustering concerns detected - escalating to user...');

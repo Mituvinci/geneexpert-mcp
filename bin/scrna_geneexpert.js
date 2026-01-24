@@ -59,6 +59,9 @@ EXAMPLES:
   .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (ICML baseline #2-3)')
   .option('--force-automation', 'Skip all agents, use template-based decisions only (ICML baseline #1)')
   .option('--sequential-chain', 'Use sequential chain mode: GPT-5.2 → Gemini → Claude (ICML experiment #5)')
+  .option('--gpt-role <role>', 'Role for GPT-5.2: stats, pipeline, biology (default: stats)', 'stats')
+  .option('--claude-role <role>', 'Role for Claude: stats, pipeline, biology (default: pipeline)', 'pipeline')
+  .option('--gemini-role <role>', 'Role for Gemini: stats, pipeline, biology (default: biology)', 'biology')
   .option('--verbose', 'Verbose output', false)
   .action(async (input, options) => {
     console.log('🧬 scRNA-seq GeneExpert Multi-Agent Analysis');
@@ -92,6 +95,24 @@ EXAMPLES:
       process.exit(1);
     }
 
+    // Validate role assignments
+    const validRoles = ['stats', 'pipeline', 'biology'];
+    if (!validRoles.includes(options.gptRole)) {
+      console.error(`❌ Error: Invalid --gpt-role: ${options.gptRole}`);
+      console.error(`   Valid options: ${validRoles.join(', ')}`);
+      process.exit(1);
+    }
+    if (!validRoles.includes(options.claudeRole)) {
+      console.error(`❌ Error: Invalid --claude-role: ${options.claudeRole}`);
+      console.error(`   Valid options: ${validRoles.join(', ')}`);
+      process.exit(1);
+    }
+    if (!validRoles.includes(options.geminiRole)) {
+      console.error(`❌ Error: Invalid --gemini-role: ${options.geminiRole}`);
+      console.error(`   Valid options: ${validRoles.join(', ')}`);
+      process.exit(1);
+    }
+
     // Create output directory
     const outputDir = path.resolve(options.output);
     if (!fs.existsSync(outputDir)) {
@@ -108,6 +129,11 @@ EXAMPLES:
       singleAgent: options.singleAgent,
       forceAutomation: options.forceAutomation,
       sequentialChain: options.sequentialChain,
+      roleAssignments: {  // NEW: Role swapping for ablation study
+        gptRole: options.gptRole,
+        claudeRole: options.claudeRole,
+        geminiRole: options.geminiRole
+      },
       verbose: options.verbose
     };
 
@@ -149,6 +175,21 @@ EXAMPLES:
     console.log(`   Data Type:  scRNA-seq (10x Genomics)`);
     console.log('');
     console.log(`🔬 ICML Experiment Mode #${modeNumber}: ${experimentalMode}`);
+
+    // Display role assignments if in multi-agent mode
+    if (!options.forceAutomation && !options.singleAgent) {
+      const isDefaultRoles = options.gptRole === 'stats' &&
+                              options.claudeRole === 'pipeline' &&
+                              options.geminiRole === 'biology';
+      if (isDefaultRoles) {
+        console.log('   Agent Roles: Default (GPT=stats, Claude=pipeline, Gemini=biology)');
+      } else {
+        console.log('   Agent Roles: Custom Configuration');
+        console.log(`   - GPT-5.2:  ${options.gptRole.toUpperCase()} agent`);
+        console.log(`   - Claude:   ${options.claudeRole.toUpperCase()} agent`);
+        console.log(`   - Gemini:   ${options.geminiRole.toUpperCase()} agent`);
+      }
+    }
     console.log('');
 
     try {

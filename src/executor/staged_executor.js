@@ -84,6 +84,11 @@ export class StagedExecutor {
     this.singleAgent = options.singleAgent || null;
     this.forceAutomation = options.forceAutomation || false;
     this.sequentialChain = options.sequentialChain || false;  // NEW: Sequential chain mode
+    this.roleAssignments = options.roleAssignments || {  // NEW: Role assignments for ablation study
+      gptRole: 'stats',
+      claudeRole: 'pipeline',
+      geminiRole: 'biology'
+    };
     this.useExistingFastqc = options.useExistingFastqc || null;  // FIX: Use preprocessed FastQC
     this.useExistingBam = options.useExistingBam || null;  // FIX: Use preprocessed BAM
     this.dataType = options.dataType || 'bulk';  // NEW: 'bulk' or 'scrna'
@@ -105,7 +110,8 @@ export class StagedExecutor {
     this.coordinator = new Coordinator({
       verbose: this.verbose,
       singleAgent: this.singleAgent,
-      sequentialChain: this.sequentialChain  // NEW: Pass sequential chain flag
+      sequentialChain: this.sequentialChain,  // NEW: Pass sequential chain flag
+      roleAssignments: this.roleAssignments  // NEW: Pass role assignments for ablation study
     });
 
     // Logger will be initialized when we have output dir

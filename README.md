@@ -2,7 +2,7 @@
 
 **Staged Multi-Agent Pipeline** where GPT-5.2, Claude Sonnet 4.5, and Gemini Pro collaborate at decision checkpoints throughout RNA-seq analysis.
 
-**Key Innovation:** 4-stage architecture with agent review checkpoints - agents validate each stage, detect issues early, and decide whether to proceed or adjust the approach.
+**Key Innovation:** Dual-pipeline architecture (bulk RNA-seq 4-stage, scRNA-seq 5-stage) with agent review checkpoints - agents validate each stage, detect issues early, and decide whether to proceed or adjust the approach.
 
 **Research Goal:** Multi-agent collaboration with user-in-loop tracking reduces errors 40%+ through staged validation and consensus-based decision making.
 
@@ -29,6 +29,7 @@ R: R version 4.3.3 (2024-02-29)
 Subread-align: v2.1.1
 FastQC: v0.12.1
 SAMtools: samtools 1.22.1
+Seurat: v5.0.0 (for scRNA-seq analysis)
 ```
 
 ### 2. Configure API Keys
@@ -40,6 +41,7 @@ nano .env  # Add your OpenAI, Anthropic, Google API keys
 
 ### 3. Run Analysis (Staged Architecture)
 
+**Bulk RNA-seq Analysis:**
 ```bash
 node bin/geneexpert.js analyze data/your_input_folder \
   --staged \
@@ -50,12 +52,27 @@ node bin/geneexpert.js analyze data/your_input_folder \
   --output results/your_output_folder
 ```
 
-**What happens:**
+**What happens (Bulk RNA-seq):**
 1. Stage 1: FASTQ Validation - Agents review file integrity and quality
 2. Stage 2: Alignment + QC - Agents review mapping rates, detect contamination
 3. Stage 3: Quantification + PCA QC - Agents review outliers, batch effects, choose DE method
 4. Stage 4: DE Analysis - Agents review differential expression results
 5. User input tracked when agents can't reach consensus (critical for research evaluation)
+
+**Single-cell RNA-seq Analysis:**
+```bash
+node bin/scrna_geneexpert.js analyze data/scRNA_data/pbmc_healthy_human \
+  --output results/scRNA_pbmc \
+  --organism human \
+  --verbose
+```
+
+**What happens (scRNA-seq):**
+1. Stage 1: Load + QC Metrics - Load 10x data, compute QC metrics (auto-proceed, no agents)
+2. Stage 2: QC Filtering - Agents review QC thresholds, recommend filtering parameters
+3. Stage 3: Normalize + HVG + **CELL CYCLE ANALYSIS** - SCTransform normalization, HVG selection, **cell cycle phase detection, plot saving, cell cycle effect removal, scaling, re-plotting** (auto-proceed, no agents - CRUCIAL for downstream analysis)
+4. Stage 4: PCA - Agents review PCA results, select number of PCs
+5. Stage 5: Clustering + Markers - Agents review clustering quality, marker identification
 
 ### Two Multi-Agent Modes
 
@@ -210,6 +227,100 @@ Agent Decision:
 Outputs: stage4_de_analysis/ with DE results CSV, final Excel file
 ```
 
+---
+
+### 5-Stage Single-Cell RNA-seq Pipeline
+
+**Stage 1: Load + QC Metrics**
+```
+Script Steps:
+  1. Load 10x Genomics data (H5, directory, or CSV format)
+  2. Create Seurat object
+  3. Compute QC metrics (nFeature_RNA, nCount_RNA, percent.mt)
+
+Agent Decision: NONE (auto-proceed)
+
+Outputs: seurat_stage1_raw.rds, qc_metrics_stage1.csv
+```
+
+**Stage 2: QC Filtering**
+```
+Script Steps:
+  1. Generate QC distribution plots (violin plots for nFeature, nCount, percent.mt)
+  2. Present QC summary to agents
+
+Agent Decision:
+  - SET_THRESHOLDS: Recommend nFeature_min, nFeature_max, percent_mt_max
+  - USE_DEFAULT_THRESHOLDS: Apply standard thresholds
+  - INSUFFICIENT_DATA: Cannot determine proper thresholds
+
+Agent Logic:
+  - Large dataset (>5000 cells): Aggressive filtering
+  - Small dataset (<1000 cells): Conservative filtering
+  - Organism-specific: Brain tissue tolerates higher MT% (>30%), blood needs stricter (<15%)
+
+Outputs: seurat_stage2_filtered.rds, qc_summary_stage2.json
+```
+
+**Stage 3: Normalize + HVG + CELL CYCLE ANALYSIS**
+```
+Script Steps:
+  1. SCTransform normalization
+  2. Highly Variable Gene (HVG) selection
+  3. **CELL CYCLE PHASE DETECTION** (S phase, G2M phase markers)
+  4. **SAVE CELL CYCLE PLOTS** (before removal)
+  5. **REMOVE CELL CYCLE EFFECTS** (regress out S.Score, G2M.Score)
+  6. **SCALING DATA** (scale.data slot)
+  7. **RE-PLOTTING AND SAVING** (after cell cycle correction)
+
+Agent Decision: NONE (auto-proceed, deterministic)
+
+CRITICAL: Cell cycle analysis is CRUCIAL for downstream clustering accuracy.
+Without cell cycle correction, cells cluster by cell cycle phase instead of biological identity.
+
+Outputs: seurat_stage3_norm.rds, cell_cycle_plots.pdf
+```
+
+**Stage 4: PCA**
+```
+Script Steps:
+  1. Run PCA on HVGs
+  2. Generate elbow plot (variance explained by each PC)
+  3. Calculate variance percentages for PC ranges (1-10, 1-20, 1-30)
+
+Agent Decision:
+  - USE_DEFAULT: Use default PC range (1-30)
+  - SELECT_PC_RANGE: Recommend specific PC range based on elbow plot
+
+Agent Logic:
+  - GPT-5.2 (Stats): Analyze variance explained, recommend statistically optimal range
+  - Claude (Pipeline): Consider Seurat pipeline requirements
+
+Outputs: seurat_stage4_pca.rds, pca_variance.json, elbow_plot.pdf
+```
+
+**Stage 5: Clustering + Markers**
+```
+Script Steps:
+  1. Graph-based clustering (Leiden/Louvain algorithm)
+  2. UMAP dimensionality reduction
+  3. Find marker genes for each cluster
+  4. Generate cluster UMAP plot
+
+Agent Decision:
+  - ACCEPT_CLUSTERING: Clusters are biologically meaningful
+  - ADJUST_RESOLUTION: Change clustering resolution parameter
+  - FLAG_SUSPICIOUS: Clusters don't match expected biology
+
+Agent Logic:
+  - All 3 agents review cluster quality, marker gene patterns
+  - Validate against known cell type markers (if provided)
+
+Outputs: seurat_stage5_final.rds, cluster_summary.csv, marker_genes.csv, umap_plot.pdf
+```
+
+---
+
 ### Multi-Agent Decision System
 
 **3 Specialized Agents:**
@@ -265,10 +376,12 @@ GPT-5.2 (Stats) → Gemini (Biology) → Claude (Pipeline)
 
 ### Implemented & Tested:
 
-1. **4-Stage Architecture with Agent Checkpoints**
+1. **Dual-Pipeline Architecture with Agent Checkpoints**
+   - Bulk RNA-seq: 4-stage pipeline (Validation → Alignment → Quantification → DE)
+   - scRNA-seq: 5-stage pipeline (Load → Filter → Normalize+CellCycle → PCA → Cluster)
    - Each stage: Generate → Execute → Parse → Format → Agent Review → Decision
-   - Early issue detection (catch bad samples in Stage 2, not Stage 4)
-   - Progressive refinement (remove outliers before DE analysis)
+   - Early issue detection (catch bad samples early, not at the end)
+   - Progressive refinement (remove outliers, correct cell cycle effects)
 
 2. **User Input Tracking (Research Critical)**
    - JSON logs track when user input required
@@ -398,20 +511,30 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 
 ```
 ├── bin/
-│   ├── geneexpert.js                    # CLI entry point (--staged flag)
+│   ├── geneexpert.js                    # Bulk RNA-seq CLI entry point
+│   ├── scrna_geneexpert.js              # scRNA-seq CLI entry point
 │   ├── evaluate.js                      # Evaluation metrics calculator
 │   ├── analyze_costs.js                 # Cost analysis from experiment logs
 │   └── json_to_csv.js                   # JSON to CSV converter
 ├── src/
 │   ├── executor/
-│   │   └── staged_executor.js           # 4-stage orchestration
+│   │   └── staged_executor.js           # 4-stage bulk RNA-seq orchestration
+│   ├── scrna_executor/
+│   │   └── scrna_executor.js            # 5-stage scRNA-seq orchestration
 │   ├── stages/
 │   │   ├── stage1_validation.js         # FASTQ validation
 │   │   ├── stage2_alignment.js          # Alignment + QC
 │   │   ├── stage3_quantification_qc.js  # Quantification + PCA QC
 │   │   └── stage4_de_analysis.js        # Differential expression
+│   ├── scrna_stages/
+│   │   ├── stage1_load_qc.js            # Load 10x data + QC metrics
+│   │   ├── stage2_filter_qc.js          # QC filtering (agents recommend thresholds)
+│   │   ├── stage3_normalize_hvg.js      # Normalize + HVG + CELL CYCLE ANALYSIS
+│   │   ├── stage4_pca.js                # PCA (agents select PC range)
+│   │   └── stage5_cluster_markers.js    # Clustering + marker genes
 │   ├── config/
-│   │   └── stage_prompts.js             # Agent prompts for each stage
+│   │   ├── stage_prompts.js             # Bulk RNA-seq agent prompts
+│   │   └── scrna_stage_prompts.js       # scRNA-seq agent prompts
 │   ├── coordinator/
 │   │   └── orchestrator.js              # Multi-agent coordination
 │   ├── utils/
@@ -419,10 +542,10 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 │   │   ├── user_input.js                # User decision handling
 │   │   └── llm_clients.js               # OpenAI, Anthropic, Google APIs
 │   └── pipeline/                        # Old monolithic architecture (legacy)
-├── test_stage1.js                       # Test Stage 1 independently
-├── test_stage2.js                       # Test Stage 2 independently
-├── test_stage3.js                       # Test Stage 3 independently
-├── test_stage4.js                       # Test Stage 4 independently
+├── test_stage1.js                       # Test bulk Stage 1 independently
+├── test_stage2.js                       # Test bulk Stage 2 independently
+├── test_stage3.js                       # Test bulk Stage 3 independently
+├── test_stage4.js                       # Test bulk Stage 4 independently
 ├── experiments/
 │   └── ground_truth.json                # Evaluation dataset labels
 └── README.md                            # This file

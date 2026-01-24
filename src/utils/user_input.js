@@ -678,7 +678,17 @@ export async function handleScRNAStage5UserDecision(reviewResult, stage5Output) 
   console.log('  USER DECISION REQUIRED - Clustering Validation');
   console.log('='.repeat(60));
   console.log('');
-  console.log('Agents flagged concerns with the clustering results.');
+
+  // Check if agents actually flagged concerns or just low confidence
+  const hasRealConcerns = reviewResult.decision === 'FLAG_SUSPICIOUS' ||
+                          reviewResult.decision === 'ADJUST_RESOLUTION' ||
+                          (reviewResult.consensus && reviewResult.consensus.votes.reject >= 2);
+
+  if (hasRealConcerns) {
+    console.log('Agents flagged concerns with the clustering results.');
+  } else {
+    console.log('Low consensus confidence - requesting user confirmation.');
+  }
   console.log('');
 
   // Show agent summaries

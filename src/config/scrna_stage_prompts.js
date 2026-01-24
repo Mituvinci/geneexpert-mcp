@@ -725,6 +725,43 @@ Biological_Interpretation: [Brief summary of major cell types identified]
 Cell_Type_Concerns: [List any implausible clusters or missing expected types, or "None"]`
 };
 
+/**
+ * Apply role swapping to scRNA stage prompts
+ * @param {Object} prompts - Original prompts object (with gpt5_2, claude, gemini keys)
+ * @param {Object} roleAssignments - Role assignments
+ * @param {string} roleAssignments.gptRole - Role for GPT-5.2: 'stats', 'pipeline', or 'biology'
+ * @param {string} roleAssignments.claudeRole - Role for Claude: 'stats', 'pipeline', or 'biology'
+ * @param {string} roleAssignments.geminiRole - Role for Gemini: 'stats', 'pipeline', or 'biology'
+ * @returns {Object} - System prompts for each agent (potentially swapped)
+ */
+export function applyRoleSwapping(prompts, roleAssignments = null) {
+  if (!roleAssignments) {
+    // Default (backward compatible)
+    return {
+      gpt5_2_SystemPrompt: prompts.gpt5_2,
+      claudeSystemPrompt: prompts.claude,
+      geminiSystemPrompt: prompts.gemini
+    };
+  }
+
+  const gptRole = roleAssignments.gptRole || 'stats';
+  const claudeRole = roleAssignments.claudeRole || 'pipeline';
+  const geminiRole = roleAssignments.geminiRole || 'biology';
+
+  // Map roles to prompt keys
+  const roleToPromptKey = {
+    'stats': 'gpt5_2',      // Stats role uses GPT's prompt
+    'pipeline': 'claude',    // Pipeline role uses Claude's prompt
+    'biology': 'gemini'      // Biology role uses Gemini's prompt
+  };
+
+  return {
+    gpt5_2_SystemPrompt: prompts[roleToPromptKey[gptRole]],
+    claudeSystemPrompt: prompts[roleToPromptKey[claudeRole]],
+    geminiSystemPrompt: prompts[roleToPromptKey[geminiRole]]
+  };
+}
+
 export default {
   SCRNA_STAGE_2_THRESHOLD_PROMPTS,
   SCRNA_STAGE_2_PROMPTS,

@@ -66,6 +66,9 @@ EXAMPLES:
   .option('--single-agent <name>', 'Use only one agent: gpt5.2, claude, or gemini (ICML baseline #2-3)')
   .option('--force-automation', 'Skip all agents, use template-based decisions only (ICML baseline #1)')
   .option('--sequential-chain', 'Use sequential chain mode: GPT-5.2 → Gemini → Claude (ICML experiment #5)')
+  .option('--gpt-role <role>', 'Role for GPT-5.2: stats, pipeline, biology (default: stats)', 'stats')
+  .option('--claude-role <role>', 'Role for Claude: stats, pipeline, biology (default: pipeline)', 'pipeline')
+  .option('--gemini-role <role>', 'Role for Gemini: stats, pipeline, biology (default: biology)', 'biology')
   .option('--use-existing-fastqc <path>', 'Use existing FastQC outputs from preprocessing (saves time for ICML experiments)')
   .option('--use-existing-bam <path>', 'Use existing BAM files from preprocessing (saves time for ICML experiments)')
   .option('--verbose', 'Verbose output', false)
@@ -96,6 +99,24 @@ EXAMPLES:
       process.exit(1);
     }
 
+    // Validate role assignments
+    const validRoles = ['stats', 'pipeline', 'biology'];
+    if (!validRoles.includes(options.gptRole)) {
+      console.error(`❌ Error: Invalid --gpt-role: ${options.gptRole}`);
+      console.error(`   Valid options: ${validRoles.join(', ')}`);
+      process.exit(1);
+    }
+    if (!validRoles.includes(options.claudeRole)) {
+      console.error(`❌ Error: Invalid --claude-role: ${options.claudeRole}`);
+      console.error(`   Valid options: ${validRoles.join(', ')}`);
+      process.exit(1);
+    }
+    if (!validRoles.includes(options.geminiRole)) {
+      console.error(`❌ Error: Invalid --gemini-role: ${options.geminiRole}`);
+      console.error(`   Valid options: ${validRoles.join(', ')}`);
+      process.exit(1);
+    }
+
     // Create output directory
     const outputDir = path.resolve(options.output);
     if (!fs.existsSync(outputDir)) {
@@ -120,6 +141,11 @@ EXAMPLES:
       singleAgent: options.singleAgent, // For experimental comparisons
       forceAutomation: options.forceAutomation, // Skip agents, use template only
       sequentialChain: options.sequentialChain, // NEW: Sequential chain mode
+      roleAssignments: {  // NEW: Role swapping for ablation study
+        gptRole: options.gptRole,
+        claudeRole: options.claudeRole,
+        geminiRole: options.geminiRole
+      },
       useExistingFastqc: options.useExistingFastqc ? path.resolve(options.useExistingFastqc) : null, // Use preprocessed FastQC
       useExistingBam: options.useExistingBam ? path.resolve(options.useExistingBam) : null, // Use preprocessed BAM
       verbose: options.verbose
@@ -190,6 +216,21 @@ EXAMPLES:
     console.log(`   Architecture: ${options.staged ? 'Staged (4-stage checkpoints)' : 'Monolithic'}`);
     console.log('');
     console.log(`🔬 ICML Experiment Mode #${modeNumber}: ${experimentalMode}`);
+
+    // Display role assignments if in multi-agent mode
+    if (!options.forceAutomation && !options.singleAgent) {
+      const isDefaultRoles = options.gptRole === 'stats' &&
+                              options.claudeRole === 'pipeline' &&
+                              options.geminiRole === 'biology';
+      if (isDefaultRoles) {
+        console.log('   Agent Roles: Default (GPT=stats, Claude=pipeline, Gemini=biology)');
+      } else {
+        console.log('   Agent Roles: Custom Configuration');
+        console.log(`   - GPT-5.2:  ${options.gptRole.toUpperCase()} agent`);
+        console.log(`   - Claude:   ${options.claudeRole.toUpperCase()} agent`);
+        console.log(`   - Gemini:   ${options.geminiRole.toUpperCase()} agent`);
+      }
+    }
     console.log('');
 
     try {
@@ -208,6 +249,7 @@ EXAMPLES:
           singleAgent: config.singleAgent,
           forceAutomation: config.forceAutomation,
           sequentialChain: config.sequentialChain,  // NEW: Pass sequential chain flag
+          roleAssignments: config.roleAssignments,  // NEW: Pass role assignments for ablation study
           useExistingFastqc: config.useExistingFastqc,  // FIX: Pass preprocessed FastQC path
           useExistingBam: config.useExistingBam  // FIX: Pass preprocessed BAM path
         });

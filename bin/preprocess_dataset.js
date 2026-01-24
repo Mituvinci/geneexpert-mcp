@@ -93,6 +93,32 @@ function detectDataInfo(inputDir) {
   };
 }
 
+// Save metadata file (called after each stage)
+function saveMetadata(outputDir, dataInfo, organism, stage1Done, stage2Done) {
+  try {
+    const metadata = {
+      dataset_name: dataInfo.comparison,
+      organism: dataInfo.organism || organism,
+      genome_build: organism === 'human' ? 'hg38' : (organism === 'mouse' ? 'mm10' : 'rn6'),
+      sequencing_type: dataInfo.pairedEnd ? 'paired-end' : 'single-end',
+      paired_end: dataInfo.pairedEnd,
+      num_samples: dataInfo.samples.length,
+      preprocessing_date: new Date().toISOString(),
+      samples: dataInfo.samples.map(s => s.name),
+      stage1_completed: stage1Done,
+      stage2_completed: stage2Done,
+      notes: 'Generated automatically by preprocess_dataset.js'
+    };
+
+    const metadataPath = path.join(outputDir, 'dataset_metadata.json');
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+    return metadataPath;
+  } catch (error) {
+    console.error(`WARNING: Could not save metadata: ${error.message}`);
+    return null;
+  }
+}
+
 // Execute script
 function executeScript(scriptPath, stageName) {
   console.log(`[Preprocessing] Executing ${stageName}...`);
@@ -160,16 +186,35 @@ async function main() {
   console.log('');
 
   const stage1Result = executeScript(stage1ScriptPath, 'Stage 1 (FastQC)');
-  if (!stage1Result.success) {
-    console.error('ERROR: Stage 1 failed. Cannot proceed to Stage 2.');
-    process.exit(1);
-  }
 
+  // Parse Stage 1 output regardless of exit code
   console.log('[Stage 1] Parsing output...');
   const stage1Output = parseStage1Output(outputDir);
   console.log(`[Stage 1] Status: ${stage1Output.overall_status}`);
   console.log(`[Stage 1] Samples: ${stage1Output.samples_validated}`);
   console.log('');
+
+  // ALWAYS save metadata after Stage 1
+  const metadataPath1 = saveMetadata(outputDir, dataInfo, organism, true, false);
+  if (metadataPath1) {
+    console.log(`[Stage 1] Metadata saved: ${metadataPath1}`);
+    console.log('');
+  } else {
+    console.error('[Stage 1] WARNING: Could not save metadata!');
+  }
+
+  // Check if Stage 1 had critical errors
+  if (!stage1Result.success && stage1Output.samples_validated === 0) {
+    console.error('ERROR: Stage 1 failed - No samples were validated. Cannot proceed to Stage 2.');
+    process.exit(1);
+  }
+
+  // If Stage 1 had warnings but samples were validated, continue
+  if (!stage1Result.success && stage1Output.samples_validated > 0) {
+    console.log('⚠️  Note: Stage 1 script exited with warnings/errors, but samples were validated.');
+    console.log('    Continuing with preprocessing - agents will review issues later.');
+    console.log('');
+  }
 
   // ===================================================================
   // STAGE 2: Alignment
@@ -187,11 +232,8 @@ async function main() {
   console.log('');
 
   const stage2Result = executeScript(stage2ScriptPath, 'Stage 2 (Alignment)');
-  if (!stage2Result.success) {
-    console.error('ERROR: Stage 2 failed.');
-    process.exit(1);
-  }
 
+  // Parse Stage 2 output regardless of exit code
   console.log('[Stage 2] Parsing output...');
   const stage2Output = parseStage2Output(outputDir);
   console.log(`[Stage 2] Status: ${stage2Output.overall_status}`);
@@ -200,27 +242,58 @@ async function main() {
   console.log(`[Stage 2] BAM files: ${bamCount}`);
   console.log('');
 
+  // ALWAYS save metadata after Stage 2, even if QC has warnings
+  const metadataPath2 = saveMetadata(outputDir, dataInfo, organism, true, true);
+  if (metadataPath2) {
+    console.log(`[Stage 2] Metadata updated: ${metadataPath2}`);
+    console.log('');
+  } else {
+    console.error('[Stage 2] WARNING: Could not save metadata!');
+  }
+
+  // Only fail if BAM files were not created at all
+  if (bamCount === 0) {
+    console.error('ERROR: Stage 2 failed - No BAM files were created.');
+    process.exit(1);
+  }
+
+  // If Stage 2 script exited with error but BAM files exist, just warn
+  if (!stage2Result.success) {
+    console.log('⚠️  Note: Stage 2 script exited with warnings/errors, but BAM files were created successfully.');
+    console.log('    This is usually due to QC warnings (low mapping rates, etc.)');
+    console.log('    Continuing with preprocessing - agents will review QC issues later.');
+    console.log('');
+  }
+
   // ===================================================================
-  // SAVE METADATA
+  // FINAL METADATA VERIFICATION
   // ===================================================================
 
-  console.log('[Metadata] Saving dataset metadata...');
-  const metadata = {
-    dataset_name: dataInfo.comparison,
-    organism: dataInfo.organism,
-    genome_build: organism === 'human' ? 'hg38' : (organism === 'mouse' ? 'mm10' : 'rn6'),
-    sequencing_type: dataInfo.pairedEnd ? 'paired-end' : 'single-end',
-    paired_end: dataInfo.pairedEnd,
-    num_samples: dataInfo.samples.length,
-    preprocessing_date: new Date().toISOString(),
-    samples: dataInfo.samples.map(s => s.name),
-    notes: 'Generated automatically by preprocess_dataset.js'
-  };
+  console.log('[Metadata] Verifying final metadata...');
 
-  const metadataPath = path.join(outputDir, 'dataset_metadata.json');
-  fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
-  console.log(`[Metadata] Saved to: ${metadataPath}`);
-  console.log('');
+  try {
+    const metadataPath = path.join(outputDir, 'dataset_metadata.json');
+
+    if (!fs.existsSync(metadataPath)) {
+      throw new Error('Metadata file does not exist!');
+    }
+
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+
+    console.log(`[Metadata] ✓ File exists: ${metadataPath}`);
+    console.log(`[Metadata]   - Dataset: ${metadata.dataset_name}`);
+    console.log(`[Metadata]   - Organism: ${metadata.organism} (${metadata.genome_build})`);
+    console.log(`[Metadata]   - Type: ${metadata.sequencing_type}`);
+    console.log(`[Metadata]   - Samples: ${metadata.num_samples}`);
+    console.log(`[Metadata]   - Stage 1: ${metadata.stage1_completed ? '✓' : '✗'}`);
+    console.log(`[Metadata]   - Stage 2: ${metadata.stage2_completed ? '✓' : '✗'}`);
+    console.log('');
+  } catch (error) {
+    console.error(`[Metadata] ✗ FAILED to verify metadata: ${error.message}`);
+    console.error('[Metadata]   This is a critical error - ICML experiments need this file!');
+    console.error('');
+    throw error;  // Re-throw to ensure we don't silently ignore this
+  }
 
   // ===================================================================
   // SUMMARY

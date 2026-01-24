@@ -900,7 +900,16 @@ export function getStagePrompt(stage, agent) {
  * @param {number|string} stage - Stage number (1, 2, 3, 4) or stage ID ('3a', '3b', '3c' for scRNA-seq)
  * @returns {Object} - { gpt5_2_SystemPrompt, claudeSystemPrompt, geminiSystemPrompt }
  */
-export function getStagePrompts(stage) {
+/**
+ * Get stage-specific prompts with optional role swapping
+ * @param {number|string} stage - Stage number (1, 2, 3, 4) or stage ID ('3a', '3b', '3c')
+ * @param {Object} roleAssignments - Optional role assignments for ablation study
+ * @param {string} roleAssignments.gptRole - Role for GPT-5.2: 'stats', 'pipeline', or 'biology'
+ * @param {string} roleAssignments.claudeRole - Role for Claude: 'stats', 'pipeline', or 'biology'
+ * @param {string} roleAssignments.geminiRole - Role for Gemini: 'stats', 'pipeline', or 'biology'
+ * @returns {Object} - System prompts for each agent
+ */
+export function getStagePrompts(stage, roleAssignments = null) {
   const stagePrompts = {
     1: STAGE_1_PROMPTS,
     2: STAGE_2_PROMPTS,
@@ -916,10 +925,23 @@ export function getStagePrompts(stage) {
     throw new Error(`Unknown stage: ${stage}. Valid stages: 1, 2, 3, 3a, 3b, 3c, 4`);
   }
 
+  // Default role assignments (backward compatible)
+  const gptRole = roleAssignments?.gptRole || 'stats';
+  const claudeRole = roleAssignments?.claudeRole || 'pipeline';
+  const geminiRole = roleAssignments?.geminiRole || 'biology';
+
+  // Map roles to prompt keys (role -> original agent that had that role)
+  const roleToPromptKey = {
+    'stats': 'gpt5_2',      // Stats role uses GPT's prompt
+    'pipeline': 'claude',    // Pipeline role uses Claude's prompt
+    'biology': 'gemini'      // Biology role uses Gemini's prompt
+  };
+
+  // Return prompts based on role assignments (swapped if custom roles provided)
   return {
-    gpt5_2_SystemPrompt: prompts.gpt5_2,
-    claudeSystemPrompt: prompts.claude,
-    geminiSystemPrompt: prompts.gemini
+    gpt5_2_SystemPrompt: prompts[roleToPromptKey[gptRole]],
+    claudeSystemPrompt: prompts[roleToPromptKey[claudeRole]],
+    geminiSystemPrompt: prompts[roleToPromptKey[geminiRole]]
   };
 }
 

@@ -30,7 +30,8 @@ import {
   SCRNA_STAGE_2_THRESHOLD_PROMPTS,
   SCRNA_STAGE_2_PROMPTS,
   SCRNA_STAGE_4_PROMPTS,
-  SCRNA_STAGE_5_PROMPTS
+  SCRNA_STAGE_5_PROMPTS,
+  applyRoleSwapping  // NEW: For role swapping in scRNA prompts
 } from '../config/scrna_stage_prompts.js';
 
 /**
@@ -41,6 +42,11 @@ export class Coordinator {
     this.verbose = options.verbose || false;
     this.singleAgent = options.singleAgent || null;  // For experimental single-agent mode
     this.sequentialChain = options.sequentialChain || false;  // NEW: For sequential chain mode
+    this.roleAssignments = options.roleAssignments || {  // NEW: For ablation study role swapping
+      gptRole: 'stats',
+      claudeRole: 'pipeline',
+      geminiRole: 'biology'
+    };
     this.sessionHistory = [];
     this.currentDataset = null;  // Set when analysis starts, used for decision_id generation
     this.stepCounter = 0;        // Tracks pipeline step for unique decision_ids
@@ -81,8 +87,8 @@ export class Coordinator {
 
     // Call all agents in parallel (or single agent if in experimental mode)
     // Note: In single-agent mode, the agent gets a COMBINED prompt (stats + pipeline + bio)
-    // In multi-agent mode, each agent gets a domain-separated prompt
-    const prompts = getMultiAgentPrompts();
+    // In multi-agent mode, each agent gets a domain-separated prompt (role-based)
+    const prompts = getMultiAgentPrompts(this.roleAssignments);  // Pass role assignments
     const responses = await callAllAgents(question, {
       singleAgent: this.singleAgent,
       ...prompts
@@ -380,8 +386,8 @@ Focus on biological insight and interpretation.
     this.log(`Consulting agents for Stage ${stage} review...`);
     if (decision_id) this.log(`Decision ID: ${decision_id}`);
 
-    // Get stage-specific prompts
-    const stagePrompts = getStagePrompts(stage);
+    // Get stage-specific prompts (with role assignments for ablation study)
+    const stagePrompts = getStagePrompts(stage, this.roleAssignments);
 
     // Build options
     const agentOptions = {
@@ -954,12 +960,11 @@ Based on these QC metrics, recommend filtering thresholds that balance:
 - **nFeature_max**: Maximum genes per cell (typical: 5000-15000)
 - **percent_mt_max**: Maximum % mitochondrial (typical: 10-30%, tissue-dependent)`;
 
-    // Build agent options
+    // Build agent options (with role swapping for ablation study)
+    const prompts = applyRoleSwapping(SCRNA_STAGE_2_THRESHOLD_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
-      gpt5_2_SystemPrompt: SCRNA_STAGE_2_THRESHOLD_PROMPTS.gpt5_2,
-      claudeSystemPrompt: SCRNA_STAGE_2_THRESHOLD_PROMPTS.claude,
-      geminiSystemPrompt: SCRNA_STAGE_2_THRESHOLD_PROMPTS.gemini
+      ...prompts
     };
 
     // Call agents
@@ -1074,12 +1079,11 @@ Evaluate whether the QC filtering is appropriate for this scRNA-seq dataset.
 - PROCEED_WITH_WARNING
 - STOP_AND_REVIEW`;
 
-    // Build agent options with scRNA Stage 2 prompts
+    // Build agent options with scRNA Stage 2 prompts (with role swapping)
+    const prompts = applyRoleSwapping(SCRNA_STAGE_2_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
-      gpt5_2_SystemPrompt: SCRNA_STAGE_2_PROMPTS.gpt5_2,
-      claudeSystemPrompt: SCRNA_STAGE_2_PROMPTS.claude,
-      geminiSystemPrompt: SCRNA_STAGE_2_PROMPTS.gemini
+      ...prompts
     };
 
     // Call agents (parallel or sequential based on flag)
@@ -1167,12 +1171,11 @@ Based on the variance explained, select an appropriate PC range (min_pc to max_p
 - SELECT_PC_RANGE (specify custom min_pc and max_pc)
 - STOP_AND_REVIEW (if variance pattern is concerning)`;
 
-    // Build agent options with scRNA Stage 4 prompts
+    // Build agent options with scRNA Stage 4 prompts (with role swapping)
+    const prompts = applyRoleSwapping(SCRNA_STAGE_4_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
-      gpt5_2_SystemPrompt: SCRNA_STAGE_4_PROMPTS.gpt5_2,
-      claudeSystemPrompt: SCRNA_STAGE_4_PROMPTS.claude,
-      geminiSystemPrompt: SCRNA_STAGE_4_PROMPTS.gemini
+      ...prompts
     };
 
     // Call agents
@@ -1302,12 +1305,11 @@ Evaluate whether the clustering is biologically and technically valid.
 - ADJUST_RESOLUTION (suggest increasing or decreasing resolution)
 - FLAG_SUSPICIOUS (major concerns about clustering quality)`;
 
-    // Build agent options with scRNA Stage 5 prompts
+    // Build agent options with scRNA Stage 5 prompts (with role swapping)
+    const prompts = applyRoleSwapping(SCRNA_STAGE_5_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
-      gpt5_2_SystemPrompt: SCRNA_STAGE_5_PROMPTS.gpt5_2,
-      claudeSystemPrompt: SCRNA_STAGE_5_PROMPTS.claude,
-      geminiSystemPrompt: SCRNA_STAGE_5_PROMPTS.gemini
+      ...prompts
     };
 
     // Call agents
