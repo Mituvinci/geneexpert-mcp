@@ -29,6 +29,7 @@ import { getStagePrompts, getCombinedStagePrompt, formatStageOutputForAgents } f
 import {
   SCRNA_STAGE_2_THRESHOLD_PROMPTS,
   SCRNA_STAGE_2_PROMPTS,
+  SCRNA_STAGE_3A_PROMPTS,
   SCRNA_STAGE_4_PROMPTS,
   SCRNA_STAGE_5_PROMPTS,
   applyRoleSwapping  // NEW: For role swapping in scRNA prompts
@@ -1122,6 +1123,143 @@ Evaluate whether the QC filtering is appropriate for this scRNA-seq dataset.
   }
 
   /**
+   * Review scRNA Stage 3A: Cell Cycle Scoring
+   * ALL 3 AGENTS decide: REMOVE_CELL_CYCLE / SKIP_CELL_CYCLE / UNCERTAIN
+   */
+  async reviewScRNAStage3ACellCycle(stage3AOutput, dataInfo) {
+    this.log('[Coordinator] Reviewing scRNA Stage 3A (Cell Cycle) with ALL 3 AGENTS...');
+
+    // Check if cell cycle plot exists
+    const cellCyclePlot = stage3AOutput.cell_cycle_plot_jpg;
+    if (!cellCyclePlot) {
+      this.log('WARNING: No cell cycle plot found, using text-only analysis');
+    }
+
+    // Format data for agents
+    const phaseDistribution = stage3AOutput.phase_distribution || {};
+    const totalCells = Object.values(phaseDistribution).reduce((a, b) => a + b, 0) || stage3AOutput.n_cells || 0;
+
+    const formattedOutput = `# scRNA-seq Cell Cycle Analysis (Stage 3A)
+
+## Dataset Context
+- Organism: ${dataInfo.organism || 'unknown'}
+- Tissue: ${dataInfo.tissue || 'unknown'}
+- Total Cells: ${totalCells}
+
+## Cell Cycle Phase Distribution
+${stage3AOutput.cell_cycle_detected ? `
+**Phase Counts:**
+- G1 phase: ${phaseDistribution.G1 || 0} cells (${totalCells > 0 ? ((phaseDistribution.G1 || 0) / totalCells * 100).toFixed(1) : 'N/A'}%)
+- S phase: ${phaseDistribution.S || 0} cells (${totalCells > 0 ? ((phaseDistribution.S || 0) / totalCells * 100).toFixed(1) : 'N/A'}%)
+- G2M phase: ${phaseDistribution.G2M || 0} cells (${totalCells > 0 ? ((phaseDistribution.G2M || 0) / totalCells * 100).toFixed(1) : 'N/A'}%)
+
+**Cell Cycle Markers:**
+- S phase markers detected: ${stage3AOutput.s_markers_present || 0}
+- G2M phase markers detected: ${stage3AOutput.g2m_markers_present || 0}
+` : `
+**Cell Cycle NOT Detected**
+Reason: ${stage3AOutput.reason || 'Insufficient markers'}
+Recommendation: ${stage3AOutput.recommendation || 'SKIP_CELL_CYCLE'}
+`}
+
+## PCA Correlation Analysis
+${stage3AOutput.cell_cycle_detected ? `
+**PC1 Correlations (CRITICAL for decision):**
+- Correlation with S.Score: ${stage3AOutput.pc1_correlation_s_score?.toFixed(3) || 'N/A'}
+- Correlation with G2M.Score: ${stage3AOutput.pc1_correlation_g2m_score?.toFixed(3) || 'N/A'}
+
+**Interpretation:**
+- |r| > 0.3: Strong cell cycle effect → Recommend REMOVE_CELL_CYCLE
+- 0.2 < |r| < 0.3: Moderate effect → Consider removal
+- |r| < 0.2: Weak effect → Recommend SKIP_CELL_CYCLE
+` : `
+No PCA correlations available (cell cycle not detected).
+`}
+
+## Visual Evidence
+${cellCyclePlot ? `
+**See attached image: cell_cycle_before.jpg**
+- PCA plot colored by cell cycle phase (G1, S, G2M)
+- Feature plots showing S.Score and G2M.Score gradients
+
+**What to look for:**
+- Distinct clustering by phase → Strong cell cycle effect → REMOVE_CELL_CYCLE
+- Intermixed phases → Weak cell cycle effect → SKIP_CELL_CYCLE
+` : 'No visual plot available.'}
+
+## Your Decision
+Based on:
+1. Phase distribution (is S+G2M fraction reasonable for this tissue?)
+2. PCA correlations (are they >0.3 indicating strong cell cycle effect?)
+3. Visual evidence (do phases cluster separately or mix together?)
+
+**Decide:**
+- **REMOVE_CELL_CYCLE**: Regress out cell cycle effects (proceed to Stage 3B regression)
+- **SKIP_CELL_CYCLE**: Skip regression, just scale data (proceed to Stage 3B skip)
+- **UNCERTAIN**: Borderline case, escalate to user
+
+## Full Data (JSON)
+\`\`\`json
+${JSON.stringify({
+  cell_cycle_detected: stage3AOutput.cell_cycle_detected,
+  phase_distribution: phaseDistribution,
+  pc1_correlation_s_score: stage3AOutput.pc1_correlation_s_score,
+  pc1_correlation_g2m_score: stage3AOutput.pc1_correlation_g2m_score,
+  recommendation: stage3AOutput.recommendation
+}, null, 2)}
+\`\`\``;
+
+    // Build agent options with scRNA Stage 3A prompts (with role swapping)
+    const prompts = applyRoleSwapping(SCRNA_STAGE_3A_PROMPTS, this.roleAssignments);
+    const agentOptions = {
+      singleAgent: this.singleAgent,
+      ...prompts
+    };
+
+    // Add image if available
+    if (cellCyclePlot) {
+      agentOptions.imagePath = cellCyclePlot;
+    }
+
+    // Call agents
+    const responses = this.sequentialChain
+      ? await callAllAgentsSequential(formattedOutput, agentOptions)
+      : await callAllAgents(formattedOutput, agentOptions);
+
+    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+
+    // Synthesize consensus
+    const consensus = synthesizeConsensus(responses, 'scrna_stage3a', null);
+
+    // Map vote category to cell cycle decision
+    let cellCycleDecision = 'SKIP_CELL_CYCLE';  // Default to skip if uncertain
+
+    if (consensus.decision === 'approve') {
+      // Majority voted to remove cell cycle
+      cellCycleDecision = 'REMOVE_CELL_CYCLE';
+    } else if (consensus.decision === 'reject') {
+      // Majority voted to skip cell cycle
+      cellCycleDecision = 'SKIP_CELL_CYCLE';
+    } else {
+      // No clear consensus or user_decision_required
+      cellCycleDecision = 'UNCERTAIN';
+    }
+
+    this.log(`[Coordinator] scRNA Stage 3A Consensus: ${cellCycleDecision}`);
+    this.log(`[Coordinator] Voting result: ${consensus.decision}`);
+
+    return {
+      decision: cellCycleDecision,
+      reasoning: consensus.summary,
+      confidence: consensus.confidence,
+      agentResponses: responses,
+      consensus
+    };
+  }
+
+  /**
    * Review scRNA Stage 4: PCA + PC Selection
    * Stats Agent decides: USE_DEFAULT / SELECT_PC_RANGE / STOP_AND_REVIEW
    */
@@ -1177,6 +1315,11 @@ Based on the variance explained, select an appropriate PC range (min_pc to max_p
       singleAgent: this.singleAgent,
       ...prompts
     };
+
+    // Add elbow plot if available
+    if (stage4Output.elbow_plot_jpg) {
+      agentOptions.imagePath = stage4Output.elbow_plot_jpg;
+    }
 
     // Call agents
     const responses = this.sequentialChain
@@ -1311,6 +1454,11 @@ Evaluate whether the clustering is biologically and technically valid.
       singleAgent: this.singleAgent,
       ...prompts
     };
+
+    // Add UMAP plot if available
+    if (stage5Output.umap_plot_jpg) {
+      agentOptions.imagePath = stage5Output.umap_plot_jpg;
+    }
 
     // Call agents
     const responses = this.sequentialChain

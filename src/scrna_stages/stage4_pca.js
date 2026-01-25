@@ -56,9 +56,18 @@ export function parseStage4Output(outputDir) {
   }
 
   const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8'));
-  console.log(`[scRNA Stage 4] PCA complete. Variance explained by PC 20: ${summary.variance_explained_pc20}%`);
+  console.log(`[scRNA Stage 4] PCA complete.`);
 
-  return { ...summary, stage4Dir };
+  // Check for elbow plot
+  const elbowPlotJPG = path.join(stage4Dir, 'elbow_plot.jpg');
+  const elbowPlotPDF = path.join(stage4Dir, 'elbow_plot.pdf');
+
+  return {
+    ...summary,
+    stage4Dir,
+    elbow_plot_jpg: fs.existsSync(elbowPlotJPG) ? elbowPlotJPG : null,
+    elbow_plot_pdf: fs.existsSync(elbowPlotPDF) ? elbowPlotPDF : null
+  };
 }
 
 export function formatStage4ForAgents(parsedOutput) {

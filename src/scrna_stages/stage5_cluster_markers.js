@@ -64,7 +64,16 @@ export function parseStage5Output(outputDir) {
   console.log(`[scRNA Stage 5] Identified ${summary.n_clusters} clusters`);
   console.log(`[scRNA Stage 5] Total markers detected: ${summary.total_markers}`);
 
-  return { ...summary, stage5Dir };
+  // Check for UMAP plot
+  const umapPlotJPG = path.join(stage5Dir, 'umap_plot.jpg');
+  const umapPlotPDF = path.join(stage5Dir, 'umap_plot.pdf');
+
+  return {
+    ...summary,
+    stage5Dir,
+    umap_plot_jpg: fs.existsSync(umapPlotJPG) ? umapPlotJPG : null,
+    umap_plot_pdf: fs.existsSync(umapPlotPDF) ? umapPlotPDF : null
+  };
 }
 
 export function formatStage5ForAgents(parsedOutput) {

@@ -33,6 +33,19 @@ import {
 } from '../scrna_stages/stage3_normalize_hvg.js';
 
 import {
+  generateStage3AScript,
+  parseStage3AOutput,
+  formatStage3AForAgents,
+  formatStage3AForDisplay
+} from '../scrna_stages/stage3a_cell_cycle_scoring.js';
+
+import {
+  generateStage3BScript,
+  parseStage3BOutput,
+  formatStage3BForDisplay
+} from '../scrna_stages/stage3b_cell_cycle_regression.js';
+
+import {
   generateStage4Script,
   parseStage4Output,
   formatStage4ForAgents
@@ -53,6 +66,9 @@ import {
   handleScRNAStage5UserDecision
 } from '../utils/user_input.js';
 
+// Auto-resolution utilities
+import { autoResolveDecision } from '../utils/auto_resolver.js';
+
 /**
  * scRNA-seq Staged Executor Class
  */
@@ -72,6 +88,10 @@ export class ScRNAExecutor {
       claudeRole: 'pipeline',
       geminiRole: 'biology'
     };
+
+    // Auto-resolution settings
+    this.autoResolveMode = options.autoResolveMode || 'auto';  // 'auto', 'median', 'confidence', 'user'
+    this.escalationThreshold = options.escalationThreshold || 0.6;  // 0-1 score
 
     // Stage results tracking
     this.stageResults = {
@@ -314,17 +334,27 @@ export class ScRNAExecutor {
         return { proceed: false, error: 'Insufficient data (agent decision)' };
       }
 
-      // Check if user decision needed (low consensus or disagreement on thresholds)
-      let userDecision = null;
-      const needsUserInput = thresholdReview.consensus.confidence < 0.7 ||
-                             thresholdReview.consensus.decision.toLowerCase().includes('user_decision') ||
-                             hasThresholdDisagreement(thresholdReview.agentResponses);
+      // Try auto-resolution first
+      const autoResolution = await autoResolveDecision(
+        thresholdReview.agentResponses,
+        thresholdReview.consensus,
+        'thresholds',
+        this.autoResolveMode,
+        this.escalationThreshold
+      );
 
-      if (needsUserInput) {
-        this.log('Low consensus or threshold disagreement - escalating to user...');
+      let userDecision = null;
+      if (autoResolution.autoResolved) {
+        // Auto-resolved!
+        thresholds = autoResolution.decision;
+        console.log(`✓ Auto-resolved (${autoResolution.method}): ${autoResolution.reasoning}`);
+      } else {
+        // Escalate to user
+        this.log(`⚠ Escalating to user: ${autoResolution.reasoning}`);
         userDecision = await handleScRNAStage2UserDecision(
           thresholdReview,
-          this.stageResults.stage1.output
+          this.stageResults.stage1.output,
+          autoResolution
         );
 
         if (!userDecision.proceed) {
@@ -333,8 +363,6 @@ export class ScRNAExecutor {
         }
 
         thresholds = userDecision.thresholds;
-      } else {
-        thresholds = thresholdReview.thresholds;
       }
 
       // Log agent decision (Stage 2 checkpoint)
@@ -394,54 +422,173 @@ export class ScRNAExecutor {
   }
 
   /**
-   * Run Stage 3: Normalize + HVG
+   * Run Stage 3A: Cell Cycle Scoring (AGENT CHECKPOINT 2)
    */
-  async runStage3() {
+  async runStage3A() {
     console.log('');
     console.log('='.repeat(60));
-    console.log('  STAGE 3: Normalization + HVG');
+    console.log('  STAGE 3A: Cell Cycle Scoring');
     console.log('='.repeat(60));
     console.log('');
 
     const absOutputDir = path.resolve(this.outputDir);
-    const scriptPath = path.resolve(absOutputDir, `stage_3_scrna_normalize_hvg.sh`);
+    const scriptPath = path.resolve(absOutputDir, `stage_3a_scrna_cell_cycle_scoring.sh`);
 
-    this.log('Generating Stage 3 script...');
-    generateStage3Script(this.stageResults.stage2.output, this.config, scriptPath);
+    this.log('Generating Stage 3A script...');
+    generateStage3AScript(this.stageResults.stage2.output, this.config, scriptPath);
 
     if (this.dryRun) {
       return { proceed: true, dryRun: true };
     }
 
-    this.log('Executing Stage 3 script...');
-    const execResult = this.executeScript(scriptPath, 'Normalize + HVG');
+    this.log('Executing Stage 3A script...');
+    const execResult = this.executeScript(scriptPath, 'Cell Cycle Scoring');
 
     if (!execResult.success) {
-      console.error(`Stage 3 execution failed: ${execResult.error}`);
+      console.error(`Stage 3A execution failed: ${execResult.error}`);
       return { proceed: false, error: execResult.error };
     }
 
-    const stage3Output = parseStage3Output(absOutputDir);
+    const stage3AOutput = parseStage3AOutput(absOutputDir);
     console.log('');
-    console.log(formatStage3ForDisplay(stage3Output));
+    console.log(formatStage3AForDisplay(stage3AOutput));
 
-    // Log to JSONL (automated stage, no agents)
+    // Agent review for cell cycle decision
+    let cellCycleDecision = 'SKIP_CELL_CYCLE';  // Default
+
+    if (this.forceAutomation) {
+      this.log('FORCE AUTOMATION - Using default (skip cell cycle regression)');
+      cellCycleDecision = 'SKIP_CELL_CYCLE';
+
+      // Log automated decision
+      this.logger.logStageDecision(
+        '3A', 'Cell Cycle Scoring',
+        this.dataInfo, stage3AOutput,
+        {},
+        {
+          decision: cellCycleDecision,
+          confidence: 1.0,
+          votes: { approve: 0, reject: 0, uncertain: 0 },
+          reasoning: 'Force automation - skipping cell cycle regression',
+          recommendations: []
+        },
+        { proceed: true, cellCycleDecision, automated: true }
+      );
+    } else if (!stage3AOutput.cell_cycle_detected) {
+      // No cell cycle detected (insufficient markers) → Auto-skip
+      this.log('Cell cycle not detected (insufficient markers) - auto-skipping regression');
+      cellCycleDecision = 'SKIP_CELL_CYCLE';
+
+      this.logger.logStageDecision(
+        '3A', 'Cell Cycle Scoring',
+        this.dataInfo, stage3AOutput,
+        {},
+        {
+          decision: cellCycleDecision,
+          confidence: 1.0,
+          votes: { approve: 0, reject: 0, uncertain: 0 },
+          reasoning: 'Insufficient cell cycle markers detected',
+          recommendations: []
+        },
+        { proceed: true, cellCycleDecision, automated: true }
+      );
+    } else {
+      // Cell cycle detected → Ask agents
+      this.log('Calling ALL 3 AGENTS to review cell cycle plot...');
+      const reviewResult = await this.coordinator.reviewScRNAStage3ACellCycle(
+        stage3AOutput,
+        this.dataInfo
+      );
+
+      // Try auto-resolution
+      const autoResolution = await autoResolveDecision(
+        reviewResult.agentResponses,
+        reviewResult.consensus,
+        'binary',  // REMOVE_CELL_CYCLE vs SKIP_CELL_CYCLE
+        this.autoResolveMode,
+        this.escalationThreshold
+      );
+
+      if (autoResolution.autoResolved) {
+        // Auto-resolved!
+        cellCycleDecision = autoResolution.decision;
+        console.log(`✓ Auto-resolved (${autoResolution.method}): ${cellCycleDecision}`);
+        console.log(`  ${autoResolution.reasoning}`);
+      } else {
+        // Escalate to user (need to create this handler!)
+        console.log(`⚠ Escalating to user: ${autoResolution.reasoning}`);
+        cellCycleDecision = reviewResult.decision || 'SKIP_CELL_CYCLE';
+        // TODO: Create handleScRNAStage3AUserDecision()
+      }
+
+      // Log agent decision
+      if (reviewResult.agentResponses && reviewResult.consensus) {
+        this.logger.logStageDecision(
+          '3A', 'Cell Cycle Scoring',
+          this.dataInfo, stage3AOutput,
+          reviewResult.agentResponses,
+          reviewResult.consensus,
+          { proceed: true, cellCycleDecision, autoResolution }
+        );
+      }
+
+      console.log('');
+      console.log(`Agent Decision: ${cellCycleDecision}`);
+    }
+
+    this.stageResults.stage3A = { output: stage3AOutput, cellCycleDecision, proceed: true };
+    return { proceed: true, output: stage3AOutput, cellCycleDecision };
+  }
+
+  /**
+   * Run Stage 3B: Cell Cycle Regression or Skip (Conditional)
+   */
+  async runStage3B(cellCycleDecision) {
+    console.log('');
+    console.log('='.repeat(60));
+    console.log(`  STAGE 3B: ${cellCycleDecision === 'REMOVE_CELL_CYCLE' ? 'Cell Cycle Regression' : 'Skip Regression (Scale Only)'}`);
+    console.log('='.repeat(60));
+    console.log('');
+
+    const absOutputDir = path.resolve(this.outputDir);
+    const scriptPath = path.resolve(absOutputDir, `stage_3b_scrna_cell_cycle_${cellCycleDecision === 'REMOVE_CELL_CYCLE' ? 'regression' : 'skip'}.sh`);
+
+    this.log('Generating Stage 3B script...');
+    generateStage3BScript(this.stageResults.stage3A.output, cellCycleDecision, this.config, scriptPath);
+
+    if (this.dryRun) {
+      return { proceed: true, dryRun: true };
+    }
+
+    this.log('Executing Stage 3B script...');
+    const execResult = this.executeScript(scriptPath, cellCycleDecision === 'REMOVE_CELL_CYCLE' ? 'Cell Cycle Regression' : 'Skip Regression');
+
+    if (!execResult.success) {
+      console.error(`Stage 3B execution failed: ${execResult.error}`);
+      return { proceed: false, error: execResult.error };
+    }
+
+    const stage3BOutput = parseStage3BOutput(absOutputDir, cellCycleDecision);
+    console.log('');
+    console.log(formatStage3BForDisplay(stage3BOutput));
+
+    // Log to JSONL (automated execution based on agent decision from 3A)
     this.logger.logStageDecision(
-      3, 'Normalize + HVG',
-      this.dataInfo, stage3Output,
-      {}, // No agent responses
+      '3B', cellCycleDecision === 'REMOVE_CELL_CYCLE' ? 'Cell Cycle Regression' : 'Skip Regression',
+      this.dataInfo, stage3BOutput,
+      {},
       {
-        decision: 'auto_proceed',
+        decision: cellCycleDecision,
         confidence: 1.0,
         votes: { approve: 1, reject: 0, uncertain: 0 },
-        reasoning: 'Automated stage - no agent review',
+        reasoning: `Executing agent decision from Stage 3A: ${cellCycleDecision}`,
         recommendations: []
       },
       { proceed: true, automated: true }
     );
 
-    this.stageResults.stage3 = { output: stage3Output, proceed: true };
-    return { proceed: true, output: stage3Output };
+    this.stageResults.stage3B = { output: stage3BOutput, proceed: true };
+    return { proceed: true, output: stage3BOutput };
   }
 
   /**
@@ -458,7 +605,7 @@ export class ScRNAExecutor {
     const scriptPath = path.resolve(absOutputDir, `stage_4_scrna_pca.sh`);
 
     this.log('Generating Stage 4 script...');
-    generateStage4Script(this.stageResults.stage3.output, this.config, scriptPath);
+    generateStage4Script(this.stageResults.stage3B.output, this.config, scriptPath);
 
     if (this.dryRun) {
       return { proceed: true, dryRun: true };
@@ -485,17 +632,27 @@ export class ScRNAExecutor {
     this.log('Calling ALL 3 AGENTS for PC selection...');
     const reviewResult = await this.coordinator.reviewScRNAStage4(stage4Output, this.dataInfo);
 
-    // Check if user decision needed (agents disagree significantly on PC range)
+    // Try auto-resolution
+    const autoResolution = await autoResolveDecision(
+      reviewResult.agentResponses,
+      reviewResult.consensus,
+      'numeric',  // PC range is numeric
+      this.autoResolveMode,
+      this.escalationThreshold
+    );
+
     let userDecision = null;
     let pcSelection = { min_pc: 1, max_pc: 20 };  // Default
 
-    const needsUserInput = reviewResult.consensus.confidence < 0.7 ||
-                           reviewResult.consensus.decision.toLowerCase().includes('user_decision') ||
-                           hasPCRangeDisagreement(reviewResult.agentResponses);
-
-    if (needsUserInput) {
-      this.log('PC range disagreement - escalating to user...');
-      userDecision = await handleScRNAStage4UserDecision(reviewResult, stage4Output);
+    if (autoResolution.autoResolved) {
+      // Auto-resolved!
+      pcSelection = autoResolution.decision;
+      console.log(`✓ Auto-resolved (${autoResolution.method}): PCs ${pcSelection.min_pc}-${pcSelection.max_pc}`);
+      console.log(`  ${autoResolution.reasoning}`);
+    } else {
+      // Escalate to user
+      this.log(`⚠ Escalating to user: ${autoResolution.reasoning}`);
+      userDecision = await handleScRNAStage4UserDecision(reviewResult, stage4Output, autoResolution);
 
       if (!userDecision.proceed) {
         console.log('User aborted analysis');
@@ -503,11 +660,6 @@ export class ScRNAExecutor {
       }
 
       pcSelection = userDecision.pcSelection;
-    } else {
-      // Use agent recommendation
-      if (reviewResult.decision === 'SELECT_PC_RANGE') {
-        pcSelection = { min_pc: reviewResult.min_pc, max_pc: reviewResult.max_pc };
-      }
     }
 
     // Log agent decision (Stage 4 checkpoint)
@@ -571,24 +723,28 @@ export class ScRNAExecutor {
     this.log('Calling ALL 3 AGENTS for clustering validation...');
     const reviewResult = await this.coordinator.reviewScRNAStage5(stage5Output, this.dataInfo);
 
-    // Check if user decision needed (agents flag suspicious or disagree)
+    // Try auto-resolution
+    const autoResolution = await autoResolveDecision(
+      reviewResult.agentResponses,
+      reviewResult.consensus,
+      'categorical',  // ACCEPT/ADJUST/FLAG
+      this.autoResolveMode,
+      this.escalationThreshold
+    );
+
     let userDecision = null;
     let finalProceed = reviewResult.decision === 'ACCEPT_CLUSTERING';
 
-    // FIX: Don't escalate if all 3 agents unanimously agreed to accept
-    const unanimousAccept = reviewResult.consensus.votes.approve === 3;
-
-    const needsUserInput = !unanimousAccept && (
-                           reviewResult.consensus.confidence < 0.7 ||
-                           reviewResult.consensus.decision.toLowerCase().includes('user_decision') ||
-                           reviewResult.decision === 'FLAG_SUSPICIOUS' ||
-                           reviewResult.decision === 'ADJUST_RESOLUTION' ||
-                           reviewResult.consensus.votes.reject >= 2
-                           );
-
-    if (needsUserInput) {
-      this.log('Clustering concerns detected - escalating to user...');
-      userDecision = await handleScRNAStage5UserDecision(reviewResult, stage5Output);
+    if (autoResolution.autoResolved) {
+      // Auto-resolved!
+      const decision = autoResolution.decision;
+      finalProceed = (decision === 'ACCEPT_CLUSTERING');
+      console.log(`✓ Auto-resolved (${autoResolution.method}): ${decision}`);
+      console.log(`  ${autoResolution.reasoning}`);
+    } else {
+      // Escalate to user
+      this.log(`⚠ Escalating to user: ${autoResolution.reasoning}`);
+      userDecision = await handleScRNAStage5UserDecision(reviewResult, stage5Output, autoResolution);
 
       if (!userDecision.proceed) {
         console.log('User aborted or requested re-clustering');
@@ -658,10 +814,16 @@ export class ScRNAExecutor {
         throw new Error('Stage 2 rejected by agent');
       }
 
-      // Stage 3: Normalize + HVG (no agent)
-      const stage3Result = await this.runStage3();
-      if (!stage3Result.proceed) {
-        throw new Error('Stage 3 failed');
+      // Stage 3A: Cell Cycle Scoring (Agent Checkpoint)
+      const stage3AResult = await this.runStage3A();
+      if (!stage3AResult.proceed) {
+        throw new Error('Stage 3A failed');
+      }
+
+      // Stage 3B: Cell Cycle Regression or Skip (based on agent decision from 3A)
+      const stage3BResult = await this.runStage3B(stage3AResult.cellCycleDecision);
+      if (!stage3BResult.proceed) {
+        throw new Error('Stage 3B failed');
       }
 
       // Stage 4: PCA (Stats Agent for PC selection)

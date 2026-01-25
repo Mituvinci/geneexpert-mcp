@@ -62,6 +62,8 @@ EXAMPLES:
   .option('--gpt-role <role>', 'Role for GPT-5.2: stats, pipeline, biology (default: stats)', 'stats')
   .option('--claude-role <role>', 'Role for Claude: stats, pipeline, biology (default: pipeline)', 'pipeline')
   .option('--gemini-role <role>', 'Role for Gemini: stats, pipeline, biology (default: biology)', 'biology')
+  .option('--auto-resolve <mode>', 'Auto-resolution mode: auto, median, confidence, user (default: auto)', 'auto')
+  .option('--escalation-threshold <value>', 'Disagreement score threshold for escalation 0-1 (default: 0.6)', '0.6')
   .option('--verbose', 'Verbose output', false)
   .action(async (input, options) => {
     console.log('🧬 scRNA-seq GeneExpert Multi-Agent Analysis');
@@ -134,6 +136,8 @@ EXAMPLES:
         claudeRole: options.claudeRole,
         geminiRole: options.geminiRole
       },
+      autoResolveMode: options.autoResolve,
+      escalationThreshold: parseFloat(options.escalationThreshold),
       verbose: options.verbose
     };
 

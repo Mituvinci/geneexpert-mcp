@@ -1,8 +1,8 @@
-# PolyLLM-BioMCP : Poly-Foundational LLM Agent Orchestration for RNA-seq Upstream Intelligence
+# GeneXpert-BioMCP : Poly-Foundational LLM Agent Orchestration for RNA-seq Upstream Intelligence
 
 **Staged Multi-Agent Pipeline** where GPT-5.2, Claude Sonnet 4.5, and Gemini Pro collaborate at decision checkpoints throughout RNA-seq analysis.
 
-**Key Innovation:** Dual-pipeline architecture (bulk RNA-seq 4-stage, scRNA-seq 5-stage) with agent review checkpoints - agents validate each stage, detect issues early, and decide whether to proceed or adjust the approach.
+**Key Innovation:** Dual-pipeline architecture (bulk RNA-seq 4-stage, scRNA-seq 7-stage) with agent review checkpoints - agents validate each stage, detect issues early, and decide whether to proceed or adjust the approach.
 
 **Research Goal:** Multi-agent collaboration with user-in-loop tracking reduces errors 40%+ through staged validation and consensus-based decision making.
 
@@ -67,12 +67,13 @@ node bin/scrna_geneexpert.js analyze data/scRNA_data/pbmc_healthy_human \
   --verbose
 ```
 
-**What happens (scRNA-seq):**
+**What happens (scRNA-seq - 7 stages, 4 agent checkpoints):**
 1. Stage 1: Load + QC Metrics - Load 10x data, compute QC metrics (auto-proceed, no agents)
-2. Stage 2: QC Filtering - Agents review QC thresholds, recommend filtering parameters
-3. Stage 3: Normalize + HVG + **CELL CYCLE ANALYSIS** - SCTransform normalization, HVG selection, **cell cycle phase detection, plot saving, cell cycle effect removal, scaling, re-plotting** (auto-proceed, no agents - CRUCIAL for downstream analysis)
-4. Stage 4: PCA - Agents review PCA results, select number of PCs
-5. Stage 5: Clustering + Markers - Agents review clustering quality, marker identification
+2. Stage 2: QC Filtering - **Agent Checkpoint #1**: Recommend filtering thresholds
+3. Stage 3A: Cell Cycle Scoring - **Agent Checkpoint #2**: Detect cell cycle effects, decide REMOVE or SKIP
+4. Stage 3B: Cell Cycle Regression - Conditional execution based on 3A decision (regression or skip)
+5. Stage 4: PCA - **Agent Checkpoint #3**: Select optimal PC range
+6. Stage 5: Clustering + Markers - **Agent Checkpoint #4**: Validate clustering quality
 
 ### Two Multi-Agent Modes
 
@@ -229,7 +230,7 @@ Outputs: stage4_de_analysis/ with DE results CSV, final Excel file
 
 ---
 
-### 5-Stage Single-Cell RNA-seq Pipeline
+### 7-Stage Single-Cell RNA-seq Pipeline (4 Agent Checkpoints)
 
 **Stage 1: Load + QC Metrics**
 ```
@@ -262,61 +263,103 @@ Agent Logic:
 Outputs: seurat_stage2_filtered.rds, qc_summary_stage2.json
 ```
 
-**Stage 3: Normalize + HVG + CELL CYCLE ANALYSIS**
+**Stage 3A: Cell Cycle Scoring**
 ```
 Script Steps:
   1. SCTransform normalization
-  2. Highly Variable Gene (HVG) selection
+  2. Highly Variable Gene (HVG) selection (~2000 genes)
   3. **CELL CYCLE PHASE DETECTION** (S phase, G2M phase markers)
-  4. **SAVE CELL CYCLE PLOTS** (before removal)
-  5. **REMOVE CELL CYCLE EFFECTS** (regress out S.Score, G2M.Score)
-  6. **SCALING DATA** (scale.data slot)
-  7. **RE-PLOTTING AND SAVING** (after cell cycle correction)
+  4. Calculate correlation between PC1 and cell cycle scores
+  5. **GENERATE VISUAL OUTPUT** (cell_cycle_before.jpg/pdf)
 
-Agent Decision: NONE (auto-proceed, deterministic)
+Agent Decision: **AGENT CHECKPOINT #2**
+  - REMOVE_CELL_CYCLE: Cell cycle effects detected, regression needed
+  - SKIP_CELL_CYCLE: No significant cell cycle effects, proceed without regression
+
+Agent Logic:
+  - All 3 agents review PC-vs-cell-cycle correlation plots
+  - Detect if PC1 strongly correlates with S.Score or G2M.Score
+  - Confidence scoring: HIGH/MEDIUM/LOW for disagreement resolution
+
+Auto-Resolution:
+  - Minor disagreement: Auto-resolve using tiered escalation
+  - Major disagreement: Escalate to user
 
 CRITICAL: Cell cycle analysis is CRUCIAL for downstream clustering accuracy.
-Without cell cycle correction, cells cluster by cell cycle phase instead of biological identity.
+Without proper detection, cells may cluster by cell cycle phase instead of biological identity.
 
-Outputs: seurat_stage3_norm.rds, cell_cycle_plots.pdf
+Outputs: seurat_stage3a_scored.rds, cell_cycle_summary_stage3a.json, cell_cycle_before.jpg
+```
+
+**Stage 3B: Cell Cycle Regression or Skip**
+```
+Script Steps (Conditional Execution):
+
+  Path A (if REMOVE_CELL_CYCLE):
+    1. Regress out cell cycle effects (S.Score, G2M.Score)
+    2. Scale data (scale.data slot)
+    3. Re-run PCA to verify correction
+    4. Generate after-correction plots (cell_cycle_after.jpg/pdf)
+
+  Path B (if SKIP_CELL_CYCLE):
+    1. Scale data without regression
+    2. Skip cell cycle correction
+
+Agent Decision: NONE (auto-proceed based on Stage 3A decision)
+
+Outputs: seurat_stage3_norm.rds, cell_cycle_after.jpg (if regression applied)
 ```
 
 **Stage 4: PCA**
 ```
 Script Steps:
-  1. Run PCA on HVGs
+  1. Run PCA on HVGs (from Stage 3A)
   2. Generate elbow plot (variance explained by each PC)
   3. Calculate variance percentages for PC ranges (1-10, 1-20, 1-30)
 
-Agent Decision:
+Agent Decision: **AGENT CHECKPOINT #3**
   - USE_DEFAULT: Use default PC range (1-30)
   - SELECT_PC_RANGE: Recommend specific PC range based on elbow plot
 
 Agent Logic:
-  - GPT-5.2 (Stats): Analyze variance explained, recommend statistically optimal range
-  - Claude (Pipeline): Consider Seurat pipeline requirements
+  - All 3 agents review variance explained metrics
+  - GPT-5.2 (Stats): Statistical analysis of elbow point
+  - Claude (Pipeline): Seurat best practices
+  - Gemini (Biology): Biological complexity considerations
 
-Outputs: seurat_stage4_pca.rds, pca_variance.json, elbow_plot.pdf
+Auto-Resolution:
+  - Extract PC ranges from all agents
+  - Calculate median if minor disagreement
+  - Flag major disagreements (>10 PC difference)
+
+Outputs: seurat_stage4_pca.rds, pca_variance.json, elbow_plot.pdf/jpg
 ```
 
 **Stage 5: Clustering + Markers**
 ```
 Script Steps:
-  1. Graph-based clustering (Leiden/Louvain algorithm)
+  1. Graph-based clustering (Louvain algorithm)
   2. UMAP dimensionality reduction
   3. Find marker genes for each cluster
-  4. Generate cluster UMAP plot
+  4. Generate cluster UMAP plot (PDF + JPEG for agents)
 
-Agent Decision:
+Agent Decision: **AGENT CHECKPOINT #4**
   - ACCEPT_CLUSTERING: Clusters are biologically meaningful
   - ADJUST_RESOLUTION: Change clustering resolution parameter
   - FLAG_SUSPICIOUS: Clusters don't match expected biology
 
 Agent Logic:
   - All 3 agents review cluster quality, marker gene patterns
-  - Validate against known cell type markers (if provided)
+  - GPT-5.2 (Stats): Cluster separation quality, marker significance
+  - Claude (Pipeline): Technical clustering parameters
+  - Gemini (Biology): Biological plausibility of cell types
 
-Outputs: seurat_stage5_final.rds, cluster_summary.csv, marker_genes.csv, umap_plot.pdf
+Auto-Resolution:
+  - Categorical decision (ACCEPT/ADJUST/FLAG)
+  - Multi-category voting with confidence weights
+  - Escalate if no clear consensus
+
+Outputs: seurat_stage5_clustered.rds, markers_stage5.csv, cluster_summary.csv, umap_plot.pdf/jpg
 ```
 
 ---
@@ -372,16 +415,102 @@ GPT-5.2 (Stats) → Gemini (Biology) → Claude (Pipeline)
 
 ---
 
+### Auto-Resolution System (3-Tier Escalation)
+
+When agents disagree, GeneXpert uses a tiered escalation system to resolve conflicts intelligently:
+
+**Tier 1: Minor Disagreement (score < 0.3)**
+- Auto-resolve using median/average of agent recommendations
+- Example: PCs [25, 28, 30] → Use median 28
+- Fast resolution, no user interruption
+
+**Tier 2: Moderate Disagreement (0.3 ≤ score < 0.6)**
+- Use highest confidence agent's recommendation
+- Agents provide confidence scores: HIGH/MEDIUM/LOW
+- Trust the most confident expert
+- Example: Agent A (HIGH confidence): REMOVE, Agent B (LOW): SKIP → Use REMOVE
+
+**Tier 3: Major Disagreement (score ≥ 0.6)**
+- Escalate to user decision
+- Fundamental disagreement signals uncertainty
+- User input logged for research evaluation
+
+**Auto-Resolution Modes:**
+```bash
+# Tiered escalation (default, recommended)
+--auto-resolve auto
+
+# Always use median (fastest, no escalation)
+--auto-resolve median
+
+# Always use highest confidence agent
+--auto-resolve confidence
+
+# Always escalate to user (most conservative)
+--auto-resolve user
+```
+
+**Disagreement Scoring:**
+- Numeric decisions: Coefficient of variation (std / mean)
+- Binary decisions: Entropy-based scoring
+- Categorical decisions: Simpson diversity index
+
+**Implementation:**
+- `/src/utils/auto_resolver.js` - Core escalation logic
+- `/src/utils/consensus_helper.js` - Disagreement scoring, confidence extraction
+
+---
+
+### Role Swapping (Ablation Study Feature)
+
+GeneXpert supports flexible role assignment to test which model excels in which role:
+
+**Default Assignment:**
+- GPT-5.2 → Stats Agent
+- Claude Sonnet 4.5 → Pipeline Agent
+- Gemini 2.0 Flash → Biology Agent
+
+**Custom Role Assignment:**
+```bash
+# Swap roles for ablation study
+node bin/geneexpert.js analyze <dataset> \
+  --staged \
+  --gpt-role biology \
+  --claude-role stats \
+  --gemini-role pipeline \
+  --output results/role_swap
+
+# Test all 6 permutations (3! = 6 possible assignments)
+```
+
+**How It Works:**
+- Each agent checkpoint uses role-specific prompts
+- Prompts dynamically assigned based on `--<model>-role` flag
+- Agent responses formatted according to assigned role
+- Enables research question: "Which model is best for statistical vs biological reasoning?"
+
+**Supported Roles:**
+- `stats`: Statistical validation, threshold selection
+- `pipeline`: Technical feasibility, Seurat best practices
+- `biology`: Biological interpretation, cell type knowledge
+
+**Implementation:**
+- `/src/coordinator/orchestrator.js` - `applyRoleSwapping()` function
+- `/src/config/scrna_stage_prompts.js` - Role-specific prompt library
+
+---
+
 ## Key Features
 
 ### Implemented & Tested:
 
 1. **Dual-Pipeline Architecture with Agent Checkpoints**
-   - Bulk RNA-seq: 4-stage pipeline (Validation → Alignment → Quantification → DE)
-   - scRNA-seq: 5-stage pipeline (Load → Filter → Normalize+CellCycle → PCA → Cluster)
+   - Bulk RNA-seq: 4-stage pipeline, 4 agent checkpoints (Validation → Alignment → Quantification → DE)
+   - scRNA-seq: 7-stage pipeline, 4 agent checkpoints (Load → Filter → Cell Cycle Scoring → Cell Cycle Regression → PCA → Cluster)
    - Each stage: Generate → Execute → Parse → Format → Agent Review → Decision
    - Early issue detection (catch bad samples early, not at the end)
    - Progressive refinement (remove outliers, correct cell cycle effects)
+   - Conditional execution paths (Stage 3B branches based on 3A agent decision)
 
 2. **User Input Tracking (Research Critical)**
    - JSON logs track when user input required
@@ -426,6 +555,30 @@ GPT-5.2 (Stats) → Gemini (Biology) → Claude (Pipeline)
    - MA plot visualization with customizable thresholds, PDF + JPEG formats
    - Enhanced agent summaries with distribution statistics, top genes by p-value, classification counts
    - Agent-driven threshold adjustments based on data characteristics
+
+9. **3-Tier Auto-Resolution System**
+   - Minor disagreements (score < 0.3): Auto-resolve using median/average
+   - Moderate disagreements (0.3 ≤ score < 0.6): Use highest confidence agent
+   - Major disagreements (score ≥ 0.6): Escalate to user
+   - 4 modes: `auto` (tiered), `median` (fast), `confidence` (trust expert), `user` (conservative)
+   - Disagreement scoring: CV for numeric, entropy for binary, diversity for categorical
+   - Implementation: `/src/utils/auto_resolver.js`, `/src/utils/consensus_helper.js`
+
+10. **Role Swapping for Ablation Studies**
+   - Flexible role assignment: any model can play any role (stats/pipeline/biology)
+   - Default: GPT-5.2 (Stats), Claude (Pipeline), Gemini (Biology)
+   - Custom assignment via CLI: `--gpt-role`, `--claude-role`, `--gemini-role`
+   - Role-specific prompt library (46KB of stage-specific prompts)
+   - Enables research question: "Which model excels in which reasoning task?"
+   - All 6 role permutations supported (3! = 6 combinations)
+
+11. **Cell Cycle Analysis with Agent Decision**
+   - Stage 3A: Agents review cell cycle correlation plots, decide REMOVE or SKIP
+   - Stage 3B: Conditional execution based on 3A decision (regression vs skip)
+   - Organism-specific marker genes (human: cc.genes.updated.2019, mouse: mm.cc.genes)
+   - Correlation analysis between PC1 and S.Score/G2M.Score
+   - Before/after plots for validation
+   - Critical for preventing cell cycle-driven false clustering
 
 ---
 
@@ -520,7 +673,7 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 │   ├── executor/
 │   │   └── staged_executor.js           # 4-stage bulk RNA-seq orchestration
 │   ├── scrna_executor/
-│   │   └── scrna_executor.js            # 5-stage scRNA-seq orchestration
+│   │   └── scrna_executor.js            # 7-stage scRNA-seq orchestration
 │   ├── stages/
 │   │   ├── stage1_validation.js         # FASTQ validation
 │   │   ├── stage2_alignment.js          # Alignment + QC
@@ -529,7 +682,8 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 │   ├── scrna_stages/
 │   │   ├── stage1_load_qc.js            # Load 10x data + QC metrics
 │   │   ├── stage2_filter_qc.js          # QC filtering (agents recommend thresholds)
-│   │   ├── stage3_normalize_hvg.js      # Normalize + HVG + CELL CYCLE ANALYSIS
+│   │   ├── stage3a_cell_cycle_scoring.js    # Cell cycle scoring (Agent Checkpoint #2)
+│   │   ├── stage3b_cell_cycle_regression.js # Cell cycle regression or skip (conditional)
 │   │   ├── stage4_pca.js                # PCA (agents select PC range)
 │   │   └── stage5_cluster_markers.js    # Clustering + marker genes
 │   ├── config/
@@ -540,7 +694,9 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 │   ├── utils/
 │   │   ├── logger.js                    # JSON logging with user input tracking
 │   │   ├── user_input.js                # User decision handling
-│   │   └── llm_clients.js               # OpenAI, Anthropic, Google APIs
+│   │   ├── llm_clients.js               # OpenAI, Anthropic, Google APIs
+│   │   ├── auto_resolver.js             # 3-tier auto-resolution system
+│   │   └── consensus_helper.js          # Disagreement scoring, confidence extraction
 │   └── pipeline/                        # Old monolithic architecture (legacy)
 ├── test_stage1.js                       # Test bulk Stage 1 independently
 ├── test_stage2.js                       # Test bulk Stage 2 independently
@@ -555,16 +711,21 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 
 ## Cost Estimate
 
-### Per-Stage Agent Review:
-- 3 agents x 4 stages = 12 agent API calls per analysis
+### Bulk RNA-seq (4 Agent Checkpoints):
+- 3 agents × 4 checkpoints = 12 agent API calls per analysis
 - ~$0.01 per agent call
-- **Total agent cost: ~$0.12 per complete analysis**
+- **Total agent cost: ~$0.12 per complete bulk RNA-seq analysis**
+
+### scRNA-seq (4 Agent Checkpoints):
+- 3 agents × 4 checkpoints = 12 agent API calls per analysis
+- ~$0.01 per agent call
+- **Total agent cost: ~$0.12 per complete scRNA-seq analysis**
 
 ### Script Execution:
-- All bioinformatics tools run locally (subread-align, featureCounts, edgeR)
+- All bioinformatics tools run locally (subread-align, featureCounts, edgeR, Seurat)
 - **Execution cost: $0**
 
-**Total: ~$0.12 per RNA-seq analysis with full multi-agent validation**
+**Total: ~$0.12 per analysis with full multi-agent validation (both pipelines)**
 
 
 
@@ -642,6 +803,25 @@ tail -f results/my_analysis/stage*_log.txt
    - Measure impact of each stage's agent review
    - Evaluate error propagation in sequential mode
 
+7. **3-Tier Auto-Resolution System**
+   - Intelligent disagreement resolution without always escalating to user
+   - Tiered escalation based on disagreement severity (minor/moderate/major)
+   - Confidence-weighted voting for moderate disagreements
+   - Enables higher autonomy while maintaining safety
+   - Research question: Can intelligent auto-resolution maintain accuracy while reducing user burden?
+
+8. **Role Swapping for Model Comparison**
+   - Ablation study: Which model excels at which reasoning task?
+   - Test all role permutations (stats, pipeline, biology)
+   - Empirical comparison of GPT-5.2 vs Claude vs Gemini in different roles
+   - Research question: Is model-role alignment more important than model capability?
+
+9. **Conditional Execution Architecture**
+   - Stage 3B execution path determined by Stage 3A agent decision
+   - Cell cycle regression vs skip based on agent consensus
+   - Demonstrates adaptive pipeline with agent-driven branching
+   - Research contribution: Agent decisions shape computational workflow, not just approve/reject
+
 ---
 
 ## Evaluation Datasets
@@ -712,5 +892,6 @@ MIT
 ## Links
 
 - **GitHub:** https://github.com/Mituvinci/geneexpert-mcp
-- **Status:** Staged architecture complete with Sequential Chain mode
-- **Experiments:** 45 total (5 systems × 9 datasets) for ICML 2026
+- **Status:** Dual-pipeline architecture complete (Bulk 4-stage + scRNA 7-stage) with 4 agent checkpoints each
+- **New Features:** 3-tier auto-resolution, role swapping, conditional execution (Stage 3A/3B branching)
+- **Experiments:** 45 bulk + scRNA experiments (5 systems × 9 datasets × 2 pipelines) for ICML 2026

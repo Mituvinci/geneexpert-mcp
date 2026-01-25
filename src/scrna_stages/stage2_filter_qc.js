@@ -111,9 +111,19 @@ export function parseStage2Output(outputDir) {
 
   console.log(`[scRNA Stage 2] Filtered ${summary.cells_before} → ${summary.cells_after} cells (${summary.percent_removed}% removed)`);
 
+  // Check for QC distribution plots
+  const qcBeforeJPG = path.join(stage2Dir, 'qc_distributions_before.jpg');
+  const qcBeforePDF = path.join(stage2Dir, 'qc_distributions_before.pdf');
+  const qcAfterJPG = path.join(stage2Dir, 'qc_distributions_after.jpg');
+  const qcAfterPDF = path.join(stage2Dir, 'qc_distributions_after.pdf');
+
   return {
     ...summary,
     stage2Dir,
+    qc_before_jpg: fs.existsSync(qcBeforeJPG) ? qcBeforeJPG : null,
+    qc_before_pdf: fs.existsSync(qcBeforePDF) ? qcBeforePDF : null,
+    qc_after_jpg: fs.existsSync(qcAfterJPG) ? qcAfterJPG : null,
+    qc_after_pdf: fs.existsSync(qcAfterPDF) ? qcAfterPDF : null,
     // Initial status - will be overridden by agent
     overall_status: summary.percent_removed > 50 ? 'WARN' : 'PASS'
   };

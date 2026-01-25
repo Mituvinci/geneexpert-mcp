@@ -578,9 +578,9 @@ export async function handleScRNAStage2UserDecision(reviewResult, stage1Output) 
   console.log('');
 
   console.log('--- Dataset Summary ---');
-  console.log(`Cells: ${stage1Output.n_cells || 'unknown'}`);
-  console.log(`Median nFeature: ${stage1Output.median_nFeature || 'unknown'}`);
-  console.log(`Median %MT: ${stage1Output.median_percent_mt || 'unknown'}%`);
+  console.log(`Cells: ${stage1Output.cells_total || stage1Output.n_cells || 'unknown'}`);
+  console.log(`Median nFeature: ${stage1Output.nFeature_median || stage1Output.median_nFeature || 'unknown'}`);
+  console.log(`Median %MT: ${(stage1Output.percent_mt_median !== undefined ? stage1Output.percent_mt_median.toFixed(2) : stage1Output.median_percent_mt) || 'unknown'}%`);
   console.log('');
 
   const options = [
