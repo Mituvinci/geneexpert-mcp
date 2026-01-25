@@ -236,7 +236,10 @@ function mapCanonicalToVoteCategory(canonicalDecision, stage) {
 export function vote(responses, decisionType = 'threshold') {
   const { gpt5_2, claude, gemini } = responses;
 
-  // Detect single-agent mode (exactly 2 agents skipped)
+  // Detect single-model multi-agent mode (all responses from same model)
+  const singleModelMultiAgent = responses.singleModelMultiAgent || false;
+
+  // Detect old single-agent mode (exactly 2 agents skipped) - deprecated but kept for backward compatibility
   const skippedCount = [gpt5_2.skipped, claude.skipped, gemini.skipped].filter(Boolean).length;
   const singleAgentMode = skippedCount === 2;
 

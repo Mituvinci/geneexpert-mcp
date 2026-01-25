@@ -254,126 +254,191 @@ export async function callGemini(prompt, options = {}) {
 export async function callAllAgents(prompt, options = {}) {
   const singleAgent = options.singleAgent;
 
-  // Single-agent mode for experiments (agent performs all 3 roles with stage-specific format)
+  // Single-MODEL Multi-AGENT mode (TRUE multi-agent with one model)
+  // The same model is called 3 times with 3 different role prompts, then consensus voting applies
   if (singleAgent) {
-    console.log(`[Single-Agent Mode] Using only ${singleAgent.toUpperCase()} agent...`);
-    console.log('[Single-Agent] This agent will perform ALL roles: Statistical + Pipeline + Biological analysis');
+    console.log(`[Single-Model Multi-Agent Mode] Using ${singleAgent.toUpperCase()} as 3 independent agents...`);
+    console.log('[Single-Model Multi-Agent] Same model will play 3 roles separately:');
+    console.log('  - Agent 1: Statistical analysis (Stats role)');
+    console.log('  - Agent 2: Pipeline/Technical analysis (Pipeline role)');
+    console.log('  - Agent 3: Biological analysis (Biology role)');
+    console.log('[Single-Model Multi-Agent] Each role gets independent API call → Consensus voting applied');
     console.log('');
 
-    let result;
+    // Get role-specific prompts from options
+    const statsPrompt = options.gpt5_2_SystemPrompt;
+    const pipelinePrompt = options.claudeSystemPrompt;
+    const biologyPrompt = options.geminiSystemPrompt;
+
     if (singleAgent === 'gpt5.2' || singleAgent === 'gpt4') {
-      console.log('[GPT-5.2 Full-Stack Agent] Analyzing (Stats + Pipeline + Biology)...');
+      console.log('[GPT-5.2 Multi-Agent] Calling GPT-5.2 THREE times with different role prompts...');
+      console.log('[GPT-5.2 as Agent 1] Stats role...');
+      console.log('[GPT-5.2 as Agent 2] Pipeline role...');
+      console.log('[GPT-5.2 as Agent 3] Biology role...');
+      console.log('');
 
-      // CRITICAL FIX: Use stage-specific prompt if provided (for correct decision format)
-      // Orchestrator provides stage prompt as options.gpt5_2_SystemPrompt
-      const stagePrompt = options.gpt5_2_SystemPrompt;
-
-      if (stagePrompt) {
-        console.log('[GPT-5.2] Using stage-specific prompt (correct decision format)');
-        result = await callGPT5(prompt, {
-          systemPrompt: stagePrompt,
+      // Call GPT-5.2 THREE times in parallel with different role prompts
+      const [statsResult, pipelineResult, biologyResult] = await Promise.all([
+        callGPT5(prompt, {
+          systemPrompt: statsPrompt,
           ...options.gpt5_2_Options
-        });
-      } else {
-        // Fallback to legacy combined prompt (for non-staged usage)
-        console.log('[GPT-5.2] Using legacy combined prompt (fallback)');
-        const combinedPrompt = getSystemPrompt('gpt5.2', true);
-        result = await callGPT5(prompt, {
-          systemPrompt: combinedPrompt,
+        }),
+        callGPT5(prompt, {
+          systemPrompt: pipelinePrompt,
           ...options.gpt5_2_Options
-        });
-      }
+        }),
+        callGPT5(prompt, {
+          systemPrompt: biologyPrompt,
+          ...options.gpt5_2_Options
+        })
+      ]);
 
-      console.log('[GPT-5.2 Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
-      if (result.success && result.content) {
+      // Display results
+      console.log('[GPT-5.2 as Stats Agent] ' + (statsResult.success ? '✓ Response received' : '✗ Failed'));
+      if (statsResult.success && statsResult.content) {
         console.log('-'.repeat(60));
-        console.log(result.content);
+        console.log(statsResult.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      console.log('[GPT-5.2 as Pipeline Agent] ' + (pipelineResult.success ? '✓ Response received' : '✗ Failed'));
+      if (pipelineResult.success && pipelineResult.content) {
+        console.log('-'.repeat(60));
+        console.log(pipelineResult.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      console.log('[GPT-5.2 as Biology Agent] ' + (biologyResult.success ? '✓ Response received' : '✗ Failed'));
+      if (biologyResult.success && biologyResult.content) {
+        console.log('-'.repeat(60));
+        console.log(biologyResult.content);
         console.log('-'.repeat(60));
       }
       console.log('');
 
       return {
-        gpt5_2: result,
-        claude: { success: false, model: 'claude', content: null, skipped: true },
-        gemini: { success: false, model: 'gemini', content: null, skipped: true },
-        allSuccessful: result.success,
-        singleAgentMode: true
+        gpt5_2: statsResult,       // GPT-5.2 playing Stats role
+        claude: pipelineResult,    // GPT-5.2 playing Pipeline role
+        gemini: biologyResult,     // GPT-5.2 playing Biology role
+        allSuccessful: statsResult.success && pipelineResult.success && biologyResult.success,
+        singleModelMultiAgent: true,  // Flag for logging
+        model: 'gpt5.2'  // Track which model was used
       };
+
     } else if (singleAgent === 'claude') {
-      console.log('[Claude Full-Stack Agent] Analyzing (Stats + Pipeline + Biology + MCP Tools)...');
+      console.log('[Claude Multi-Agent] Calling Claude THREE times with different role prompts...');
+      console.log('[Claude as Agent 1] Stats role...');
+      console.log('[Claude as Agent 2] Pipeline role...');
+      console.log('[Claude as Agent 3] Biology role...');
+      console.log('');
 
-      // CRITICAL FIX: Use stage-specific prompt if provided (for correct decision format)
-      // Orchestrator provides stage prompt as options.claudeSystemPrompt
-      const stagePrompt = options.claudeSystemPrompt;
-
-      if (stagePrompt) {
-        console.log('[Claude] Using stage-specific prompt (correct decision format)');
-        result = await callClaude(prompt, {
-          systemPrompt: stagePrompt,
+      // Call Claude THREE times in parallel with different role prompts
+      const [statsResult, pipelineResult, biologyResult] = await Promise.all([
+        callClaude(prompt, {
+          systemPrompt: statsPrompt,
           ...options.claudeOptions
-        });
-      } else {
-        // Fallback to legacy combined prompt (for non-staged usage)
-        console.log('[Claude] Using legacy combined prompt (fallback)');
-        const combinedPrompt = getSystemPrompt('claude', true);
-        result = await callClaude(prompt, {
-          systemPrompt: combinedPrompt,
+        }),
+        callClaude(prompt, {
+          systemPrompt: pipelinePrompt,
           ...options.claudeOptions
-        });
-      }
+        }),
+        callClaude(prompt, {
+          systemPrompt: biologyPrompt,
+          ...options.claudeOptions
+        })
+      ]);
 
-      console.log('[Claude Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
-      if (result.success && result.content) {
+      // Display results
+      console.log('[Claude as Stats Agent] ' + (statsResult.success ? '✓ Response received' : '✗ Failed'));
+      if (statsResult.success && statsResult.content) {
         console.log('-'.repeat(60));
-        console.log(result.content);
+        console.log(statsResult.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      console.log('[Claude as Pipeline Agent] ' + (pipelineResult.success ? '✓ Response received' : '✗ Failed'));
+      if (pipelineResult.success && pipelineResult.content) {
+        console.log('-'.repeat(60));
+        console.log(pipelineResult.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      console.log('[Claude as Biology Agent] ' + (biologyResult.success ? '✓ Response received' : '✗ Failed'));
+      if (biologyResult.success && biologyResult.content) {
+        console.log('-'.repeat(60));
+        console.log(biologyResult.content);
         console.log('-'.repeat(60));
       }
       console.log('');
 
       return {
-        gpt5_2: { success: false, model: 'gpt-5.2', content: null, skipped: true },
-        claude: result,
-        gemini: { success: false, model: 'gemini', content: null, skipped: true },
-        allSuccessful: result.success,
-        singleAgentMode: true
+        gpt5_2: statsResult,       // Claude playing Stats role
+        claude: pipelineResult,    // Claude playing Pipeline role
+        gemini: biologyResult,     // Claude playing Biology role
+        allSuccessful: statsResult.success && pipelineResult.success && biologyResult.success,
+        singleModelMultiAgent: true,  // Flag for logging
+        model: 'claude'  // Track which model was used
       };
+
     } else if (singleAgent === 'gemini') {
-      console.log('[Gemini Full-Stack Agent] Analyzing (Stats + Pipeline + Biology)...');
+      console.log('[Gemini Multi-Agent] Calling Gemini THREE times with different role prompts...');
+      console.log('[Gemini as Agent 1] Stats role...');
+      console.log('[Gemini as Agent 2] Pipeline role...');
+      console.log('[Gemini as Agent 3] Biology role...');
+      console.log('');
 
-      // CRITICAL FIX: Use stage-specific prompt if provided (for correct decision format)
-      // Orchestrator provides stage prompt as options.geminiSystemPrompt
-      const stagePrompt = options.geminiSystemPrompt;
-
-      if (stagePrompt) {
-        console.log('[Gemini] Using stage-specific prompt (correct decision format)');
-        result = await callGemini(prompt, {
-          systemPrompt: stagePrompt,
+      // Call Gemini THREE times in parallel with different role prompts
+      const [statsResult, pipelineResult, biologyResult] = await Promise.all([
+        callGemini(prompt, {
+          systemPrompt: statsPrompt,
           ...options.geminiOptions
-        });
-      } else {
-        // Fallback to legacy combined prompt (for non-staged usage)
-        console.log('[Gemini] Using legacy combined prompt (fallback)');
-        const combinedPrompt = getSystemPrompt('gemini', true);
-        result = await callGemini(prompt, {
-          systemPrompt: combinedPrompt,
+        }),
+        callGemini(prompt, {
+          systemPrompt: pipelinePrompt,
           ...options.geminiOptions
-        });
-      }
+        }),
+        callGemini(prompt, {
+          systemPrompt: biologyPrompt,
+          ...options.geminiOptions
+        })
+      ]);
 
-      console.log('[Gemini Full-Stack Agent] ' + (result.success ? '✓ Response received' : '✗ Failed'));
-      if (result.success && result.content) {
+      // Display results
+      console.log('[Gemini as Stats Agent] ' + (statsResult.success ? '✓ Response received' : '✗ Failed'));
+      if (statsResult.success && statsResult.content) {
         console.log('-'.repeat(60));
-        console.log(result.content);
+        console.log(statsResult.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      console.log('[Gemini as Pipeline Agent] ' + (pipelineResult.success ? '✓ Response received' : '✗ Failed'));
+      if (pipelineResult.success && pipelineResult.content) {
+        console.log('-'.repeat(60));
+        console.log(pipelineResult.content);
+        console.log('-'.repeat(60));
+      }
+      console.log('');
+
+      console.log('[Gemini as Biology Agent] ' + (biologyResult.success ? '✓ Response received' : '✗ Failed'));
+      if (biologyResult.success && biologyResult.content) {
+        console.log('-'.repeat(60));
+        console.log(biologyResult.content);
         console.log('-'.repeat(60));
       }
       console.log('');
 
       return {
-        gpt5_2: { success: false, model: 'gpt-5.2', content: null, skipped: true },
-        claude: { success: false, model: 'claude', content: null, skipped: true },
-        gemini: result,
-        allSuccessful: result.success,
-        singleAgentMode: true
+        gpt5_2: statsResult,       // Gemini playing Stats role
+        claude: pipelineResult,    // Gemini playing Pipeline role
+        gemini: biologyResult,     // Gemini playing Biology role
+        allSuccessful: statsResult.success && pipelineResult.success && biologyResult.success,
+        singleModelMultiAgent: true,  // Flag for logging
+        model: 'gemini'  // Track which model was used
       };
     }
   }

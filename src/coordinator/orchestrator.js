@@ -396,23 +396,12 @@ Focus on biological insight and interpretation.
       singleAgent: this.singleAgent
     };
 
-    // CRITICAL: For single-agent mode, use COMBINED prompt (all 3 perspectives)
-    // For multi-agent mode, use separate prompts (one perspective each)
-    if (this.singleAgent) {
-      // Single-agent: Get combined prompt that merges all 3 perspectives
-      const combinedPrompt = getCombinedStagePrompt(stage);
-
-      // Provide combined prompt for all three agent options
-      // (only the selected agent will be called, but we structure it this way for consistency)
-      agentOptions.gpt5_2_SystemPrompt = combinedPrompt;
-      agentOptions.claudeSystemPrompt = combinedPrompt;
-      agentOptions.geminiSystemPrompt = combinedPrompt;
-    } else {
-      // Multi-agent mode: separate prompts (each agent sees only their role)
-      agentOptions.gpt5_2_SystemPrompt = stagePrompts.gpt5_2_SystemPrompt;
-      agentOptions.claudeSystemPrompt = stagePrompts.claudeSystemPrompt;
-      agentOptions.geminiSystemPrompt = stagePrompts.geminiSystemPrompt;
-    }
+    // CRITICAL: Always use role-specific prompts (for true multi-agent behavior)
+    // Single-agent mode will call the same model 3 times with different role prompts
+    // Multi-agent mode calls 3 different models with their respective role prompts
+    agentOptions.gpt5_2_SystemPrompt = stagePrompts.gpt5_2_SystemPrompt;
+    agentOptions.claudeSystemPrompt = stagePrompts.claudeSystemPrompt;
+    agentOptions.geminiSystemPrompt = stagePrompts.geminiSystemPrompt;
 
     // Add images to each agent's options if available
     if (context.images && context.images.length > 0) {
