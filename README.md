@@ -52,12 +52,74 @@ node bin/geneexpert.js analyze data/your_input_folder \
   --output results/your_output_folder
 ```
 
-**What happens (Bulk RNA-seq):**
-1. Stage 1: FASTQ Validation - Agents review file integrity and quality
-2. Stage 2: Alignment + QC - Agents review mapping rates, detect contamination
-3. Stage 3: Quantification + PCA QC - Agents review outliers, batch effects, choose DE method
-4. Stage 4: DE Analysis - Agents review differential expression results
-5. User input tracked when agents can't reach consensus (critical for research evaluation)
+**Bulk RNA-seq Pipeline Flow:**
+```
++---------------------------------------+
+|  Input: FASTQ Files                   |
++---------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 1: FASTQ Validation            |
+|  - validate_fastq.sh                  |
+|  - fastqc quality metrics             |
++---------------------------------------+
+                  |
+                  v
+    +-------------------------------+
+    |  AGENT CHECKPOINT #1          |
+    |  Decision: PASS/WARN/FAIL     |
+    +-------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 2: Alignment + QC              |
+|  - subread-align (BAM files)          |
+|  - alignment_qc_screening.R           |
++---------------------------------------+
+                  |
+                  v
+    +--------------------------------------+
+    |  AGENT CHECKPOINT #2                 |
+    |  Decision: PASS_ALL/REMOVE/ABORT     |
+    +--------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 3: Quantification + PCA/QC     |
+|  - featureCounts                      |
+|  - RPKM normalization                 |
+|  - PCA analysis                       |
++---------------------------------------+
+                  |
+                  v
+    +------------------------------------------+
+    |  AGENT CHECKPOINT #3                     |
+    |  Decisions:                              |
+    |  1. DE Method (simple/batch_effect)      |
+    |  2. Outlier Action (KEEP/REMOVE)         |
+    |  3. Batch Specification (auto/paired)    |
+    +------------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 4: Differential Expression     |
+|  - edgeR analysis                     |
+|  - merge_results.R                    |
++---------------------------------------+
+                  |
+                  v
+    +--------------------------------------+
+    |  AGENT CHECKPOINT #4                 |
+    |  Decision: APPROVE/REANALYZE         |
+    +--------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Output: DE Results + Excel Report    |
++---------------------------------------+
+```
+*User input tracked when agents can't reach consensus (critical for research evaluation)*
 
 **Single-cell RNA-seq Analysis:**
 ```bash
@@ -67,13 +129,94 @@ node bin/scrna_geneexpert.js analyze data/scRNA_data/pbmc_healthy_human \
   --verbose
 ```
 
-**What happens (scRNA-seq - 7 stages, 4 agent checkpoints):**
-1. Stage 1: Load + QC Metrics - Load 10x data, compute QC metrics (auto-proceed, no agents)
-2. Stage 2: QC Filtering - **Agent Checkpoint #1**: Recommend filtering thresholds
-3. Stage 3A: Cell Cycle Scoring - **Agent Checkpoint #2**: Detect cell cycle effects, decide REMOVE or SKIP
-4. Stage 3B: Cell Cycle Regression - Conditional execution based on 3A decision (regression or skip)
-5. Stage 4: PCA - **Agent Checkpoint #3**: Select optimal PC range
-6. Stage 5: Clustering + Markers - **Agent Checkpoint #4**: Validate clustering quality
+**scRNA-seq Pipeline Flow (7 stages, 4 agent checkpoints):**
+```
++---------------------------------------+
+|  Input: 10x Genomics Data             |
+|  (H5 / Directory / CSV)               |
++---------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 1: Load + QC Metrics           |
+|  - Load 10x data                      |
+|  - Compute QC metrics                 |
+|  - Auto-proceed (no agents)           |
++---------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 2: QC Filtering                |
+|  - Generate QC distribution plots     |
++---------------------------------------+
+                  |
+                  v
+    +----------------------------------------+
+    |  AGENT CHECKPOINT #1                   |
+    |  Decision: SET_THRESHOLDS/USE_DEFAULT  |
+    |  (nFeature_min/max, percent_mt_max)    |
+    +----------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 3A: Cell Cycle Scoring         |
+|  - SCTransform normalization          |
+|  - HVG selection                      |
+|  - Cell cycle phase detection         |
++---------------------------------------+
+                  |
+                  v
+    +----------------------------------------+
+    |  AGENT CHECKPOINT #2                   |
+    |  Decision: REMOVE_CELL_CYCLE/SKIP      |
+    |  (Review PC-cycle correlation)         |
+    +----------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 3B: Cell Cycle Regression      |
+|  - Conditional execution:             |
+|    * REMOVE: Regress out S/G2M scores |
+|    * SKIP: Scale without regression   |
+|  - Auto-proceed based on 3A decision  |
++---------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 4: PCA                         |
+|  - Run PCA on HVGs                    |
+|  - Generate elbow plot                |
++---------------------------------------+
+                  |
+                  v
+    +----------------------------------------+
+    |  AGENT CHECKPOINT #3                   |
+    |  Decision: USE_DEFAULT/SELECT_PC_RANGE |
+    |  (Select optimal # of PCs)             |
+    +----------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Stage 5: Clustering + Markers        |
+|  - Graph-based clustering             |
+|  - UMAP visualization                 |
+|  - Marker gene discovery              |
++---------------------------------------+
+                  |
+                  v
+    +-------------------------------------------+
+    |  AGENT CHECKPOINT #4                      |
+    |  Decision: ACCEPT/ADJUST_RESOLUTION/FLAG  |
+    |  (Validate cluster quality)               |
+    +-------------------------------------------+
+                  |
+                  v
++---------------------------------------+
+|  Output: Seurat Object + Clusters     |
+|  + Markers + UMAP                     |
++---------------------------------------+
+```
+*Cell cycle correction (Stage 3A/3B) is CRITICAL for proper downstream clustering*
 
 ### Two Multi-Agent Modes
 
@@ -108,45 +251,96 @@ Run all steps → Hope everything works → Debug if fails at the end
 
 **GeneExpert Staged Multi-Agent System:**
 ```
-Stage 1: FASTQ Validation
-  Generate script → Execute → Parse results → Format for agents
-  ↓
-  3 Agents Review:
-  [GPT-5.2 Stats]:    "Read depth sufficient, 15M reads/sample"
-  [Claude Pipeline]:  "File integrity good, paired-end consistent"
-  [Gemini Biology]:   "Quality scores acceptable, proceed to alignment"
-  ↓
-  Consensus: PASS (3/3 agents agree) → Proceed to Stage 2
-  ↓
-Stage 2: Alignment + Alignment QC
-  Generate script → Execute → Parse alignment QC → Format for agents
-  ↓
-  3 Agents Review:
-  [GPT-5.2 Stats]:    "Mapping rate 85% - excellent"
-  [Claude Pipeline]:  "All samples >80%, no contamination"
-  [Gemini Biology]:   "Genome match confirmed"
-  ↓
-  Consensus: PASS_ALL (keep all samples) → Proceed to Stage 3
-  ↓
-Stage 3: Quantification + PCA/QC Assessment
-  Generate script → Execute → Parse PCA/outliers/batch → Format for agents
-  ↓
-  3 Agents Review:
-  [GPT-5.2 Stats]:    "No statistical outliers, no batch effects"
-  [Claude Pipeline]:  "PCA shows good separation by condition"
-  [Gemini Biology]:   "Biological groups cluster appropriately"
-  ↓
-  Consensus: DE_Method=simpleEdger, KEEP_ALL → Proceed to Stage 4
-  ↓
-Stage 4: Differential Expression Analysis
-  Generate script → Execute → Parse DE results → Format for agents
-  ↓
-  3 Agents Review:
-  [GPT-5.2 Stats]:    "1,234 DEGs at FDR<0.05 - reasonable"
-  [Claude Pipeline]:  "LogFC range appropriate, no red flags"
-  [Gemini Biology]:   "Top genes biologically meaningful"
-  ↓
-  Consensus: APPROVE → Analysis Complete!
++---------------------------------------------------------------+
+|  Stage 1: FASTQ Validation                                    |
+|  Generate script → Execute → Parse results → Format for agents|
++---------------------------------------------------------------+
+                            |
+                            v
+              +----------------------------------+
+              |  3 Agents Review:                |
+              |  [GPT-5.2 Stats]:                |
+              |    "Read depth sufficient"       |
+              |  [Claude Pipeline]:              |
+              |    "File integrity good"         |
+              |  [Gemini Biology]:               |
+              |    "Quality acceptable"          |
+              +----------------------------------+
+                            |
+                            v
+              +----------------------------------+
+              |  Consensus: PASS (3/3 agree)     |
+              |  → Proceed to Stage 2            |
+              +----------------------------------+
+                            |
+                            v
++---------------------------------------------------------------+
+|  Stage 2: Alignment + QC                                      |
+|  Generate script → Execute → Parse QC → Format for agents     |
++---------------------------------------------------------------+
+                            |
+                            v
+              +----------------------------------+
+              |  3 Agents Review:                |
+              |  [GPT-5.2 Stats]:                |
+              |    "Mapping rate 85% excellent"  |
+              |  [Claude Pipeline]:              |
+              |    "All samples >80%, no contam" |
+              |  [Gemini Biology]:               |
+              |    "Genome match confirmed"      |
+              +----------------------------------+
+                            |
+                            v
+              +----------------------------------+
+              |  Consensus: PASS_ALL             |
+              |  → Proceed to Stage 3            |
+              +----------------------------------+
+                            |
+                            v
++---------------------------------------------------------------+
+|  Stage 3: Quantification + PCA/QC                             |
+|  Generate script → Execute → Parse PCA → Format for agents    |
++---------------------------------------------------------------+
+                            |
+                            v
+              +----------------------------------+
+              |  3 Agents Review:                |
+              |  [GPT-5.2 Stats]:                |
+              |    "No statistical outliers"     |
+              |  [Claude Pipeline]:              |
+              |    "PCA shows good separation"   |
+              |  [Gemini Biology]:               |
+              |    "Groups cluster properly"     |
+              +----------------------------------+
+                            |
+                            v
+              +----------------------------------+
+              |  Consensus: simpleEdger, KEEP_ALL|
+              |  → Proceed to Stage 4            |
+              +----------------------------------+
+                            |
+                            v
++---------------------------------------------------------------+
+|  Stage 4: Differential Expression                             |
+|  Generate script → Execute → Parse DE → Format for agents     |
++---------------------------------------------------------------+
+                            |
+                            v
+              +----------------------------------+
+              |  3 Agents Review:                |
+              |  [GPT-5.2 Stats]:                |
+              |    "1,234 DEGs at FDR<0.05"      |
+              |  [Claude Pipeline]:              |
+              |    "LogFC range appropriate"     |
+              |  [Gemini Biology]:               |
+              |    "Top genes meaningful"        |
+              +----------------------------------+
+                            |
+                            v
+              +----------------------------------+
+              |  Consensus: APPROVE              |
+              |  → Analysis Complete!            |
+              +----------------------------------+
 ```
 
 **This is TRUE staged validation:** Issues caught early, decisions made with full context, user input tracked when needed!

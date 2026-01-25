@@ -715,13 +715,17 @@ export class StagedExecutor {
       let shortLabelToFullName = {};
       if (fs.existsSync(dictionaryPath)) {
         const dictData = fs.readFileSync(dictionaryPath, 'utf-8').split('\n');
-        // Parse CSV: short_label,full_name,group
+        // Parse CSV: short_label,full_name,group (skip header row)
         for (let i = 1; i < dictData.length; i++) {
           const line = dictData[i].trim();
           if (!line) continue;
           const [shortLabel, fullName] = line.split(',');
           if (shortLabel && fullName) {
-            shortLabelToFullName[shortLabel.trim()] = fullName.trim();
+            // Remove quotes and trim
+            const cleanShortLabel = shortLabel.trim().replace(/^"|"$/g, '');
+            const cleanFullName = fullName.trim().replace(/^"|"$/g, '');
+            shortLabelToFullName[cleanShortLabel] = cleanFullName;
+            this.log(`  Loaded mapping: ${cleanShortLabel} → ${cleanFullName}`);
           }
         }
       }

@@ -423,11 +423,15 @@ export class ScRNAExecutor {
 
   /**
    * Run Stage 3A: Cell Cycle Scoring (AGENT CHECKPOINT 2)
+   * @param {boolean} forceRemoval - If true, force REMOVE_CELL_CYCLE decision (for re-clustering)
    */
-  async runStage3A() {
+  async runStage3A(forceRemoval = false) {
     console.log('');
     console.log('='.repeat(60));
     console.log('  STAGE 3A: Cell Cycle Scoring');
+    if (forceRemoval) {
+      console.log('  (FORCED CELL CYCLE REMOVAL - Re-clustering attempt)');
+    }
     console.log('='.repeat(60));
     console.log('');
 
@@ -456,7 +460,25 @@ export class ScRNAExecutor {
     // Agent review for cell cycle decision
     let cellCycleDecision = 'SKIP_CELL_CYCLE';  // Default
 
-    if (this.forceAutomation) {
+    // If forced removal (re-clustering), skip agent review
+    if (forceRemoval) {
+      this.log('FORCED REMOVAL - Skipping agent review, forcing REMOVE_CELL_CYCLE');
+      cellCycleDecision = 'REMOVE_CELL_CYCLE';
+
+      this.logger.logStageDecision(
+        '3A', 'Cell Cycle Scoring (Forced Removal)',
+        this.dataInfo, stage3AOutput,
+        {},
+        {
+          decision: cellCycleDecision,
+          confidence: 1.0,
+          votes: { approve: 0, reject: 0, uncertain: 0 },
+          reasoning: 'Forced cell cycle removal for re-clustering attempt',
+          recommendations: []
+        },
+        { proceed: true, cellCycleDecision, forced: true }
+      );
+    } else if (this.forceAutomation) {
       this.log('FORCE AUTOMATION - Using default (skip cell cycle regression)');
       cellCycleDecision = 'SKIP_CELL_CYCLE';
 
@@ -747,15 +769,32 @@ export class ScRNAExecutor {
       userDecision = await handleScRNAStage5UserDecision(reviewResult, stage5Output, autoResolution);
 
       if (!userDecision.proceed) {
-        console.log('User aborted or requested re-clustering');
-        // Store action for potential cell cycle correction
+        console.log('User aborted analysis');
         this.stageResults.stage5 = {
           output: stage5Output,
           review: reviewResult,
           proceed: false,
-          userAction: userDecision.action || 'abort'
+          userAction: 'abort'
         };
-        return { proceed: false, error: 'User aborted or requested re-analysis' };
+        return { proceed: false, error: 'User aborted analysis' };
+      }
+
+      // Check if user requested re-clustering
+      if (userDecision.action === 'recluster_cell_cycle' || userDecision.action === 'recluster_resolution') {
+        console.log(`User requested re-clustering: ${userDecision.action}`);
+        this.stageResults.stage5 = {
+          output: stage5Output,
+          review: reviewResult,
+          proceed: true,
+          reclusterAction: userDecision.action,
+          userDecision
+        };
+        return {
+          proceed: true,
+          recluster: true,
+          reclusterAction: userDecision.action,
+          output: stage5Output
+        };
       }
 
       finalProceed = userDecision.proceed;
@@ -782,6 +821,38 @@ export class ScRNAExecutor {
     console.log('');
     console.log(`Stage 5 Result: ${reviewResult.decision}`);
     return { proceed: finalProceed, output: stage5Output, review: reviewResult };
+  }
+
+  /**
+   * Helper: Adjust clustering resolution based on current results
+   * @param {number} currentResolution - Current resolution parameter
+   * @param {Object} stage5Output - Stage 5 clustering output
+   * @returns {number} - New resolution to try
+   */
+  adjustResolution(currentResolution, stage5Output) {
+    const nClusters = stage5Output.n_clusters || 0;
+    const nCells = stage5Output.n_cells || 1000;
+
+    // Heuristic: Adjust based on cluster count and cell count
+    // Target: ~10-20 cells per cluster on average
+    const avgCellsPerCluster = nCells / nClusters;
+
+    if (avgCellsPerCluster < 50) {
+      // Too many small clusters → Lower resolution
+      const newResolution = Math.max(0.1, currentResolution - 0.2);
+      console.log(`  Too many clusters (avg ${Math.round(avgCellsPerCluster)} cells/cluster)`);
+      return newResolution;
+    } else if (avgCellsPerCluster > 200) {
+      // Too few large clusters → Raise resolution
+      const newResolution = Math.min(1.5, currentResolution + 0.3);
+      console.log(`  Too few clusters (avg ${Math.round(avgCellsPerCluster)} cells/cluster)`);
+      return newResolution;
+    } else {
+      // Moderate adjustment
+      const newResolution = currentResolution + 0.1;
+      console.log(`  Trying slightly higher resolution`);
+      return Math.min(1.5, newResolution);
+    }
   }
 
   /**
@@ -815,27 +886,98 @@ export class ScRNAExecutor {
       }
 
       // Stage 3A: Cell Cycle Scoring (Agent Checkpoint)
-      const stage3AResult = await this.runStage3A();
+      let stage3AResult = await this.runStage3A();
       if (!stage3AResult.proceed) {
         throw new Error('Stage 3A failed');
       }
 
       // Stage 3B: Cell Cycle Regression or Skip (based on agent decision from 3A)
-      const stage3BResult = await this.runStage3B(stage3AResult.cellCycleDecision);
+      let stage3BResult = await this.runStage3B(stage3AResult.cellCycleDecision);
       if (!stage3BResult.proceed) {
         throw new Error('Stage 3B failed');
       }
 
       // Stage 4: PCA (Stats Agent for PC selection)
-      const stage4Result = await this.runStage4();
+      let stage4Result = await this.runStage4();
       if (!stage4Result.proceed) {
         throw new Error('Stage 4 rejected by agent');
       }
 
-      // Stage 5: Clustering + Markers (Pipeline Agent)
-      const stage5Result = await this.runStage5();
-      if (!stage5Result.proceed) {
-        throw new Error('Stage 5 rejected by agent');
+      // Stage 5: Clustering + Markers (Pipeline Agent) with re-clustering loop
+      let stage5Result = null;
+      let reclusterAttempts = 0;
+      const MAX_RECLUSTER_ATTEMPTS = 3;
+
+      while (reclusterAttempts <= MAX_RECLUSTER_ATTEMPTS) {
+        stage5Result = await this.runStage5();
+
+        if (!stage5Result.proceed) {
+          throw new Error('Stage 5 rejected by agent');
+        }
+
+        // Check if user requested re-clustering
+        if (stage5Result.recluster && reclusterAttempts < MAX_RECLUSTER_ATTEMPTS) {
+          reclusterAttempts++;
+          console.log('');
+          console.log('='.repeat(60));
+          console.log(`  RE-CLUSTERING (Attempt ${reclusterAttempts}/${MAX_RECLUSTER_ATTEMPTS})`);
+          console.log('='.repeat(60));
+          console.log('');
+
+          if (stage5Result.reclusterAction === 'recluster_cell_cycle') {
+            // Strategy 1: Go back to Stage 3A and force cell cycle removal
+            console.log('Strategy: Cell Cycle Correction');
+            console.log('  → Going back to Stage 3A');
+            console.log('  → Will force REMOVE_CELL_CYCLE');
+            console.log('  → Re-running Stages 3B → 4 → 5');
+            console.log('');
+
+            // Force cell cycle removal (override agent decision)
+            stage3AResult = await this.runStage3A(true);  // true = force removal
+            if (!stage3AResult.proceed) {
+              throw new Error('Stage 3A failed on retry');
+            }
+
+            stage3BResult = await this.runStage3B('REMOVE_CELL_CYCLE');  // Force removal
+            if (!stage3BResult.proceed) {
+              throw new Error('Stage 3B failed on retry');
+            }
+
+            stage4Result = await this.runStage4();
+            if (!stage4Result.proceed) {
+              throw new Error('Stage 4 rejected on retry');
+            }
+
+            // Loop continues to re-run Stage 5
+
+          } else if (stage5Result.reclusterAction === 'recluster_resolution') {
+            // Strategy 2: Adjust resolution and re-run Stage 5 only
+            console.log('Strategy: Adjust Resolution');
+            console.log('  → Staying at Stage 5');
+            console.log('  → Adjusting clustering resolution');
+            console.log('');
+
+            // Adjust resolution based on agent feedback
+            const currentResolution = stage5Result.output.resolution || 0.5;
+            const newResolution = this.adjustResolution(currentResolution, stage5Result.output);
+            console.log(`  Resolution: ${currentResolution} → ${newResolution}`);
+            console.log('');
+
+            // Update resolution for next iteration
+            this.config.resolution = newResolution;
+
+            // Loop continues to re-run Stage 5
+          }
+        } else {
+          // No re-clustering requested, or max attempts reached
+          if (reclusterAttempts >= MAX_RECLUSTER_ATTEMPTS && stage5Result.recluster) {
+            console.log('');
+            console.log('⚠ WARNING: Maximum re-clustering attempts reached');
+            console.log('  Proceeding with current clustering results');
+            console.log('');
+          }
+          break;  // Exit loop
+        }
       }
 
       // Success!

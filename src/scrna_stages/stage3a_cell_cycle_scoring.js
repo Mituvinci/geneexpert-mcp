@@ -58,11 +58,13 @@ export function parseStage3AOutput(outputDir) {
   const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8'));
   console.log(`[scRNA Stage 3A] Identified ${summary.n_hvgs} highly variable genes`);
 
-  // Check for cell cycle plot
-  const cellCyclePlotJPG = path.join(stage3Dir, 'cell_cycle_before.jpg');
+  // Check for cell cycle plots (separate Phase and Scores plots)
+  const cellCyclePlotPhaseJPG = path.join(stage3Dir, 'cell_cycle_phase_before.jpg');
+  const cellCyclePlotScoresJPG = path.join(stage3Dir, 'cell_cycle_scores_before.jpg');
   const cellCyclePlotPDF = path.join(stage3Dir, 'cell_cycle_before.pdf');
 
-  const cellCyclePlotExists = fs.existsSync(cellCyclePlotJPG);
+  const cellCyclePlotPhaseExists = fs.existsSync(cellCyclePlotPhaseJPG);
+  const cellCyclePlotScoresExists = fs.existsSync(cellCyclePlotScoresJPG);
 
   if (summary.cell_cycle_detected) {
     console.log('[scRNA Stage 3A] Cell cycle phases detected:');
@@ -82,8 +84,9 @@ export function parseStage3AOutput(outputDir) {
   return {
     ...summary,
     stage3Dir,
-    cell_cycle_plot_jpg: cellCyclePlotExists ? cellCyclePlotJPG : null,
-    cell_cycle_plot_pdf: cellCyclePlotExists ? cellCyclePlotPDF : null,
+    cell_cycle_plot_phase_jpg: cellCyclePlotPhaseExists ? cellCyclePlotPhaseJPG : null,
+    cell_cycle_plot_scores_jpg: cellCyclePlotScoresExists ? cellCyclePlotScoresJPG : null,
+    cell_cycle_plot_pdf: fs.existsSync(cellCyclePlotPDF) ? cellCyclePlotPDF : null,
     overall_status: 'PENDING_AGENT_REVIEW'
   };
 }

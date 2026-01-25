@@ -30,12 +30,14 @@ export function generateStage5Script(stage4Output, pcSelection, config, outputPa
   const stage4RDS = path.join(stage4Output.stage4Dir, 'seurat_stage4_pca.rds');
   const minPC = pcSelection.min_pc || 1;
   const maxPC = pcSelection.max_pc || 20;
+  const resolution = config.resolution || 0.5;  // Use custom resolution if provided
 
   scriptLines.push(`RDS_IN="${stage4RDS}"`);
   scriptLines.push(`OUTPUT_DIR="${config.output}/stage5_cluster_markers"`);
   scriptLines.push(`SCRIPTS_DIR="${SCRIPTS_PATH}"`);
   scriptLines.push(`MIN_PC=${minPC}`);
   scriptLines.push(`MAX_PC=${maxPC}`);
+  scriptLines.push(`RESOLUTION=${resolution}`);
   scriptLines.push('');
   scriptLines.push('mkdir -p "$OUTPUT_DIR"');
   scriptLines.push('');
@@ -43,7 +45,8 @@ export function generateStage5Script(stage4Output, pcSelection, config, outputPa
   scriptLines.push('echo "scRNA-seq Stage 5: Clustering + Markers"');
   scriptLines.push('echo "=========================================="');
   scriptLines.push('echo "Using PCs: $MIN_PC-$MAX_PC"');
-  scriptLines.push('Rscript "$SCRIPTS_DIR/stage5_cluster_markers.R" "$RDS_IN" "$OUTPUT_DIR" "$MIN_PC" "$MAX_PC"');
+  scriptLines.push('echo "Resolution: $RESOLUTION"');
+  scriptLines.push('Rscript "$SCRIPTS_DIR/stage5_cluster_markers.R" "$RDS_IN" "$OUTPUT_DIR" "$MIN_PC" "$MAX_PC" "$RESOLUTION"');
   scriptLines.push('echo "Stage 5 Complete!"');
   scriptLines.push('echo "Ready for agent review (clustering validation)."');
   scriptLines.push('');

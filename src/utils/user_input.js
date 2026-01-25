@@ -758,15 +758,23 @@ export async function handleScRNAStage5UserDecision(reviewResult, stage5Output) 
     };
   }
 
-  if (choice.index === 3 || (choice.index === 1 && !cellCycleConcern)) {
-    return { proceed: false, reason: 'User aborted to review manually' };
+  if (choice.index === 3) {
+    return { proceed: false, action: 'abort', reason: 'User aborted to review manually' };
   }
 
-  return {
-    proceed: choice.index === 0,
-    action: choice.index === 0 ? 'accept' : (cellCycleConcern ? 'cell_cycle_correction' : 'adjust_resolution'),
-    reason: `User decision: ${choice.value}`
-  };
+  // Handle different user choices
+  if (choice.index === 0) {
+    // PROCEED - Accept clustering
+    return { proceed: true, action: 'accept', reason: `User decision: ${choice.value}` };
+  } else if (choice.index === 1) {
+    // RE-CLUSTER or ADJUST RESOLUTION
+    const action = cellCycleConcern ? 'recluster_cell_cycle' : 'recluster_resolution';
+    return {
+      proceed: true,  // Don't abort - we want to re-run
+      action,
+      reason: `User decision: ${choice.value}`
+    };
+  }
 }
 
 /**
@@ -817,6 +825,116 @@ function checkCellCycleConcern(reviewResult) {
          allResponses.includes('proliferat');
 }
 
+/**
+ * Handle user decision for bulk RNA Stage 4 (DE Analysis)
+ */
+export async function handleStage4UserDecision(reviewResult, stage4Output, stage3Results, autoResolution) {
+  console.log('');
+  console.log('='.repeat(60));
+  console.log('  USER DECISION REQUIRED - DE Analysis Review');
+  console.log('='.repeat(60));
+  console.log('');
+
+  if (autoResolution) {
+    console.log('Auto-resolution attempted but escalated to user:');
+    console.log(`  ${autoResolution.reasoning}`);
+    console.log('');
+  }
+
+  console.log('Agents flagged concerns with the differential expression results.');
+  console.log('');
+
+  // Show agent assessments
+  console.log('--- Agent Assessments ---');
+  console.log('');
+  if (reviewResult.responses?.gpt5_2?.success) {
+    console.log('GPT-5.2 (Stats):');
+    console.log(`  ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
+    console.log('');
+  }
+  if (reviewResult.responses?.claude?.success) {
+    console.log('Claude (Pipeline):');
+    console.log(`  ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
+    console.log('');
+  }
+  if (reviewResult.responses?.gemini?.success) {
+    console.log('Gemini (Biology):');
+    console.log(`  ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
+    console.log('');
+  }
+
+  console.log('--- DE Analysis Summary ---');
+  console.log(`Total DEGs: ${stage4Output.total_degs || 0} (Up: ${stage4Output.num_degs_up || 0}, Down: ${stage4Output.num_degs_down || 0})`);
+  console.log(`FDR threshold: ${stage4Output.fdr_threshold || 0.05}`);
+  console.log(`LogFC threshold: ${stage4Output.logfc_threshold || 0.585}`);
+  console.log(`Method: ${stage4Output.de_method || 'unknown'}`);
+  console.log('');
+
+  // Check Stage 3 context for re-analysis strategy
+  const batchEffectDetected = stage3Results?.batchEffectDetected || false;
+  const outliersDetected = stage3Results?.outliersDetected || false;
+  const currentMethod = stage4Output.de_method || 'simpleEdger';
+
+  const options = [
+    'APPROVE - Accept current DE results',
+    `RE-ANALYSIS - Try different approach (${batchEffectDetected ? 'batch correction' : 'different thresholds'})`,
+    'VIEW DETAILS - Show full agent responses',
+    'ABORT - Stop and review manually'
+  ];
+
+  const choice = await askChoice('What would you like to do?', options, 0);
+
+  if (choice.index === 2) {
+    // Show full responses
+    console.log('');
+    console.log('=== Full Agent Responses ===');
+    console.log('');
+    console.log('--- GPT-5.2 ---');
+    console.log(reviewResult.responses?.gpt5_2?.content || 'No response');
+    console.log('');
+    console.log('--- Claude ---');
+    console.log(reviewResult.responses?.claude?.content || 'No response');
+    console.log('');
+    console.log('--- Gemini ---');
+    console.log(reviewResult.responses?.gemini?.content || 'No response');
+    console.log('');
+
+    const finalChoice = await askChoice('After reviewing, what would you like to do?', options.slice(0, 2).concat(['ABORT']), 0);
+
+    if (finalChoice.index === 2) {
+      return { proceed: false, action: 'abort', reason: 'User aborted after viewing details' };
+    }
+
+    return {
+      proceed: finalChoice.index === 0,
+      action: finalChoice.index === 0 ? 'approve' : 'reanalysis',
+      reason: `User decision after viewing details: ${finalChoice.value}`,
+      batchEffectDetected,
+      outliersDetected,
+      currentMethod
+    };
+  }
+
+  if (choice.index === 3) {
+    return { proceed: false, action: 'abort', reason: 'User aborted to review manually' };
+  }
+
+  if (choice.index === 0) {
+    // APPROVE
+    return { proceed: true, action: 'approve', reason: `User decision: ${choice.value}` };
+  } else {
+    // RE-ANALYSIS
+    return {
+      proceed: true,
+      action: 'reanalysis',
+      reason: `User decision: ${choice.value}`,
+      batchEffectDetected,
+      outliersDetected,
+      currentMethod
+    };
+  }
+}
+
 export default {
   askYesNo,
   askChoice,
@@ -825,6 +943,7 @@ export default {
   handleStage1UserDecision,
   handleStage2UserDecision,
   handleStage3UserDecision,
+  handleStage4UserDecision,
   confirmOutlierRemoval,
   handleScRNAStage2UserDecision,
   handleScRNAStage4UserDecision,

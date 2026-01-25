@@ -40,16 +40,20 @@ export function generateStage4Script(dataInfo, config, outputPath, stage3Result 
   const controlKeyword = config.controlKeyword || 'cont';
   const treatmentKeyword = config.treatmentKeyword || 'ips';
 
+  // Custom thresholds for re-analysis (optional)
+  const fdrThreshold = config.fdr_threshold || 0.05;
+  const logfcThreshold = config.logfc_threshold || 0.585;
+
   // Choose DE script based on Stage 3 decision
   let deScriptName;
   let deScriptArgs;
 
   if (deMethod === 'batch_effect_edger') {
     deScriptName = 'batch_effect_edgeR_v3.R';
-    deScriptArgs = `"\${STAGE3_DIR}/\${COMPARISON}.count.filtered.csv" "\${CONTROL_KEYWORD}" "\${TREATMENT_KEYWORD}" "\${BATCH_SPEC}"`;
+    deScriptArgs = `"\${STAGE3_DIR}/\${COMPARISON}.count.filtered.csv" "\${CONTROL_KEYWORD}" "\${TREATMENT_KEYWORD}" "\${BATCH_SPEC}" "\${FDR_THRESHOLD}" "\${LOGFC_THRESHOLD}"`;
   } else {
     deScriptName = 'simpleEdger3.R';
-    deScriptArgs = `"\${STAGE3_DIR}/\${COMPARISON}.count.filtered.csv" "\${CONTROL_KEYWORD}" "\${TREATMENT_KEYWORD}"`;
+    deScriptArgs = `"\${STAGE3_DIR}/\${COMPARISON}.count.filtered.csv" "\${CONTROL_KEYWORD}" "\${TREATMENT_KEYWORD}" "\${FDR_THRESHOLD}" "\${LOGFC_THRESHOLD}"`;
   }
 
   // Build script
@@ -76,6 +80,8 @@ CONTROL_KEYWORD="${controlKeyword}"
 TREATMENT_KEYWORD="${treatmentKeyword}"
 DE_METHOD="${deMethod}"
 BATCH_SPEC="${batchSpecification}"
+FDR_THRESHOLD="${fdrThreshold}"
+LOGFC_THRESHOLD="${logfcThreshold}"
 
 # Activate conda environment (disable -u temporarily to avoid conda activation errors)
 echo "[Stage 4] Activating conda environment: \${CONDA_ENV}"
@@ -100,7 +106,9 @@ echo "Treatment Keyword: \${TREATMENT_KEYWORD}"
 `;
   }
 
-  script += `echo ""
+  script += `echo "FDR Threshold: \${FDR_THRESHOLD}"
+echo "LogFC Threshold: \${LOGFC_THRESHOLD}"
+echo ""
 echo "Step 1: Run Differential Expression Analysis"
 echo "========================================"
 echo ""
@@ -441,6 +449,17 @@ export function parseStage4Output(outputDir) {
       result.overall_status = 'WARNING';
     } else {
       result.overall_status = 'SUCCESS';
+    }
+
+    // 9. Parse threshold distribution (for re-analysis agent review)
+    const thresholdDistFile = path.join(stage4Dir, 'threshold_distribution.json');
+    if (fs.existsSync(thresholdDistFile)) {
+      try {
+        const thresholdDistData = fs.readFileSync(thresholdDistFile, 'utf8');
+        result.threshold_distribution = JSON.parse(thresholdDistData);
+      } catch (error) {
+        result.warnings.push('Could not parse threshold_distribution.json');
+      }
     }
 
   } catch (error) {

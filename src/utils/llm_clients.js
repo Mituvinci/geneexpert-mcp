@@ -153,7 +153,7 @@ export async function callClaude(prompt, options = {}) {
       }
 
       return await anthropic.messages.create({
-        model: options.model || 'claude-sonnet-4-20250514',
+        model: options.model || 'claude-opus-4-5-20251101',  // Flagship model for fair comparison with GPT-5.2
         max_tokens: options.maxTokens || 4096,
         temperature: options.temperature || 0,
         system: options.systemPrompt || 'You are a bioinformatics pipeline expert. Execute workflows, manage data processing, and ensure biological correctness.',
@@ -195,7 +195,7 @@ export async function callGemini(prompt, options = {}) {
     // Wrap API call with retry logic
     const result = await retryWithBackoff(async () => {
       const model = genAI.getGenerativeModel({
-        model: options.model || 'models/gemini-2.5-flash'
+        model: options.model || 'models/gemini-pro-latest',  // Gemini Pro Latest - most recent flagship model
       });
 
       // Add system instruction as first message since systemInstruction may not be supported
@@ -231,7 +231,7 @@ export async function callGemini(prompt, options = {}) {
 
     return {
       success: true,
-      model: 'gemini-2.5-flash',
+      model: 'gemini-pro-latest',
       content: response.text(),
       usage: response.usageMetadata || null,
       raw: response
@@ -379,10 +379,31 @@ export async function callAllAgents(prompt, options = {}) {
   }
 
   // Multi-agent mode (default)
+  // Get role assignments from options (with defaults)
+  const roleAssignments = options.roleAssignments || {
+    gptRole: 'stats',
+    claudeRole: 'pipeline',
+    geminiRole: 'biology'
+  };
+
+  // Helper function to generate role label
+  const getRoleLabel = (role) => {
+    const labels = {
+      stats: 'Stats Agent',
+      pipeline: 'Pipeline Agent',
+      biology: 'Biology Agent'
+    };
+    return labels[role] || role;
+  };
+
+  const gptLabel = `GPT-5.2 (${getRoleLabel(roleAssignments.gptRole)})`;
+  const claudeLabel = `Claude Opus 4.5 (${getRoleLabel(roleAssignments.claudeRole)})`;
+  const geminiLabel = `Gemini Pro (${getRoleLabel(roleAssignments.geminiRole)})`;
+
   console.log('[Multi-Agent] Sending prompt to all 3 foundation models in parallel...');
-  console.log('[GPT-5.2 Stats Agent] Analyzing from statistical perspective...');
-  console.log('[Claude Sonnet 4 Pipeline Agent] Analyzing pipeline requirements...');
-  console.log('[Gemini Biology Agent] Analyzing biological context...');
+  console.log(`[${gptLabel}] Analyzing...`);
+  console.log(`[${claudeLabel}] Analyzing...`);
+  console.log(`[${geminiLabel}] Analyzing...`);
   console.log('');
 
   const [gpt5Result, claudeResult, geminiResult] = await Promise.all([
@@ -401,7 +422,7 @@ export async function callAllAgents(prompt, options = {}) {
   ]);
 
   // Show FULL agent responses
-  console.log('[GPT-5.2 Stats Agent] ' + (gpt5Result.success ? '✓ Response received' : '✗ Failed'));
+  console.log(`[${gptLabel}] ` + (gpt5Result.success ? '✓ Response received' : '✗ Failed'));
   if (gpt5Result.success && gpt5Result.content) {
     console.log('-'.repeat(60));
     console.log(gpt5Result.content);
@@ -409,7 +430,7 @@ export async function callAllAgents(prompt, options = {}) {
   }
   console.log('');
 
-  console.log('[Claude Sonnet 4 Pipeline Agent] ' + (claudeResult.success ? '✓ Response received' : '✗ Failed'));
+  console.log(`[${claudeLabel}] ` + (claudeResult.success ? '✓ Response received' : '✗ Failed'));
   if (claudeResult.success && claudeResult.content) {
     console.log('-'.repeat(60));
     console.log(claudeResult.content);
@@ -417,7 +438,7 @@ export async function callAllAgents(prompt, options = {}) {
   }
   console.log('');
 
-  console.log('[Gemini Biology Agent] ' + (geminiResult.success ? '✓ Response received' : '✗ Failed'));
+  console.log(`[${geminiLabel}] ` + (geminiResult.success ? '✓ Response received' : '✗ Failed'));
   if (geminiResult.success && geminiResult.content) {
     console.log('-'.repeat(60));
     console.log(geminiResult.content);
@@ -445,18 +466,39 @@ export async function callAllAgents(prompt, options = {}) {
  * Claude acts as synthesis agent with full context
  */
 export async function callAllAgentsSequential(prompt, options = {}) {
+  // Get role assignments from options (with defaults)
+  const roleAssignments = options.roleAssignments || {
+    gptRole: 'stats',
+    claudeRole: 'pipeline',
+    geminiRole: 'biology'
+  };
+
+  // Helper function to generate role label
+  const getRoleLabel = (role) => {
+    const labels = {
+      stats: 'Stats Agent',
+      pipeline: 'Pipeline Agent',
+      biology: 'Biology Agent'
+    };
+    return labels[role] || role;
+  };
+
+  const gptLabel = `GPT-5.2 (${getRoleLabel(roleAssignments.gptRole)})`;
+  const claudeLabel = `Claude Opus 4.5 (${getRoleLabel(roleAssignments.claudeRole)})`;
+  const geminiLabel = `Gemini Pro (${getRoleLabel(roleAssignments.geminiRole)})`;
+
   console.log('[Sequential Chain Mode] Calling agents in sequence: GPT-5.2 → Gemini → Claude');
   console.log('[Sequential Chain] Each agent will see previous responses for informed synthesis');
   console.log('');
 
-  // STEP 1: Stats Agent (GPT-5.2) - First assessment
-  console.log('[Step 1/3] GPT-5.2 (Stats Agent) - Statistical assessment...');
+  // STEP 1: First agent (GPT-5.2)
+  console.log(`[Step 1/3] ${gptLabel} - First assessment...`);
   const gpt5Result = await callGPT5(prompt, {
     systemPrompt: options.gpt5_2_SystemPrompt,
     ...options.gpt5_2_Options
   });
 
-  console.log('[GPT-5.2 Stats Agent] ' + (gpt5Result.success ? '✓ Response received' : '✗ Failed'));
+  console.log(`[${gptLabel}] ` + (gpt5Result.success ? '✓ Response received' : '✗ Failed'));
   if (gpt5Result.success && gpt5Result.content) {
     console.log('-'.repeat(60));
     console.log(gpt5Result.content);
@@ -464,13 +506,13 @@ export async function callAllAgentsSequential(prompt, options = {}) {
   }
   console.log('');
 
-  // STEP 2: Biology Agent (Gemini) - Receives GPT-5.2's assessment
-  console.log('[Step 2/3] Gemini (Biology Agent) - Biological interpretation...');
-  console.log('[Gemini] Receiving Stats Agent assessment for context');
+  // STEP 2: Second agent (Gemini)
+  console.log(`[Step 2/3] ${geminiLabel} - Second assessment...`);
+  console.log(`[${geminiLabel}] Receiving first agent assessment for context`);
 
   // Build augmented prompt with GPT-5.2's response
   const geminiAugmentedPrompt = gpt5Result.success
-    ? `${prompt}\n\n---\n\n**STATS AGENT ASSESSMENT (GPT-5.2):**\n\n${gpt5Result.content}\n\n---\n\nConsider the Stats Agent's statistical perspective above while providing your biological interpretation. You may agree or disagree with their assessment based on biological reasoning.`
+    ? `${prompt}\n\n---\n\n**FIRST AGENT ASSESSMENT (${gptLabel}):**\n\n${gpt5Result.content}\n\n---\n\nConsider the first agent's perspective above while providing your assessment. You may agree or disagree based on your expertise.`
     : prompt; // If GPT-5.2 failed, proceed with original prompt
 
   const geminiResult = await callGemini(geminiAugmentedPrompt, {
@@ -478,7 +520,7 @@ export async function callAllAgentsSequential(prompt, options = {}) {
     ...options.geminiOptions
   });
 
-  console.log('[Gemini Biology Agent] ' + (geminiResult.success ? '✓ Response received' : '✗ Failed'));
+  console.log(`[${geminiLabel}] ` + (geminiResult.success ? '✓ Response received' : '✗ Failed'));
   if (geminiResult.success && geminiResult.content) {
     console.log('-'.repeat(60));
     console.log(geminiResult.content);
@@ -486,9 +528,9 @@ export async function callAllAgentsSequential(prompt, options = {}) {
   }
   console.log('');
 
-  // STEP 3: Pipeline Agent (Claude) - Receives BOTH GPT-5.2 and Gemini assessments
-  console.log('[Step 3/3] Claude (Pipeline Agent) - Technical synthesis...');
-  console.log('[Claude] Receiving Stats + Biology assessments for final synthesis');
+  // STEP 3: Third agent (Claude) - Receives BOTH previous assessments
+  console.log(`[Step 3/3] ${claudeLabel} - Final synthesis...`);
+  console.log(`[${claudeLabel}] Receiving both previous assessments for synthesis`);
 
   // Build fully augmented prompt with both previous responses
   let claudeAugmentedPrompt = prompt;
@@ -497,14 +539,14 @@ export async function callAllAgentsSequential(prompt, options = {}) {
     claudeAugmentedPrompt += `\n\n---\n\n**PREVIOUS AGENT ASSESSMENTS:**\n\n`;
 
     if (gpt5Result.success) {
-      claudeAugmentedPrompt += `**1. STATS AGENT (GPT-5.2) - Statistical Perspective:**\n\n${gpt5Result.content}\n\n---\n\n`;
+      claudeAugmentedPrompt += `**1. ${gptLabel}:**\n\n${gpt5Result.content}\n\n---\n\n`;
     }
 
     if (geminiResult.success) {
-      claudeAugmentedPrompt += `**2. BIOLOGY AGENT (Gemini) - Biological Perspective:**\n\n${geminiResult.content}\n\n---\n\n`;
+      claudeAugmentedPrompt += `**2. ${geminiLabel}:**\n\n${geminiResult.content}\n\n---\n\n`;
     }
 
-    claudeAugmentedPrompt += `As the Pipeline Agent, synthesize the statistical and biological perspectives above and provide your final technical decision. Consider both assessments but make your own independent judgment based on pipeline requirements and technical feasibility.`;
+    claudeAugmentedPrompt += `As the final synthesis agent, consider both previous perspectives and provide your decision. Consider both assessments but make your own independent judgment based on your expertise (${getRoleLabel(roleAssignments.claudeRole)}).`;
   }
 
   const claudeResult = await callClaude(claudeAugmentedPrompt, {
@@ -512,7 +554,7 @@ export async function callAllAgentsSequential(prompt, options = {}) {
     ...options.claudeOptions
   });
 
-  console.log('[Claude Pipeline Agent] ' + (claudeResult.success ? '✓ Response received' : '✗ Failed'));
+  console.log(`[${claudeLabel}] ` + (claudeResult.success ? '✓ Response received' : '✗ Failed'));
   if (claudeResult.success && claudeResult.content) {
     console.log('-'.repeat(60));
     console.log(claudeResult.content);

@@ -92,6 +92,7 @@ export class Coordinator {
     const prompts = getMultiAgentPrompts(this.roleAssignments);  // Pass role assignments
     const responses = await callAllAgents(question, {
       singleAgent: this.singleAgent,
+      roleAssignments: this.roleAssignments,  // Pass role assignments for display labels
       ...prompts
     });
 
@@ -419,6 +420,9 @@ Focus on biological insight and interpretation.
       agentOptions.claudeOptions = { ...(agentOptions.claudeOptions || {}), images: context.images };
       agentOptions.geminiOptions = { ...(agentOptions.geminiOptions || {}), images: context.images };
     }
+
+    // Add role assignments for correct display labels
+    agentOptions.roleAssignments = this.roleAssignments;
 
     // Call all agents with stage-specific prompts (and images)
     // Choose parallel or sequential mode based on flag
@@ -828,6 +832,135 @@ Focus on biological insight and interpretation.
   }
 
   /**
+   * Review Stage 4 for Threshold Recommendations (Re-Analysis)
+   * Called when agents request REQUEST_REANALYSIS
+   */
+  async reviewStage4ForThresholds(stage4Output, dataInfo) {
+    this.log('[Coordinator] Requesting threshold recommendations from agents for re-analysis...');
+
+    // Format threshold distribution table
+    const dist = stage4Output.threshold_distribution || {};
+    const formattedOutput = `# Differential Expression Re-Analysis - Threshold Recommendations
+
+## Current Analysis Results
+
+**Dataset**: ${dataInfo.comparison || 'unknown'}
+**Organism**: ${dataInfo.organism || 'unknown'}
+**Current Thresholds**: FDR < ${dist.current_fdr || 0.05}, |logFC| > ${dist.current_logfc || 0.585}
+**Current DEGs Found**: ${dist.current_degs || stage4Output.total_degs || 0}
+  - Upregulated: ${stage4Output.num_degs_up || 0}
+  - Downregulated: ${stage4Output.num_degs_down || 0}
+
+## Threshold Sensitivity Analysis
+
+### FDR Thresholds (genes detected at different FDR cutoffs):
+- **FDR < 0.001**: ${dist.fdr_0_001 || 'N/A'} genes (very strict)
+- **FDR < 0.01**: ${dist.fdr_0_01 || 'N/A'} genes (strict)
+- **FDR < 0.05**: ${dist.fdr_0_05 || 'N/A'} genes ← CURRENT
+- **FDR < 0.10**: ${dist.fdr_0_10 || 'N/A'} genes (lenient)
+- **FDR < 0.20**: ${dist.fdr_0_20 || 'N/A'} genes (very lenient)
+
+### LogFC Thresholds (at FDR < 0.05):
+- **|logFC| > 0.5**: ${dist.logfc_0_5_at_fdr_0_05 || 'N/A'} genes
+- **|logFC| > 0.585**: ${dist.logfc_0_585_at_fdr_0_05 || 'N/A'} genes ← CURRENT (1.5-fold change)
+- **|logFC| > 1.0**: ${dist.logfc_1_0_at_fdr_0_05 || 'N/A'} genes (2-fold change)
+- **|logFC| > 1.5**: ${dist.logfc_1_5_at_fdr_0_05 || 'N/A'} genes (~3-fold change)
+- **|logFC| > 2.0**: ${dist.logfc_2_0_at_fdr_0_05 || 'N/A'} genes (4-fold change)
+
+## P-value Distribution
+- **Minimum p-value**: ${dist.min_pvalue ? dist.min_pvalue.toExponential(2) : 'N/A'}
+- **Median p-value**: ${dist.median_pvalue ? dist.median_pvalue.toFixed(4) : 'N/A'}
+- **% genes with p < 0.05**: ${dist.percent_p_below_0_05 || 'N/A'}%
+
+## LogFC Distribution (All Genes)
+- **Range**: ${dist.min_logfc ? dist.min_logfc.toFixed(2) : 'N/A'} to ${dist.max_logfc ? dist.max_logfc.toFixed(2) : 'N/A'}
+- **Median |logFC|**: ${dist.median_logfc ? Math.abs(dist.median_logfc).toFixed(2) : 'N/A'}
+
+## Top Expressed DEGs (Current Thresholds)
+
+### Top 5 Upregulated (with Expr=1):
+${(stage4Output.top_up_genes || []).slice(0, 5).map((g, i) =>
+  `${i + 1}. **${g.gene_symbol || g.gene_id}** (logFC: ${g.logFC.toFixed(2)}, FDR: ${g.FDR.toExponential(2)})`
+).join('\n') || 'None'}
+
+### Top 5 Downregulated (with Expr=1):
+${(stage4Output.top_down_genes || []).slice(0, 5).map((g, i) =>
+  `${i + 1}. **${g.gene_symbol || g.gene_id}** (logFC: ${g.logFC.toFixed(2)}, FDR: ${g.FDR.toExponential(2)})`
+).join('\n') || 'None'}
+
+## Your Task
+
+Based on the threshold sensitivity analysis above, recommend **optimal FDR and logFC thresholds** for re-analysis.
+
+**Consider**:
+1. **Statistical Power**: Are there too few DEGs? (underpowered → relax thresholds)
+2. **False Positives**: Are there too many DEGs? (noisy → tighten thresholds)
+3. **Biological Relevance**: Do top genes make biological sense?
+4. **Effect Size**: Is the logFC distribution meaningful?
+
+**Provide your recommendation in this format**:
+\`\`\`
+Recommended_FDR: [0.001, 0.01, 0.05, 0.10, or 0.20]
+Recommended_LogFC: [0.5, 0.585, 1.0, 1.5, or 2.0]
+Reasoning: [Brief explanation of why these thresholds are optimal]
+\`\`\`
+`;
+
+    // Call all agents
+    const responses = this.sequentialChain
+      ? await callAllAgentsSequential(formattedOutput, { singleAgent: this.singleAgent, roleAssignments: this.roleAssignments })
+      : await callAllAgents(formattedOutput, { singleAgent: this.singleAgent, roleAssignments: this.roleAssignments });
+
+    this.log(`GPT-5.2: ${responses.gpt5_2.success ? 'recommended' : 'failed'}`);
+    this.log(`Claude: ${responses.claude.success ? 'recommended' : 'failed'}`);
+    this.log(`Gemini: ${responses.gemini.success ? 'recommended' : 'failed'}`);
+
+    // Parse threshold recommendations from each agent
+    const recommendations = {
+      gpt5_2: this._parseThresholdRecommendation(responses.gpt5_2),
+      claude: this._parseThresholdRecommendation(responses.claude),
+      gemini: this._parseThresholdRecommendation(responses.gemini)
+    };
+
+    // Calculate consensus (use median for FDR, median for logFC)
+    const fdrs = [recommendations.gpt5_2.fdr, recommendations.claude.fdr, recommendations.gemini.fdr];
+    const logfcs = [recommendations.gpt5_2.logfc, recommendations.claude.logfc, recommendations.gemini.logfc];
+
+    const medianFDR = fdrs.sort((a, b) => a - b)[1];  // Middle value
+    const medianLogFC = logfcs.sort((a, b) => a - b)[1];
+
+    this.log(`[Coordinator] Threshold Consensus: FDR=${medianFDR}, logFC=${medianLogFC}`);
+
+    return {
+      fdr: medianFDR,
+      logfc: medianLogFC,
+      agentResponses: responses,
+      recommendations
+    };
+  }
+
+  /**
+   * Helper: Parse threshold recommendation from agent response
+   */
+  _parseThresholdRecommendation(agentResponse) {
+    if (!agentResponse.success || !agentResponse.content) {
+      return { fdr: 0.05, logfc: 0.585 };  // Default
+    }
+
+    const content = agentResponse.content;
+
+    // Extract FDR
+    const fdrMatch = content.match(/Recommended_FDR:\s*([\d.]+)/i);
+    const fdr = fdrMatch ? parseFloat(fdrMatch[1]) : 0.05;
+
+    // Extract logFC
+    const logfcMatch = content.match(/Recommended_LogFC:\s*([\d.]+)/i);
+    const logfc = logfcMatch ? parseFloat(logfcMatch[1]) : 0.585;
+
+    return { fdr, logfc };
+  }
+
+  /**
    * Parse Stage 4 decision to extract approval
    */
   parseStage4Decision(consensus, responses) {
@@ -965,6 +1098,7 @@ Based on these QC metrics, recommend filtering thresholds that balance:
     const prompts = applyRoleSwapping(SCRNA_STAGE_2_THRESHOLD_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
+      roleAssignments: this.roleAssignments,
       ...prompts
     };
 
@@ -973,9 +1107,11 @@ Based on these QC metrics, recommend filtering thresholds that balance:
       ? await callAllAgentsSequential(formattedOutput, agentOptions)
       : await callAllAgents(formattedOutput, agentOptions);
 
-    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
-    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
-    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+    // Dynamic role labels based on role assignments
+    const getRoleLabel = (role) => ({ stats: 'Stats', pipeline: 'Pipeline', biology: 'Biology' }[role] || role);
+    this.log(`GPT-5.2 (${getRoleLabel(this.roleAssignments.gptRole)}): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude Opus (${getRoleLabel(this.roleAssignments.claudeRole)}): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini Pro (${getRoleLabel(this.roleAssignments.geminiRole)}): ${responses.gemini.success ? 'responded' : 'failed'}`);
 
     // Parse threshold recommendations from each agent
     const thresholds = {
@@ -1084,6 +1220,7 @@ Evaluate whether the QC filtering is appropriate for this scRNA-seq dataset.
     const prompts = applyRoleSwapping(SCRNA_STAGE_2_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
+      roleAssignments: this.roleAssignments,
       ...prompts
     };
 
@@ -1092,9 +1229,11 @@ Evaluate whether the QC filtering is appropriate for this scRNA-seq dataset.
       ? await callAllAgentsSequential(formattedOutput, agentOptions)
       : await callAllAgents(formattedOutput, agentOptions);
 
-    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
-    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
-    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+    // Dynamic role labels based on role assignments
+    const getRoleLabel = (role) => ({ stats: 'Stats', pipeline: 'Pipeline', biology: 'Biology' }[role] || role);
+    this.log(`GPT-5.2 (${getRoleLabel(this.roleAssignments.gptRole)}): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude Opus (${getRoleLabel(this.roleAssignments.claudeRole)}): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini Pro (${getRoleLabel(this.roleAssignments.geminiRole)}): ${responses.gemini.success ? 'responded' : 'failed'}`);
 
     // Synthesize consensus
     const consensus = synthesizeConsensus(responses, 'scrna_stage2', null);
@@ -1129,10 +1268,10 @@ Evaluate whether the QC filtering is appropriate for this scRNA-seq dataset.
   async reviewScRNAStage3ACellCycle(stage3AOutput, dataInfo) {
     this.log('[Coordinator] Reviewing scRNA Stage 3A (Cell Cycle) with ALL 3 AGENTS...');
 
-    // Check if cell cycle plot exists
-    const cellCyclePlot = stage3AOutput.cell_cycle_plot_jpg;
+    // Check if cell cycle Phase plot exists (3-color plot showing G1/S/G2M)
+    const cellCyclePlot = stage3AOutput.cell_cycle_plot_phase_jpg;
     if (!cellCyclePlot) {
-      this.log('WARNING: No cell cycle plot found, using text-only analysis');
+      this.log('WARNING: No cell cycle Phase plot found, using text-only analysis');
     }
 
     // Format data for agents
@@ -1178,13 +1317,14 @@ No PCA correlations available (cell cycle not detected).
 
 ## Visual Evidence
 ${cellCyclePlot ? `
-**See attached image: cell_cycle_before.jpg**
-- PCA plot colored by cell cycle phase (G1, S, G2M)
-- Feature plots showing S.Score and G2M.Score gradients
+**See attached image: cell_cycle_phase_before.jpg**
+- PCA plot colored by cell cycle phase (G1=red, S=green, G2M=blue)
+- Shows spatial distribution of cells in PC1 vs PC2 space
+- Clear visualization of whether cells cluster by cell cycle phase
 
 **What to look for:**
-- Distinct clustering by phase → Strong cell cycle effect → REMOVE_CELL_CYCLE
-- Intermixed phases → Weak cell cycle effect → SKIP_CELL_CYCLE
+- Distinct clustering by phase (3 separate color groups) → Strong cell cycle effect → REMOVE_CELL_CYCLE
+- Intermixed phases (colors scattered together) → Weak cell cycle effect → SKIP_CELL_CYCLE
 ` : 'No visual plot available.'}
 
 ## Your Decision
@@ -1213,6 +1353,7 @@ ${JSON.stringify({
     const prompts = applyRoleSwapping(SCRNA_STAGE_3A_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
+      roleAssignments: this.roleAssignments,
       ...prompts
     };
 
@@ -1226,9 +1367,11 @@ ${JSON.stringify({
       ? await callAllAgentsSequential(formattedOutput, agentOptions)
       : await callAllAgents(formattedOutput, agentOptions);
 
-    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
-    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
-    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+    // Dynamic role labels based on role assignments
+    const getRoleLabel = (role) => ({ stats: 'Stats', pipeline: 'Pipeline', biology: 'Biology' }[role] || role);
+    this.log(`GPT-5.2 (${getRoleLabel(this.roleAssignments.gptRole)}): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude Opus (${getRoleLabel(this.roleAssignments.claudeRole)}): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini Pro (${getRoleLabel(this.roleAssignments.geminiRole)}): ${responses.gemini.success ? 'responded' : 'failed'}`);
 
     // Synthesize consensus
     const consensus = synthesizeConsensus(responses, 'scrna_stage3a', null);
@@ -1313,6 +1456,7 @@ Based on the variance explained, select an appropriate PC range (min_pc to max_p
     const prompts = applyRoleSwapping(SCRNA_STAGE_4_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
+      roleAssignments: this.roleAssignments,
       ...prompts
     };
 
@@ -1326,9 +1470,11 @@ Based on the variance explained, select an appropriate PC range (min_pc to max_p
       ? await callAllAgentsSequential(formattedOutput, agentOptions)
       : await callAllAgents(formattedOutput, agentOptions);
 
-    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
-    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
-    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+    // Dynamic role labels based on role assignments
+    const getRoleLabel = (role) => ({ stats: 'Stats', pipeline: 'Pipeline', biology: 'Biology' }[role] || role);
+    this.log(`GPT-5.2 (${getRoleLabel(this.roleAssignments.gptRole)}): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude Opus (${getRoleLabel(this.roleAssignments.claudeRole)}): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini Pro (${getRoleLabel(this.roleAssignments.geminiRole)}): ${responses.gemini.success ? 'responded' : 'failed'}`);
 
     // Parse PC selections from each agent
     const pcSelections = {
@@ -1452,6 +1598,7 @@ Evaluate whether the clustering is biologically and technically valid.
     const prompts = applyRoleSwapping(SCRNA_STAGE_5_PROMPTS, this.roleAssignments);
     const agentOptions = {
       singleAgent: this.singleAgent,
+      roleAssignments: this.roleAssignments,
       ...prompts
     };
 
@@ -1465,9 +1612,11 @@ Evaluate whether the clustering is biologically and technically valid.
       ? await callAllAgentsSequential(formattedOutput, agentOptions)
       : await callAllAgents(formattedOutput, agentOptions);
 
-    this.log(`GPT-5.2 (Stats): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
-    this.log(`Claude (Pipeline): ${responses.claude.success ? 'responded' : 'failed'}`);
-    this.log(`Gemini (Biology): ${responses.gemini.success ? 'responded' : 'failed'}`);
+    // Dynamic role labels based on role assignments
+    const getRoleLabel = (role) => ({ stats: 'Stats', pipeline: 'Pipeline', biology: 'Biology' }[role] || role);
+    this.log(`GPT-5.2 (${getRoleLabel(this.roleAssignments.gptRole)}): ${responses.gpt5_2.success ? 'responded' : 'failed'}`);
+    this.log(`Claude Opus (${getRoleLabel(this.roleAssignments.claudeRole)}): ${responses.claude.success ? 'responded' : 'failed'}`);
+    this.log(`Gemini Pro (${getRoleLabel(this.roleAssignments.geminiRole)}): ${responses.gemini.success ? 'responded' : 'failed'}`);
 
     // Synthesize consensus
     const consensus = synthesizeConsensus(responses, 'scrna_stage5', null);
