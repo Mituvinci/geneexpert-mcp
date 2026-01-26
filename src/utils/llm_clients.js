@@ -168,7 +168,7 @@ export async function callClaude(prompt, options = {}) {
 
     return {
       success: true,
-      model: 'claude-sonnet-4',
+      model: response.model || options.model || 'claude-opus-4-5-20251101',
       content: response.content[0].text,
       usage: response.usage,
       raw: response

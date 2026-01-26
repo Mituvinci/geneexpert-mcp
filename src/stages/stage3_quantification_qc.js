@@ -89,17 +89,40 @@ echo "Step 1: Feature Counts (Quantification)"
 echo "========================================"
 echo ""
 
-# Run featureCounts
-Rscript \${SCRIPTS_PATH}/${featureCountsScript} \\
-  "\${GENOME_BUILD}" \\
-  "\${COMPARISON}" \\
-  "\${CONTROL_KEYWORD}" \\
-  "\${TREATMENT_KEYWORD}" \\
-  "\${BAM_DIR}"/*.bam
+# OPTIMIZATION: Check if count matrix already exists in BAM directory (from previous run)
+# featureCounts is deterministic, so we can reuse existing count files to save time
+EXISTING_COUNT_FILE="\${BAM_DIR}/\${COMPARISON}.count.csv"
+if [ -f "\${EXISTING_COUNT_FILE}" ]; then
+  echo "[Stage 3] Found existing count matrix: \${EXISTING_COUNT_FILE}"
+  echo "[Stage 3] Copying existing count file (deterministic, no need to regenerate)"
+  cp "\${EXISTING_COUNT_FILE}" "\${OUTPUT_DIR}/\${COMPARISON}.count.csv"
 
-if [ $? -ne 0 ]; then
-  echo "ERROR: featureCounts failed"
-  exit 2
+  if [ $? -ne 0 ]; then
+    echo "WARNING: Failed to copy existing count file, will regenerate"
+    # Fall through to run featureCounts
+  else
+    echo "[Stage 3] ✓ Count matrix copied successfully, skipping featureCounts"
+    # Skip featureCounts since we copied the file
+    echo "" > /dev/null  # Placeholder to maintain script structure
+  fi
+fi
+
+# Run featureCounts only if count file doesn't exist yet
+if [ ! -f "\${OUTPUT_DIR}/\${COMPARISON}.count.csv" ]; then
+  echo "[Stage 3] Running featureCounts to generate count matrix..."
+  Rscript \${SCRIPTS_PATH}/${featureCountsScript} \\
+    "\${GENOME_BUILD}" \\
+    "\${COMPARISON}" \\
+    "\${CONTROL_KEYWORD}" \\
+    "\${TREATMENT_KEYWORD}" \\
+    "\${BAM_DIR}"/*.bam
+
+  if [ $? -ne 0 ]; then
+    echo "ERROR: featureCounts failed"
+    exit 2
+  fi
+else
+  echo "[Stage 3] Count matrix already exists, skipping featureCounts"
 fi
 
 echo ""

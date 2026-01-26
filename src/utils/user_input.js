@@ -170,9 +170,10 @@ export async function askMultiSelect(question, items) {
  * Display agent responses and ask for user decision on Stage 1
  * @param {Object} reviewResult - Result from coordinator.reviewStage1Output()
  * @param {Object} stage1Output - Parsed stage 1 output
+ * @param {Object} config - Configuration object with singleAgent info
  * @returns {Promise<{proceed: boolean, reason: string}>}
  */
-export async function handleStage1UserDecision(reviewResult, stage1Output) {
+export async function handleStage1UserDecision(reviewResult, stage1Output, config = {}) {
   console.log('');
   console.log('='.repeat(60));
   console.log('  USER DECISION REQUIRED');
@@ -181,19 +182,33 @@ export async function handleStage1UserDecision(reviewResult, stage1Output) {
   console.log('The agents could not reach a clear consensus on Stage 1 results.');
   console.log('');
 
+  // Helper to get display name for agent
+  const getAgentDisplayName = (agentKey, modelStr) => {
+    if (config.singleAgent) {
+      // Single-agent mode: show model name with role
+      const modelName = getModelDisplayName(modelStr);
+      const roleMap = { gpt5_2: 'Statistics', claude: 'Pipeline', gemini: 'Biology' };
+      return `${modelName} (Role: ${roleMap[agentKey]})`;
+    } else {
+      // Multi-agent mode: use traditional names
+      const defaultNames = { gpt5_2: 'GPT-5.2 (Stats)', claude: 'Claude (Pipeline)', gemini: 'Gemini (Biology)' };
+      return defaultNames[agentKey];
+    }
+  };
+
   // Show what each agent said
   console.log('--- Agent Recommendations ---');
   if (reviewResult.responses.gpt5_2.success) {
     const gptResponse = reviewResult.responses.gpt5_2.content;
-    console.log(`GPT-5.2 (Stats): ${extractDecisionSummary(gptResponse)}`);
+    console.log(`${getAgentDisplayName('gpt5_2', reviewResult.responses.gpt5_2.model)}: ${extractDecisionSummary(gptResponse)}`);
   }
   if (reviewResult.responses.claude.success) {
     const claudeResponse = reviewResult.responses.claude.content;
-    console.log(`Claude (Pipeline): ${extractDecisionSummary(claudeResponse)}`);
+    console.log(`${getAgentDisplayName('claude', reviewResult.responses.claude.model)}: ${extractDecisionSummary(claudeResponse)}`);
   }
   if (reviewResult.responses.gemini.success) {
     const geminiResponse = reviewResult.responses.gemini.content;
-    console.log(`Gemini (Biology): ${extractDecisionSummary(geminiResponse)}`);
+    console.log(`${getAgentDisplayName('gemini', reviewResult.responses.gemini.model)}: ${extractDecisionSummary(geminiResponse)}`);
   }
   console.log('');
 
@@ -252,9 +267,10 @@ export async function handleStage1UserDecision(reviewResult, stage1Output) {
  * Display agent responses and ask for user decision on Stage 2
  * @param {Object} reviewResult - Result from coordinator.reviewStage2Output()
  * @param {Object} stage2Output - Parsed stage 2 output
+ * @param {Object} config - Configuration object with singleAgent info
  * @returns {Promise<{proceed: boolean, samplesToRemove: string[], reason: string}>}
  */
-export async function handleStage2UserDecision(reviewResult, stage2Output) {
+export async function handleStage2UserDecision(reviewResult, stage2Output, config = {}) {
   console.log('');
   console.log('='.repeat(60));
   console.log('  USER DECISION REQUIRED');
@@ -271,28 +287,42 @@ export async function handleStage2UserDecision(reviewResult, stage2Output) {
   console.log(`  FAIL samples: ${stage2Output.failed_samples?.length || 0}`);
   console.log('');
 
-  // Show problematic samples
+  // Show problematic samples - FIX: Extract sample names properly
   const problematicSamples = [...(stage2Output.warned_samples || []), ...(stage2Output.failed_samples || [])];
   if (problematicSamples.length > 0) {
     console.log('--- Problematic Samples ---');
-    problematicSamples.forEach(s => {
-      const rate = stage2Output.sample_details?.[s]?.mapping_rate;
-      const status = stage2Output.sample_details?.[s]?.status;
-      console.log(`  ${s}: ${rate ? (rate * 100).toFixed(1) + '%' : 'N/A'} (${status || 'unknown'})`);
+    problematicSamples.forEach(sampleItem => {
+      // Handle both string and object formats
+      const sampleName = typeof sampleItem === 'string' ? sampleItem : (sampleItem.sample || sampleItem.name || String(sampleItem));
+      const rate = stage2Output.sample_details?.[sampleName]?.mapping_rate;
+      const status = stage2Output.sample_details?.[sampleName]?.status;
+      console.log(`  ${sampleName}: ${rate ? (rate * 100).toFixed(1) + '%' : 'N/A'} (${status || 'unknown'})`);
     });
     console.log('');
   }
 
+  // Helper to get display name for agent
+  const getAgentDisplayName = (agentKey, modelStr) => {
+    if (config.singleAgent) {
+      const modelName = getModelDisplayName(modelStr);
+      const roleMap = { gpt5_2: 'Statistics', claude: 'Pipeline', gemini: 'Biology' };
+      return `${modelName} (Role: ${roleMap[agentKey]})`;
+    } else {
+      const defaultNames = { gpt5_2: 'GPT-5.2 (Stats)', claude: 'Claude (Pipeline)', gemini: 'Gemini (Biology)' };
+      return defaultNames[agentKey];
+    }
+  };
+
   // Show agent recommendations
   console.log('--- Agent Recommendations ---');
   if (reviewResult.responses.gpt5_2.success) {
-    console.log(`GPT-5.2 (Stats): ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
+    console.log(`${getAgentDisplayName('gpt5_2', reviewResult.responses.gpt5_2.model)}: ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
   }
   if (reviewResult.responses.claude.success) {
-    console.log(`Claude (Pipeline): ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
+    console.log(`${getAgentDisplayName('claude', reviewResult.responses.claude.model)}: ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
   }
   if (reviewResult.responses.gemini.success) {
-    console.log(`Gemini (Biology): ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
+    console.log(`${getAgentDisplayName('gemini', reviewResult.responses.gemini.model)}: ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
   }
   console.log('');
 
@@ -364,9 +394,10 @@ export async function handleStage2UserDecision(reviewResult, stage2Output) {
  * Display agent responses and ask for user decision on Stage 3 (PCA/QC)
  * @param {Object} reviewResult - Result from coordinator.reviewStage3Output()
  * @param {Object} stage3Output - Parsed stage 3 output
+ * @param {Object} config - Configuration object with singleAgent info
  * @returns {Promise<{proceed: boolean, samplesToRemove: string[], useBatchCorrection: boolean, reason: string}>}
  */
-export async function handleStage3UserDecision(reviewResult, stage3Output) {
+export async function handleStage3UserDecision(reviewResult, stage3Output, config = {}) {
   console.log('');
   console.log('='.repeat(60));
   console.log('  USER DECISION REQUIRED');
@@ -390,16 +421,28 @@ export async function handleStage3UserDecision(reviewResult, stage3Output) {
   console.log(`  QC Exit Code: ${stage3Output.exit_code || 'N/A'}`);
   console.log('');
 
+  // Helper to get display name for agent
+  const getAgentDisplayName = (agentKey, modelStr) => {
+    if (config.singleAgent) {
+      const modelName = getModelDisplayName(modelStr);
+      const roleMap = { gpt5_2: 'Statistics', claude: 'Pipeline', gemini: 'Biology' };
+      return `${modelName} (Role: ${roleMap[agentKey]})`;
+    } else {
+      const defaultNames = { gpt5_2: 'GPT-5.2 (Stats)', claude: 'Claude (Pipeline)', gemini: 'Gemini (Biology)' };
+      return defaultNames[agentKey];
+    }
+  };
+
   // Show agent recommendations
   console.log('--- Agent Recommendations ---');
   if (reviewResult.responses.gpt5_2.success) {
-    console.log(`GPT-5.2 (Stats): ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
+    console.log(`${getAgentDisplayName('gpt5_2', reviewResult.responses.gpt5_2.model)}: ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
   }
   if (reviewResult.responses.claude.success) {
-    console.log(`Claude (Pipeline): ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
+    console.log(`${getAgentDisplayName('claude', reviewResult.responses.claude.model)}: ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
   }
   if (reviewResult.responses.gemini.success) {
-    console.log(`Gemini (Biology): ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
+    console.log(`${getAgentDisplayName('gemini', reviewResult.responses.gemini.model)}: ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
   }
   console.log('');
 
@@ -468,6 +511,19 @@ export async function handleStage3UserDecision(reviewResult, stage3Output) {
     useBatchCorrection: choice.index === 1,
     reason: `User decision: ${choice.value}`
   };
+}
+
+/**
+ * Get display name for model (for single-agent mode)
+ * @param {string} modelStr - Model string (e.g., 'gpt-4o', 'claude-opus-4-5')
+ * @returns {string} - Display name
+ */
+function getModelDisplayName(modelStr) {
+  if (!modelStr) return 'Unknown';
+  if (modelStr.includes('gpt')) return 'GPT-5.2';
+  if (modelStr.includes('claude')) return 'Claude';
+  if (modelStr.includes('gemini')) return 'Gemini';
+  return modelStr;
 }
 
 /**
@@ -752,8 +808,8 @@ export async function handleScRNAStage5UserDecision(reviewResult, stage5Output) 
 
     const finalChoice = await askChoice('After reviewing, what would you like to do?', options.slice(0, 2), 0);
     return {
-      proceed: finalChoice.index === 0,
-      action: finalChoice.index === 0 ? 'accept' : (cellCycleConcern ? 'cell_cycle_correction' : 'adjust_resolution'),
+      proceed: true,  // Always true - either accept or re-cluster (not abort)
+      action: finalChoice.index === 0 ? 'accept' : (cellCycleConcern ? 'recluster_cell_cycle' : 'recluster_resolution'),
       reason: `User decision after viewing details: ${finalChoice.value}`
     };
   }
@@ -828,7 +884,7 @@ function checkCellCycleConcern(reviewResult) {
 /**
  * Handle user decision for bulk RNA Stage 4 (DE Analysis)
  */
-export async function handleStage4UserDecision(reviewResult, stage4Output, stage3Results, autoResolution) {
+export async function handleStage4UserDecision(reviewResult, stage4Output, stage3Results, autoResolution, config = {}) {
   console.log('');
   console.log('='.repeat(60));
   console.log('  USER DECISION REQUIRED - DE Analysis Review');
@@ -844,21 +900,33 @@ export async function handleStage4UserDecision(reviewResult, stage4Output, stage
   console.log('Agents flagged concerns with the differential expression results.');
   console.log('');
 
+  // Helper to get display name for agent
+  const getAgentDisplayName = (agentKey, modelStr) => {
+    if (config.singleAgent) {
+      const modelName = getModelDisplayName(modelStr);
+      const roleMap = { gpt5_2: 'Statistics', claude: 'Pipeline', gemini: 'Biology' };
+      return `${modelName} (Role: ${roleMap[agentKey]})`;
+    } else {
+      const defaultNames = { gpt5_2: 'GPT-5.2 (Stats)', claude: 'Claude (Pipeline)', gemini: 'Gemini (Biology)' };
+      return defaultNames[agentKey];
+    }
+  };
+
   // Show agent assessments
   console.log('--- Agent Assessments ---');
   console.log('');
   if (reviewResult.responses?.gpt5_2?.success) {
-    console.log('GPT-5.2 (Stats):');
+    console.log(`${getAgentDisplayName('gpt5_2', reviewResult.responses.gpt5_2.model)}:`);
     console.log(`  ${extractDecisionSummary(reviewResult.responses.gpt5_2.content)}`);
     console.log('');
   }
   if (reviewResult.responses?.claude?.success) {
-    console.log('Claude (Pipeline):');
+    console.log(`${getAgentDisplayName('claude', reviewResult.responses.claude.model)}:`);
     console.log(`  ${extractDecisionSummary(reviewResult.responses.claude.content)}`);
     console.log('');
   }
   if (reviewResult.responses?.gemini?.success) {
-    console.log('Gemini (Biology):');
+    console.log(`${getAgentDisplayName('gemini', reviewResult.responses.gemini.model)}:`);
     console.log(`  ${extractDecisionSummary(reviewResult.responses.gemini.content)}`);
     console.log('');
   }

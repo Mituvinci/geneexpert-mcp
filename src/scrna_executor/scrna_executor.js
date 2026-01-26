@@ -211,7 +211,9 @@ export class ScRNAExecutor {
       organism: this.organism,
       datasetName: this.datasetName,
       singleAgent: this.singleAgent,
-      forceAutomation: this.forceAutomation
+      forceAutomation: this.forceAutomation,
+      sequentialChain: this.sequentialChain,  // CRITICAL: Pass sequential chain flag to logger
+      roleAssignments: this.roleAssignments  // CRITICAL BUG FIX: Pass role assignments to logger!
     };
 
     // Initialize logger

@@ -388,8 +388,32 @@ Focus on biological insight and interpretation.
     this.log(`Consulting agents for Stage ${stage} review...`);
     if (decision_id) this.log(`Decision ID: ${decision_id}`);
 
+    // ROLE SWAPPING DEBUG: Show current role assignments
+    console.log('[ROLE SWAPPING] Current agent role assignments:');
+    console.log(`  GPT-5.2  → ${this.roleAssignments.gptRole.toUpperCase()} Agent`);
+    console.log(`  Claude   → ${this.roleAssignments.claudeRole.toUpperCase()} Agent`);
+    console.log(`  Gemini   → ${this.roleAssignments.geminiRole.toUpperCase()} Agent`);
+    console.log('');
+
     // Get stage-specific prompts (with role assignments for ablation study)
     const stagePrompts = getStagePrompts(stage, this.roleAssignments);
+
+    // ROLE SWAPPING DEBUG: Verify prompts were swapped correctly
+    const gptPromptType = stagePrompts.gpt5_2_SystemPrompt.includes('STATISTICS') ? 'STATISTICS' :
+                           stagePrompts.gpt5_2_SystemPrompt.includes('PIPELINE') ? 'PIPELINE' :
+                           stagePrompts.gpt5_2_SystemPrompt.includes('BIOLOGY') ? 'BIOLOGY' : 'UNKNOWN';
+    const claudePromptType = stagePrompts.claudeSystemPrompt.includes('STATISTICS') ? 'STATISTICS' :
+                             stagePrompts.claudeSystemPrompt.includes('PIPELINE') ? 'PIPELINE' :
+                             stagePrompts.claudeSystemPrompt.includes('BIOLOGY') ? 'BIOLOGY' : 'UNKNOWN';
+    const geminiPromptType = stagePrompts.geminiSystemPrompt.includes('STATISTICS') ? 'STATISTICS' :
+                             stagePrompts.geminiSystemPrompt.includes('PIPELINE') ? 'PIPELINE' :
+                             stagePrompts.geminiSystemPrompt.includes('BIOLOGY') ? 'BIOLOGY' : 'UNKNOWN';
+
+    console.log('[ROLE SWAPPING] Prompts assigned to each agent:');
+    console.log(`  GPT-5.2  received: ${gptPromptType} prompt`);
+    console.log(`  Claude   received: ${claudePromptType} prompt`);
+    console.log(`  Gemini   received: ${geminiPromptType} prompt`);
+    console.log('');
 
     // Build options
     const agentOptions = {

@@ -236,6 +236,8 @@ export class StagedExecutor {
       treatmentKeyword: this.treatmentKeyword,
       singleAgent: this.singleAgent,
       forceAutomation: this.forceAutomation,
+      sequentialChain: this.sequentialChain,  // CRITICAL: Pass sequential chain flag to logger
+      roleAssignments: this.roleAssignments,  // CRITICAL BUG FIX: Pass role assignments to logger!
       useExistingFastqc: this.useExistingFastqc,  // FIX: Use preprocessed FastQC
       useExistingBam: this.useExistingBam  // FIX: Use preprocessed BAM
     };
@@ -356,7 +358,7 @@ export class StagedExecutor {
     let userDecision = null;
 
     if (reviewResult.consensus.decision.toLowerCase().includes('user_decision')) {
-      userDecision = await handleStage1UserDecision(reviewResult, stage1Output);
+      userDecision = await handleStage1UserDecision(reviewResult, stage1Output, this.config);
       finalProceed = userDecision.proceed;
       this.log(`User decided: ${finalProceed ? 'PROCEED' : 'ABORT'}`);
     }
@@ -414,22 +416,23 @@ export class StagedExecutor {
         fs.mkdirSync(targetQcDir, { recursive: true });
       }
 
-      // Copy BAM files
-      this.log('Copying BAM files from preprocessing...');
+      // Copy all files from preprocessing (BAM files, count.csv, logs, etc.)
+      this.log('Copying Stage 2 outputs from preprocessing...');
       try {
         const { execSync } = await import('child_process');
-        execSync(`cp -r "${sourceDir}"/*.bam "${targetDir}"/`, { stdio: 'inherit' });
-        execSync(`cp -r "${sourceDir}"/*.log "${targetDir}"/`, { stdio: 'inherit' });
 
-        // Copy alignment QC if exists
+        // Copy everything from bam_files directory (BAMs, count.csv, logs, etc.)
+        execSync(`cp -r "${sourceDir}"/* "${targetDir}"/`, { stdio: 'inherit' });
+
+        // Copy alignment QC
         const sourceQcDir = path.join(path.dirname(sourceDir), 'alignment_qc');
         if (fs.existsSync(sourceQcDir)) {
           execSync(`cp -r "${sourceQcDir}"/* "${targetQcDir}"/`, { stdio: 'inherit' });
         }
 
-        this.log('BAM files and QC outputs copied successfully');
+        this.log('Stage 2 outputs copied successfully');
       } catch (error) {
-        console.error(`Failed to copy BAM files: ${error.message}`);
+        console.error(`Failed to copy Stage 2 outputs: ${error.message}`);
         return { proceed: false, error: error.message };
       }
     } else {
@@ -477,7 +480,7 @@ export class StagedExecutor {
     let userDecision = null;
 
     if (reviewResult.consensus.decision.toLowerCase().includes('user_decision')) {
-      userDecision = await handleStage2UserDecision(reviewResult, stage2Output);
+      userDecision = await handleStage2UserDecision(reviewResult, stage2Output, this.config);
       finalProceed = userDecision.proceed;
       finalSamplesToRemove = userDecision.samplesToRemove || [];
       this.log(`User decided: ${finalProceed ? 'PROCEED' : 'ABORT'}`);
@@ -610,7 +613,7 @@ export class StagedExecutor {
     let userDecision = null;
 
     if (reviewResult.consensus.decision.toLowerCase().includes('user_decision')) {
-      userDecision = await handleStage3UserDecision(reviewResult, stage3Output);
+      userDecision = await handleStage3UserDecision(reviewResult, stage3Output, this.config);
       finalProceed = userDecision.proceed;
       finalDeMethod = userDecision.deMethod || finalDeMethod;
       finalBatchSpecification = userDecision.batchSpecification || finalBatchSpecification;

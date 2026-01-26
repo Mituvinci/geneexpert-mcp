@@ -108,9 +108,53 @@ class Logger {
     conversation += `Description: ${step.description}\n`;
     conversation += `${'='.repeat(80)}\n\n`;
 
+    // Detect if single-agent mode (all agents have same model)
+    const isSingleAgent = this.config.singleAgent;
+
+    // Get role assignments (default or swapped for ablation study)
+    const roleAssignments = this.config.roleAssignments || {
+      gptRole: 'stats',
+      claudeRole: 'pipeline',
+      geminiRole: 'biology'
+    };
+
+    // ROLE SWAPPING VERIFICATION: Add role assignments to log header
+    conversation += `[ROLE SWAPPING] Agent-to-Role Assignments:\n`;
+    conversation += `  GPT-5.2  → ${roleAssignments.gptRole.toUpperCase()} Agent\n`;
+    conversation += `  Claude   → ${roleAssignments.claudeRole.toUpperCase()} Agent\n`;
+    conversation += `  Gemini   → ${roleAssignments.geminiRole.toUpperCase()} Agent\n`;
+    conversation += `\n`;
+
+    // Helper function to format model name for display
+    const getModelDisplayName = (modelStr) => {
+      if (!modelStr) return 'Unknown';
+      if (modelStr.includes('gpt')) return 'GPT-5.2';
+      if (modelStr.includes('claude')) return 'Claude';
+      if (modelStr.includes('gemini')) return 'Gemini';
+      return modelStr;
+    };
+
+    // Helper to get role display name
+    const getRoleDisplayName = (role) => {
+      const roleMap = { stats: 'Statistics', pipeline: 'Pipeline', biology: 'Biology' };
+      return roleMap[role] || role;
+    };
+
+    // Helper to get agent name with role
+    const getAgentHeader = (agentKey, role) => {
+      const agentNameMap = { gpt5_2: 'GPT-5.2', claude: 'Claude', gemini: 'Gemini' };
+      const roleNameMap = { stats: 'Stats', pipeline: 'Pipeline', biology: 'Biology' };
+      return `${roleNameMap[role]} Agent (${agentNameMap[agentKey]})`;
+    };
+
     // Log each agent's full response (using ASCII box characters)
     if (agents.gpt5_2) {
-      conversation += `+-- Stats Agent (GPT-5.2) ${'-'.repeat(39)}+\n`;
+      const modelName = getModelDisplayName(agents.gpt5_2.model);
+      const header = isSingleAgent
+        ? `+-- ${modelName} (Role: ${getRoleDisplayName(roleAssignments.gptRole)}) `
+        : `+-- ${getAgentHeader('gpt5_2', roleAssignments.gptRole)} `;
+      const padding = 66 - header.length;
+      conversation += header + '-'.repeat(padding) + '+\n';
       conversation += `| Model: ${agents.gpt5_2.model}\n`;
       conversation += `| Status: ${agents.gpt5_2.success ? 'Success' : 'Failed'}\n`;
       conversation += `+${'-'.repeat(64)}+\n\n`;
@@ -118,7 +162,12 @@ class Logger {
     }
 
     if (agents.claude) {
-      conversation += `+-- Pipeline Agent (Claude) ${'-'.repeat(37)}+\n`;
+      const modelName = getModelDisplayName(agents.claude.model);
+      const header = isSingleAgent
+        ? `+-- ${modelName} (Role: ${getRoleDisplayName(roleAssignments.claudeRole)}) `
+        : `+-- ${getAgentHeader('claude', roleAssignments.claudeRole)} `;
+      const padding = 66 - header.length;
+      conversation += header + '-'.repeat(padding) + '+\n';
       conversation += `| Model: ${agents.claude.model}\n`;
       conversation += `| Status: ${agents.claude.success ? 'Success' : 'Failed'}\n`;
       conversation += `+${'-'.repeat(64)}+\n\n`;
@@ -126,7 +175,12 @@ class Logger {
     }
 
     if (agents.gemini) {
-      conversation += `+-- Biology Agent (Gemini) ${'-'.repeat(38)}+\n`;
+      const modelName = getModelDisplayName(agents.gemini.model);
+      const header = isSingleAgent
+        ? `+-- ${modelName} (Role: ${getRoleDisplayName(roleAssignments.geminiRole)}) `
+        : `+-- ${getAgentHeader('gemini', roleAssignments.geminiRole)} `;
+      const padding = 66 - header.length;
+      conversation += header + '-'.repeat(padding) + '+\n';
       conversation += `| Model: ${agents.gemini.model}\n`;
       conversation += `| Status: ${agents.gemini.success ? 'Success' : 'Failed'}\n`;
       conversation += `+${'-'.repeat(64)}+\n\n`;
@@ -313,9 +367,53 @@ class Logger {
     }
     conversation += `\n`;
 
+    // Detect if single-agent mode
+    const isSingleAgent = this.config.singleAgent;
+
+    // Get role assignments (default or swapped for ablation study)
+    const roleAssignments = this.config.roleAssignments || {
+      gptRole: 'stats',
+      claudeRole: 'pipeline',
+      geminiRole: 'biology'
+    };
+
+    // ROLE SWAPPING VERIFICATION: Add role assignments to log header
+    conversation += `[ROLE SWAPPING] Agent-to-Role Assignments:\n`;
+    conversation += `  GPT-5.2  → ${roleAssignments.gptRole.toUpperCase()} Agent\n`;
+    conversation += `  Claude   → ${roleAssignments.claudeRole.toUpperCase()} Agent\n`;
+    conversation += `  Gemini   → ${roleAssignments.geminiRole.toUpperCase()} Agent\n`;
+    conversation += `\n`;
+
+    // Helper function to format model name for display
+    const getModelDisplayName = (modelStr) => {
+      if (!modelStr) return 'Unknown';
+      if (modelStr.includes('gpt')) return 'GPT-5.2';
+      if (modelStr.includes('claude')) return 'Claude';
+      if (modelStr.includes('gemini')) return 'Gemini';
+      return modelStr;
+    };
+
+    // Helper to get role display name
+    const getRoleDisplayName = (role) => {
+      const roleMap = { stats: 'Statistics', pipeline: 'Pipeline', biology: 'Biology' };
+      return roleMap[role] || role;
+    };
+
+    // Helper to get agent name with role
+    const getAgentHeader = (agentKey, role) => {
+      const agentNameMap = { gpt5_2: 'GPT-5.2', claude: 'Claude', gemini: 'Gemini' };
+      const roleNameMap = { stats: 'Stats', pipeline: 'Pipeline', biology: 'Biology' };
+      return `${roleNameMap[role]} Agent (${agentNameMap[agentKey]})`;
+    };
+
     // Log each agent's response
     if (agents.gpt5_2) {
-      conversation += `+-- Stats Agent (GPT-5.2) ${'-'.repeat(39)}+\n`;
+      const modelName = getModelDisplayName(agents.gpt5_2.model);
+      const header = isSingleAgent
+        ? `+-- ${modelName} (Role: ${getRoleDisplayName(roleAssignments.gptRole)}) `
+        : `+-- ${getAgentHeader('gpt5_2', roleAssignments.gptRole)} `;
+      const padding = 66 - header.length;
+      conversation += header + '-'.repeat(padding) + '+\n';
       conversation += `| Model: ${agents.gpt5_2.model}\n`;
       conversation += `| Status: ${agents.gpt5_2.success ? 'Success' : 'Failed'}\n`;
       conversation += `+${'-'.repeat(64)}+\n\n`;
@@ -323,7 +421,12 @@ class Logger {
     }
 
     if (agents.claude) {
-      conversation += `+-- Pipeline Agent (Claude) ${'-'.repeat(37)}+\n`;
+      const modelName = getModelDisplayName(agents.claude.model);
+      const header = isSingleAgent
+        ? `+-- ${modelName} (Role: ${getRoleDisplayName(roleAssignments.claudeRole)}) `
+        : `+-- ${getAgentHeader('claude', roleAssignments.claudeRole)} `;
+      const padding = 66 - header.length;
+      conversation += header + '-'.repeat(padding) + '+\n';
       conversation += `| Model: ${agents.claude.model}\n`;
       conversation += `| Status: ${agents.claude.success ? 'Success' : 'Failed'}\n`;
       conversation += `+${'-'.repeat(64)}+\n\n`;
@@ -331,7 +434,12 @@ class Logger {
     }
 
     if (agents.gemini) {
-      conversation += `+-- Biology Agent (Gemini) ${'-'.repeat(38)}+\n`;
+      const modelName = getModelDisplayName(agents.gemini.model);
+      const header = isSingleAgent
+        ? `+-- ${modelName} (Role: ${getRoleDisplayName(roleAssignments.geminiRole)}) `
+        : `+-- ${getAgentHeader('gemini', roleAssignments.geminiRole)} `;
+      const padding = 66 - header.length;
+      conversation += header + '-'.repeat(padding) + '+\n';
       conversation += `| Model: ${agents.gemini.model}\n`;
       conversation += `| Status: ${agents.gemini.success ? 'Success' : 'Failed'}\n`;
       conversation += `+${'-'.repeat(64)}+\n\n`;
@@ -625,6 +733,11 @@ class Logger {
       timestamp_end: this.sessionData.timestamp_end,
       duration_seconds: this.sessionData.duration_seconds,
       system: this.sessionData.system,
+      role_assignments: this.sessionData.config?.roleAssignments || {  // EXPLICITLY show role swapping config
+        gptRole: 'stats',
+        claudeRole: 'pipeline',
+        geminiRole: 'biology'
+      },
       config: this.sessionData.config,
       data_info: this.sessionData.data_info,
       execution: this.sessionData.execution,
