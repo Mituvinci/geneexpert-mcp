@@ -347,217 +347,6 @@ Run all steps → Hope everything works → Debug if fails at the end
 
 ---
 
-## System Architecture
-
-### 4-Stage Pipeline
-
-**Stage 1: FASTQ Validation**
-```
-Script Steps:
-  1. validate_fastq.sh - File integrity check (lines % 4 == 0)
-  2. fastqc - Quality control metrics
-
-Agent Decision:
-  - PASS: Sufficient read depth, no corruption
-  - PASS_WITH_WARNING: Minor issues, user decides
-  - FAIL: Critical issues, abort analysis
-
-Outputs: stage1_validation/ with validation reports, FastQC summaries
-```
-
-**Stage 2: Alignment + Alignment QC**
-```
-Script Steps:
-  1. subread-align - Align FASTQ to BAM (genome: mm10/hg38/rn6)
-  2. alignment_qc_screening.R - Parse alignment logs for mapping rates
-
-QC Thresholds:
-  >=80%: PASS
-  70-80%: WARN
-  60-70%: FAIL
-  <60%: SEVERE_FAIL (likely contamination or wrong genome)
-
-Agent Decision:
-  - PASS_ALL: All samples >=70%, proceed with all
-  - REMOVE_SAMPLES: Some <70%, remove failed samples
-  - ABORT: Too many failures or unbalanced design
-
-Outputs: stage2_alignment/bam_files/, alignment QC summary
-```
-
-**Stage 3: Quantification + PCA/QC Assessment**
-```
-Script Steps:
-  1. featureCounts - Count reads per gene
-  2. filterIDS.R - Remove problematic gene IDs
-  3. RPKM.R - Normalize for visualization
-  4. entrz.R - Add gene symbols
-  5. qc_assessment_pca.R - PCA analysis + outlier/batch detection
-
-QC Detection:
-  - Outliers: Robust distance-based (>3 MAD from group centroid)
-  - Batch Effects: Median distance to centroid + MAD threshold
-
-Agent Decision:
-  - DE_Method: simpleEdger (no batch) vs batch_effect_edger (with batch correction)
-  - Batch_Specification: auto / paired / explicit labels
-  - Outlier_Action: KEEP_ALL vs REMOVE_OUTLIERS
-  - Outliers_to_Remove: List of specific samples (unanimous vote required)
-
-Outputs: stage3_quantification/ with count matrices, RPKM, PCA plots, QC metrics
-```
-
-**Stage 4: Differential Expression Analysis**
-```
-Script Steps:
-  1. DE Analysis:
-     - simpleEdger3.R (design: ~ condition) OR
-     - batch_effect_edgeR_v3.R (design: ~ batch + condition)
-  2. merge_results.R - Combine RPKM + DE results
-
-Agent Decision:
-  - APPROVE: Results validated, analysis complete
-  - REQUEST_REANALYSIS: Issues detected, re-run with different parameters
-
-Outputs: stage4_de_analysis/ with DE results CSV, final Excel file
-```
-
----
-
-### 7-Stage Single-Cell RNA-seq Pipeline (4 Agent Checkpoints)
-
-**Stage 1: Load + QC Metrics**
-```
-Script Steps:
-  1. Load 10x Genomics data (H5, directory, or CSV format)
-  2. Create Seurat object
-  3. Compute QC metrics (nFeature_RNA, nCount_RNA, percent.mt)
-
-Agent Decision: NONE (auto-proceed)
-
-Outputs: seurat_stage1_raw.rds, qc_metrics_stage1.csv
-```
-
-**Stage 2: QC Filtering**
-```
-Script Steps:
-  1. Generate QC distribution plots (violin plots for nFeature, nCount, percent.mt)
-  2. Present QC summary to agents
-
-Agent Decision:
-  - SET_THRESHOLDS: Recommend nFeature_min, nFeature_max, percent_mt_max
-  - USE_DEFAULT_THRESHOLDS: Apply standard thresholds
-  - INSUFFICIENT_DATA: Cannot determine proper thresholds
-
-Agent Logic:
-  - Large dataset (>5000 cells): Aggressive filtering
-  - Small dataset (<1000 cells): Conservative filtering
-  - Organism-specific: Brain tissue tolerates higher MT% (>30%), blood needs stricter (<15%)
-
-Outputs: seurat_stage2_filtered.rds, qc_summary_stage2.json
-```
-
-**Stage 3A: Cell Cycle Scoring**
-```
-Script Steps:
-  1. SCTransform normalization
-  2. Highly Variable Gene (HVG) selection (~2000 genes)
-  3. **CELL CYCLE PHASE DETECTION** (S phase, G2M phase markers)
-  4. Calculate correlation between PC1 and cell cycle scores
-  5. **GENERATE VISUAL OUTPUT** (cell_cycle_before.jpg/pdf)
-
-Agent Decision: **AGENT CHECKPOINT #2**
-  - REMOVE_CELL_CYCLE: Cell cycle effects detected, regression needed
-  - SKIP_CELL_CYCLE: No significant cell cycle effects, proceed without regression
-
-Agent Logic:
-  - All 3 agents review PC-vs-cell-cycle correlation plots
-  - Detect if PC1 strongly correlates with S.Score or G2M.Score
-  - Confidence scoring: HIGH/MEDIUM/LOW for disagreement resolution
-
-Auto-Resolution:
-  - Minor disagreement: Auto-resolve using tiered escalation
-  - Major disagreement: Escalate to user
-
-CRITICAL: Cell cycle analysis is CRUCIAL for downstream clustering accuracy.
-Without proper detection, cells may cluster by cell cycle phase instead of biological identity.
-
-Outputs: seurat_stage3a_scored.rds, cell_cycle_summary_stage3a.json, cell_cycle_before.jpg
-```
-
-**Stage 3B: Cell Cycle Regression or Skip**
-```
-Script Steps (Conditional Execution):
-
-  Path A (if REMOVE_CELL_CYCLE):
-    1. Regress out cell cycle effects (S.Score, G2M.Score)
-    2. Scale data (scale.data slot)
-    3. Re-run PCA to verify correction
-    4. Generate after-correction plots (cell_cycle_after.jpg/pdf)
-
-  Path B (if SKIP_CELL_CYCLE):
-    1. Scale data without regression
-    2. Skip cell cycle correction
-
-Agent Decision: NONE (auto-proceed based on Stage 3A decision)
-
-Outputs: seurat_stage3_norm.rds, cell_cycle_after.jpg (if regression applied)
-```
-
-**Stage 4: PCA**
-```
-Script Steps:
-  1. Run PCA on HVGs (from Stage 3A)
-  2. Generate elbow plot (variance explained by each PC)
-  3. Calculate variance percentages for PC ranges (1-10, 1-20, 1-30)
-
-Agent Decision: **AGENT CHECKPOINT #3**
-  - USE_DEFAULT: Use default PC range (1-30)
-  - SELECT_PC_RANGE: Recommend specific PC range based on elbow plot
-
-Agent Logic:
-  - All 3 agents review variance explained metrics
-  - GPT-5.2 (Stats): Statistical analysis of elbow point
-  - Claude (Pipeline): Seurat best practices
-  - Gemini (Biology): Biological complexity considerations
-
-Auto-Resolution:
-  - Extract PC ranges from all agents
-  - Calculate median if minor disagreement
-  - Flag major disagreements (>10 PC difference)
-
-Outputs: seurat_stage4_pca.rds, pca_variance.json, elbow_plot.pdf/jpg
-```
-
-**Stage 5: Clustering + Markers**
-```
-Script Steps:
-  1. Graph-based clustering (Louvain algorithm)
-  2. UMAP dimensionality reduction
-  3. Find marker genes for each cluster
-  4. Generate cluster UMAP plot (PDF + JPEG for agents)
-
-Agent Decision: **AGENT CHECKPOINT #4**
-  - ACCEPT_CLUSTERING: Clusters are biologically meaningful
-  - ADJUST_RESOLUTION: Change clustering resolution parameter
-  - FLAG_SUSPICIOUS: Clusters don't match expected biology
-
-Agent Logic:
-  - All 3 agents review cluster quality, marker gene patterns
-  - GPT-5.2 (Stats): Cluster separation quality, marker significance
-  - Claude (Pipeline): Technical clustering parameters
-  - Gemini (Biology): Biological plausibility of cell types
-
-Auto-Resolution:
-  - Categorical decision (ACCEPT/ADJUST/FLAG)
-  - Multi-category voting with confidence weights
-  - Escalate if no clear consensus
-
-Outputs: seurat_stage5_clustered.rds, markers_stage5.csv, cluster_summary.csv, umap_plot.pdf/jpg
-```
-
----
-
 ### Multi-Agent Decision System
 
 **3 Specialized Agents:**
@@ -778,51 +567,90 @@ node bin/geneexpert.js analyze <dataset> \
 
 ## Experimental Modes (Research Evaluation)
 
-GeneExpert supports 5 experimental systems for ICML 2026 evaluation:
+GeneExpert supports 10 experimental systems for ICML 2026 evaluation:
 
-### System 1: No-Agent (Template Only)
+### All Possible Role Combinations (6 permutations):
+
+**System 1: GPT=stats, Claude=pipeline, Gemini=biology (DEFAULT)**
 ```bash
-node bin/geneexpert.js analyze <dataset> \
-  --staged \
+node bin/geneexpert.js analyze <dataset> --staged \
+  --gpt-role stats --claude-role pipeline --gemini-role biology \
+  --output results/perm1
+```
+
+**System 2: GPT=stats, Claude=biology, Gemini=pipeline**
+```bash
+node bin/geneexpert.js analyze <dataset> --staged \
+  --gpt-role stats --claude-role biology --gemini-role pipeline \
+  --output results/perm2
+```
+
+**System 3: GPT=pipeline, Claude=stats, Gemini=biology**
+```bash
+node bin/geneexpert.js analyze <dataset> --staged \
+  --gpt-role pipeline --claude-role stats --gemini-role biology \
+  --output results/perm3
+```
+
+**System 4: GPT=pipeline, Claude=biology, Gemini=stats**
+```bash
+node bin/geneexpert.js analyze <dataset> --staged \
+  --gpt-role pipeline --claude-role biology --gemini-role stats \
+  --output results/perm4
+```
+
+**System 5: GPT=biology, Claude=stats, Gemini=pipeline**
+```bash
+node bin/geneexpert.js analyze <dataset> --staged \
+  --gpt-role biology --claude-role stats --gemini-role pipeline \
+  --output results/perm5
+```
+
+**System 6: GPT=biology, Claude=pipeline, Gemini=stats**
+```bash
+node bin/geneexpert.js analyze <dataset> --staged \
+  --gpt-role biology --claude-role pipeline --gemini-role stats \
+  --output results/perm6
+```
+
+### Baseline Systems (4):
+
+**System 7: No-Agent (Template Only)**
+```bash
+node bin/geneexpert.js analyze <dataset> --staged \
   --force-automation \
   --output results/no_agent
 ```
 Baseline with no agent review, template-based decisions only.
 
-### System 2: Single-Agent (GPT-5.2)
+**System 8: Single-LLM Multi-Agent (Claude Opus handles all roles)**
 ```bash
-node bin/geneexpert.js analyze <dataset> \
-  --staged \
-  --single-agent gpt5.2 \
-  --output results/single_gpt
-```
-GPT-5.2 performs ALL roles: statistics + pipeline + biology.
-
-### System 3: Single-Agent (Claude)
-```bash
-node bin/geneexpert.js analyze <dataset> \
-  --staged \
+node bin/geneexpert.js analyze <dataset> --staged \
   --single-agent claude \
   --output results/single_claude
 ```
-Claude performs ALL roles: statistics + pipeline + biology.
+Claude called 3 times with different role prompts (stats, pipeline, biology).
 
-### System 4: Multi-Agent Parallel (Default)
+**System 9: Single-LLM Multi-Agent (GPT-5.2 handles all roles)**
 ```bash
-node bin/geneexpert.js analyze <dataset> \
-  --staged \
-  --output results/multi_agent_parallel
+node bin/geneexpert.js analyze <dataset> --staged \
+  --single-agent gpt5.2 \
+  --output results/single_gpt
 ```
-3 agents review simultaneously with independent voting.
+GPT-5.2 called 3 times with different role prompts (stats, pipeline, biology).
 
-### System 5: Multi-Agent Sequential Chain
+**System 10: Single-LLM Multi-Agent (Gemini Pro handles all roles)**
 ```bash
-node bin/geneexpert.js analyze <dataset> \
-  --staged \
-  --sequential-chain \
-  --output results/multi_agent_sequential
+node bin/geneexpert.js analyze <dataset> --staged \
+  --single-agent gemini \
+  --output results/single_gemini
 ```
-3 agents review sequentially: GPT-5.2 → Gemini → Claude (informed synthesis).
+Gemini called 3 times with different role prompts (stats, pipeline, biology).
+
+**Total Experiment Count:**
+- 10 systems × 8 bulk RNA-seq datasets = 80 bulk analyses
+- 10 systems × 6 scRNA-seq datasets = 60 scRNA analyses
+- **Total: 140 analyses**
 
 **Evaluation Metrics:**
 - Decision accuracy (correct decisions / total)
@@ -832,6 +660,7 @@ node bin/geneexpert.js analyze <dataset> \
 - Inter-agent agreement (Cohen's kappa for multi-agent modes)
 - User input frequency (% decisions requiring user input)
 - Error propagation rate (sequential mode - measures if later agents correct or amplify first agent's errors)
+- Role performance analysis (which model excels at which role: stats, pipeline, biology)
 - Reasoning quality (qualitative assessment)
 
 **Evaluation Scripts:**
@@ -966,7 +795,8 @@ tail -f results/my_analysis/stage*_log.txt
 **Novel Contributions:**
 
 1. **Staged Multi-Agent Architecture**
-   - 4 decision checkpoints throughout pipeline
+   - 4 decision checkpoints throughout pipeline (bulk RNA-seq)
+   - 4 decision checkpoints for scRNA-seq pipeline
    - Early issue detection (catch problems in Stage 2, not Stage 4)
    - Progressive refinement (remove outliers before DE analysis)
 
@@ -976,58 +806,69 @@ tail -f results/my_analysis/stage*_log.txt
    - Research question: Does sequential synthesis improve decisions or does parallel independence reduce errors?
    - Empirical comparison of two multi-agent architectures
 
-3. **User-in-Loop Tracking**
+3. **Comprehensive Role Swapping Analysis**
+   - All 6 possible role permutations tested (3! = 6 combinations)
+   - Empirical comparison: GPT-5.2 vs Claude vs Gemini in stats/pipeline/biology roles
+   - Research questions:
+     - Which model excels at statistical reasoning?
+     - Which model excels at biological interpretation?
+     - Which model excels at pipeline/technical decisions?
+     - Is model-role alignment more important than raw model capability?
+   - Enables identification of optimal multi-agent team composition
+
+4. **User-in-Loop Tracking**
    - JSON logs track when user input required
    - Enables empirical analysis of human-AI collaboration
    - Metrics: autonomy rate, agreement rate, impact on success
 
-4. **Multi-Model Consensus**
+5. **Multi-Model Consensus**
    - Different foundation models (GPT-5.2, Claude Sonnet 4.5, Gemini Pro)
    - Voting system with confidence quantification
    - Disagreement signals uncertainty, triggers user input
 
-5. **Condorcet's Jury Theorem Validation**
+6. **Condorcet's Jury Theorem Validation**
    - If each agent >50% accurate, ensemble >single agent
    - Empirical measurement of error reduction
-   - Statistical significance testing
+   - Statistical significance testing across 140 analyses
 
-6. **Decision-Level Evaluation**
+7. **Decision-Level Evaluation**
    - Not just final success/failure
    - Track correctness of intermediate decisions
    - Measure impact of each stage's agent review
    - Evaluate error propagation in sequential mode
 
-7. **3-Tier Auto-Resolution System**
+8. **3-Tier Auto-Resolution System**
    - Intelligent disagreement resolution without always escalating to user
    - Tiered escalation based on disagreement severity (minor/moderate/major)
    - Confidence-weighted voting for moderate disagreements
    - Enables higher autonomy while maintaining safety
    - Research question: Can intelligent auto-resolution maintain accuracy while reducing user burden?
 
-8. **Role Swapping for Model Comparison**
-   - Ablation study: Which model excels at which reasoning task?
-   - Test all role permutations (stats, pipeline, biology)
-   - Empirical comparison of GPT-5.2 vs Claude vs Gemini in different roles
-   - Research question: Is model-role alignment more important than model capability?
-
 9. **Conditional Execution Architecture**
-   - Stage 3B execution path determined by Stage 3A agent decision
+   - Stage 3B execution path determined by Stage 3A agent decision (scRNA)
    - Cell cycle regression vs skip based on agent consensus
    - Demonstrates adaptive pipeline with agent-driven branching
    - Research contribution: Agent decisions shape computational workflow, not just approve/reject
+
+10. **Dual-Pipeline Validation**
+   - Same multi-agent system validated on TWO distinct bioinformatics pipelines
+   - Bulk RNA-seq: differential expression analysis
+   - scRNA-seq: clustering and cell type identification
+   - Tests generalizability of multi-agent approach across different computational biology domains
 
 ---
 
 ## Evaluation Datasets
 
-The system is evaluated on 9 RNA-seq datasets covering clean signals, batch effects, and contamination scenarios:
+The system is evaluated on 14 RNA-seq datasets (8 bulk + 6 single-cell) covering clean signals, batch effects, contamination, and cell cycle challenges:
 
-### Clean Biological Signal Datasets
+### Bulk RNA-seq Datasets (8 datasets)
 
 **1. GSE52778 - Human Dexamethasone Response**
 - Organism: Human cell lines (N61311, N052611, N080611, N061011)
 - Design: Untreated vs dexamethasone-treated (4 vs 4 samples)
 - Platform: Illumina paired-end RNA-seq
+- Category: Clean biological signal
 - Citation: Rüegger et al., Genome Biology, 2015
 - URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE52778
 
@@ -1035,6 +876,7 @@ The system is evaluated on 9 RNA-seq datasets covering clean signals, batch effe
 - Organism: Mouse cortex
 - Design: Control vs sleep-deprived, biologically paired by mouse (5 vs 5 samples)
 - Platform: Illumina HiSeq 2500, single-end 101bp
+- Category: Clean biological signal
 - Citation: Bellesi et al., Journal of Neuroscience, 2018
 - URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE114845
 
@@ -1042,14 +884,15 @@ The system is evaluated on 9 RNA-seq datasets covering clean signals, batch effe
 - Organism: Mouse prefrontal cortex
 - Design: Wildtype homecage control vs sleep deprivation (5 vs 5 samples)
 - Platform: Illumina HiSeq 2500, paired-end
+- Category: Clean biological signal
 - Citation: Ingiosi et al., eLife, 2019 (PMID: 30973326)
 - URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE113754
-
-### Batch Effect Datasets
 
 **4. GSE141496 - HeLa Technical Heterogeneity**
 - Organism: Human HeLa cell line
 - Design: Same biological condition across multiple lanes/runs (14 samples)
+- Platform: Illumina paired-end RNA-seq
+- Category: Batch effect
 - Purpose: Stress-test for false-positive biological signals from technical variation
 - Citation: Chen et al., Nature Biotechnology, 2019 (PMID: 30617342)
 - URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE141496
@@ -1057,23 +900,74 @@ The system is evaluated on 9 RNA-seq datasets covering clean signals, batch effe
 **5. GSE47774 - SEQC Multi-Site Reference**
 - Organism: Human reference RNA samples
 - Design: Same RNA sequenced across multiple sites, flowcells, lanes (24 samples selected)
+- Platform: Illumina paired-end RNA-seq
+- Category: Batch effect
 - Purpose: Multi-batch technical variation benchmark
 - Citation: SEQC/MAQC-III Consortium, Nature Biotechnology, 2014
 - URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE47774
 
-### Contamination Source Datasets
-
 **6. GSE193658 - Human Lab Experiment**
 - Organism: Human cell line
 - Design: Laboratory perturbation experiments
-- Purpose: Source for synthetic contamination generation
+- Platform: Illumina paired-end RNA-seq
+- Category: Lab data
+- Purpose: Real-world laboratory dataset
 - URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE193658
 
-**7. GSE48151 - E. coli Reference**
-- Organism: Escherichia coli
-- Design: Bacterial transcriptome under controlled conditions
-- Purpose: Non-host organism for synthetic contamination (50% and 70% mixing)
-- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE48151
+**7. GSE114845_CONTAM50 - 50% E. coli Contamination**
+- Base: GSE114845 (mouse cortex) + 50% synthetic E. coli reads
+- Category: Contamination
+- Purpose: Test agent ability to detect cross-species contamination
+
+**8. GSE114845_CONTAM70 - 70% E. coli Contamination**
+- Base: GSE114845 (mouse cortex) + 70% synthetic E. coli reads
+- Category: Contamination
+- Purpose: Test agent ability to detect severe contamination
+
+### Single-cell RNA-seq Datasets (6 datasets)
+
+**1. REH parental - Human Leukemia Cell Line**
+- Organism: Human (leukemia cell line)
+- Platform: 10x Chromium Multiome
+- Category: Clean single-cell
+- Accession: GSE293316
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE293316
+
+**2. SUP-B15 parental - Human Leukemia Cell Line**
+- Organism: Human (leukemia cell line)
+- Platform: 10x Chromium Multiome
+- Category: Clean single-cell
+- Accession: GSE293316
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE293316
+
+**3. PBMC Healthy Human - Peripheral Blood Mononuclear Cells**
+- Organism: Human (healthy donor)
+- Platform: 10x Chromium (10,194 cells)
+- Category: Clean single-cell
+- Cell cycle labels: 2,431 cells (1,963 G1, 127 S, 341 G2M) consensus labeled
+- URL: https://www.10xgenomics.com/resources/datasets
+
+**4. Mouse Brain Cells (Healthy) - 10k Brain Cells from E18 Mouse**
+- Organism: Mouse (embryonic day 18)
+- Platform: 10x Chromium v3 chemistry (11,843 cells)
+- Category: Clean single-cell
+- Cell cycle labels: 5,524 cells (3,830 G1, 1,116 S, 578 G2M) consensus labeled
+- URL: https://www.10xgenomics.com/resources/datasets
+
+**5. GSE75748 - Human Embryonic Stem Cells (hPSC/hESC)**
+- Organism: Human embryonic stem cells
+- Design: 1,776 cells across progenitor states and differentiation trajectory
+- Category: Cell cycle challenge
+- Purpose: Strong cell-cycle activity, developmental transitions
+- Usage: Training/evaluating cell-cycle phase prediction
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75748
+
+**6. GSE146773 - Human U-2 OS Cells with FUCCI Reporter**
+- Organism: Human osteosarcoma cell line (U-2 OS)
+- Design: FUCCI (Fluorescent Ubiquitination-based Cell Cycle Indicator) reporter
+- Category: Cell cycle ground truth
+- Purpose: Cell cycle phase ground truth validation
+- URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE146773
 
 ---
 

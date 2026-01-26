@@ -10,8 +10,8 @@ import os
 from pathlib import Path
 
 # Base directory for results
-RESULTS_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results"
-OUTPUT_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results"
+RESULTS_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results/completed_result"
+OUTPUT_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results/completed_result"
 
 def extract_experiment_info(filepath):
     """Extract dataset and system from filepath"""
