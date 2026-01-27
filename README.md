@@ -567,7 +567,7 @@ node bin/geneexpert.js analyze <dataset> \
 
 ## Experimental Modes (Research Evaluation)
 
-GeneExpert supports 10 experimental systems for ICML 2026 evaluation:
+GeneExpert supports 10 experimental systems for evaluation:
 
 ### All Possible Role Combinations (6 permutations):
 
@@ -691,8 +691,10 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 │   ├── scrna_geneexpert.js              # scRNA-seq CLI entry point
 │   ├── evaluate.js                      # Evaluation metrics calculator
 │   ├── analyze_costs.js                 # Cost analysis from experiment logs
-│   └── json_to_csv.js                   # JSON to CSV converter
-├── src/
+│   ├── json_to_csv.js                   # JSON/JSONL to CSV converter
+│   └── aggregate_experiments.py         # Aggregate all experiments to summary CSV
+│
+├── src/                                 # ✅ CURRENT ARCHITECTURE (Multi-Agent System)
 │   ├── executor/
 │   │   └── staged_executor.js           # 4-stage bulk RNA-seq orchestration
 │   ├── scrna_executor/
@@ -713,16 +715,34 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 │   │   ├── stage_prompts.js             # Bulk RNA-seq agent prompts
 │   │   └── scrna_stage_prompts.js       # scRNA-seq agent prompts
 │   ├── coordinator/
-│   │   └── orchestrator.js              # Multi-agent coordination
+│   │   ├── orchestrator.js              # Multi-agent coordination
+│   │   └── consensus.js                 # Voting and consensus logic
 │   ├── utils/
-│   │   ├── logger.js                    # JSON logging with user input tracking
+│   │   ├── logger.js                    # JSON/JSONL logging with user input tracking
 │   │   ├── user_input.js                # User decision handling
 │   │   ├── llm_clients.js               # OpenAI, Anthropic, Google APIs
 │   │   ├── auto_resolver.js             # 3-tier auto-resolution system
-│   │   └── consensus_helper.js          # Disagreement scoring, confidence extraction
-│   └── pipeline/                        # Old monolithic architecture (legacy)
+│   │   ├── consensus_helper.js          # Disagreement scoring, confidence extraction
+│   │   ├── response_parser.js           # Parse agent responses
+│   │   ├── cost_calculator.js           # API cost tracking
+│   │   └── metrics.js                   # Evaluation metrics
+│   │
+│   └── [LEGACY] Old Monolithic Architecture (NOT used for current experiments)
+│       ├── pipeline/                    # Old single-stage executor
+│       ├── agents/                      # Old agent implementations
+│       └── mcp/                         # Model Context Protocol (experimental)
+│
+├── experiments/
+│   ├── results/                         # Bulk RNA-seq experiment outputs
+│   ├── scrna_results/                   # scRNA-seq experiment outputs
+│   ├── bulk_rna_ground_truth.json       # Ground truth for bulk (7 datasets, 28 decisions)
+│   └── scrna_ground_truth.json          # Ground truth for scRNA (6 datasets, 18 decisions)
+│
 └── README.md                            # This file
 ```
+
+**Note on Legacy Code:**
+The legacy folders (`pipeline/`, `agents/`, `mcp/`) remain in the codebase for backward compatibility. The CLI supports running without `--staged` flag (old monolithic architecture), but **all current experiments use `--staged` flag** and therefore only use the current architecture. Reviewers can safely ignore the legacy folders when evaluating the research paper.
 
 ---
 
@@ -937,4 +957,4 @@ MIT
 - **GitHub:** https://github.com/Mituvinci/geneexpert-mcp
 - **Status:** Dual-pipeline architecture complete (Bulk 4-stage + scRNA 7-stage) with 4 agent checkpoints each
 - **New Features:** 3-tier auto-resolution, role swapping, conditional execution (Stage 3A/3B branching)
-- **Experiments:** 45 bulk + scRNA experiments (5 systems × 9 datasets × 2 pipelines) for ICML 2026
+- **Experiments:** 130 total analyses (10 systems × 13 datasets: 7 bulk + 6 scRNA)
