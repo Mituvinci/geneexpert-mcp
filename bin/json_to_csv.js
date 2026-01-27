@@ -40,12 +40,14 @@ program
     if (options.input) {
       files = [options.input];
     } else if (options.dir) {
-      const pattern = path.join(options.dir, '**/*_agent_decisions.json');
-      files = globSync(pattern);
+      // Find both .json (bulk RNA-seq) and .jsonl (scRNA-seq) files
+      const jsonPattern = path.join(options.dir, '**/*_agent_decisions.json');
+      const jsonlPattern = path.join(options.dir, '**/*_agent_decisions.jsonl');
+      files = [...globSync(jsonPattern), ...globSync(jsonlPattern)];
     }
 
     if (files.length === 0) {
-      console.log('⚠️  No JSON files found.');
+      console.log('⚠️  No JSON/JSONL files found.');
       process.exit(0);
     }
 
@@ -59,8 +61,27 @@ program
 
     files.forEach(file => {
       try {
-        const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
-        const outputFile = options.output || file.replace('.json', '_metrics.csv');
+        let data;
+        const fileContent = fs.readFileSync(file, 'utf-8');
+
+        // Handle both .json (bulk RNA-seq) and .jsonl (scRNA-seq) formats
+        if (file.endsWith('.jsonl')) {
+          // JSONL format: one JSON object per line
+          const lines = fileContent.trim().split('\n').filter(line => line.trim());
+          const decisions = lines.map(line => JSON.parse(line));
+
+          // Convert to same structure as .json format
+          data = {
+            session_id: decisions[0]?.decision_id?.split('_stage')[0] || 'unknown',
+            decisions: decisions,
+            config: decisions[0]?.stage_input || {}
+          };
+        } else {
+          // JSON format: single object with decisions array
+          data = JSON.parse(fileContent);
+        }
+
+        const outputFile = options.output || file.replace(/\.jsonl?$/, '_metrics.csv');
 
         const csv = convertToCSV(data);
         fs.writeFileSync(outputFile, csv);

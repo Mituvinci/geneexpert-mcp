@@ -648,9 +648,9 @@ node bin/geneexpert.js analyze <dataset> --staged \
 Gemini called 3 times with different role prompts (stats, pipeline, biology).
 
 **Total Experiment Count:**
-- 10 systems × 8 bulk RNA-seq datasets = 80 bulk analyses
+- 10 systems × 7 bulk RNA-seq datasets = 70 bulk analyses
 - 10 systems × 6 scRNA-seq datasets = 60 scRNA analyses
-- **Total: 140 analyses**
+- **Total: 130 analyses**
 
 **Evaluation Metrics:**
 - Decision accuracy (correct decisions / total)
@@ -721,12 +721,6 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 │   │   ├── auto_resolver.js             # 3-tier auto-resolution system
 │   │   └── consensus_helper.js          # Disagreement scoring, confidence extraction
 │   └── pipeline/                        # Old monolithic architecture (legacy)
-├── test_stage1.js                       # Test bulk Stage 1 independently
-├── test_stage2.js                       # Test bulk Stage 2 independently
-├── test_stage3.js                       # Test bulk Stage 3 independently
-├── test_stage4.js                       # Test bulk Stage 4 independently
-├── experiments/
-│   └── ground_truth.json                # Evaluation dataset labels
 └── README.md                            # This file
 ```
 
@@ -749,42 +743,6 @@ node bin/analyze_costs.js generate --results experiments/results --system multi-
 - **Execution cost: $0**
 
 **Total: ~$0.12 per analysis with full multi-agent validation (both pipelines)**
-
-
-
-## Development Commands
-
-```bash
-# Run full staged pipeline
-node bin/geneexpert.js analyze data/DA0036 \
-  --staged \
-  --organism mouse \
-  --comparison "experiment_name" \
-  --control-keyword "cont" \
-  --treatment-keyword "ips" \
-  --output results/DA0036
-
-# Test individual stages
-node test_stage1.js data/DA0036 results/test --organism=mouse
-node test_stage2.js data/DA0036 results/test --organism=mouse
-node test_stage3.js data/DA0036 results/test --organism=mouse
-node test_stage4.js data/DA0036 results/test --organism=mouse
-
-# Run with single agent (for  baseline)
-node bin/geneexpert.js analyze data/DA0036 \
-  --staged \
-  --single-agent gpt5.2 \
-  --output results/single_agent
-
-# Run without agents (for  baseline)
-node bin/geneexpert.js analyze data/DA0036 \
-  --staged \
-  --force-automation \
-  --output results/no_agent
-
-# Check logs
-tail -f results/my_analysis/stage*_log.txt
-```
 
 ---
 
@@ -860,9 +818,9 @@ tail -f results/my_analysis/stage*_log.txt
 
 ## Evaluation Datasets
 
-The system is evaluated on 14 RNA-seq datasets (8 bulk + 6 single-cell) covering clean signals, batch effects, contamination, and cell cycle challenges:
+The system is evaluated on 13 RNA-seq datasets (7 bulk + 6 single-cell) covering clean signals, batch effects, contamination, and cell cycle challenges:
 
-### Bulk RNA-seq Datasets (8 datasets)
+### Bulk RNA-seq Datasets (7 datasets)
 
 **1. GSE52778 - Human Dexamethasone Response**
 - Organism: Human cell lines (N61311, N052611, N080611, N061011)
@@ -906,23 +864,20 @@ The system is evaluated on 14 RNA-seq datasets (8 bulk + 6 single-cell) covering
 - Citation: SEQC/MAQC-III Consortium, Nature Biotechnology, 2014
 - URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE47774
 
-**6. GSE193658 - Human Lab Experiment**
+**6. GSE193658 - Human In-House Experiment**
 - Organism: Human cell line
 - Design: Laboratory perturbation experiments
 - Platform: Illumina paired-end RNA-seq
-- Category: Lab data
-- Purpose: Real-world laboratory dataset
+- Category: In-house data
+- Purpose: Real-world dataset generated in-house and published
 - URL: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE193658
 
-**7. GSE114845_CONTAM50 - 50% E. coli Contamination**
-- Base: GSE114845 (mouse cortex) + 50% synthetic E. coli reads
+**7. GSE114845_CONTAM70 - 70% E. coli Contamination**
+- Base: GSE114845 single-end data + 70% synthetic E. coli contamination
+- Contamination source: E. coli reads from GSE48151 (GSM1170025)
+- Method: seqkit-based synthetic contamination (70% E. coli, 30% host)
 - Category: Contamination
-- Purpose: Test agent ability to detect cross-species contamination
-
-**8. GSE114845_CONTAM70 - 70% E. coli Contamination**
-- Base: GSE114845 (mouse cortex) + 70% synthetic E. coli reads
-- Category: Contamination
-- Purpose: Test agent ability to detect severe contamination
+- Purpose: Test agent ability to detect severe cross-species contamination
 
 ### Single-cell RNA-seq Datasets (6 datasets)
 

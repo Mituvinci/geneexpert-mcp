@@ -2,6 +2,8 @@
 """
 Aggregate all experiment decision metrics into comprehensive CSV files
 for presentation to PI and analysis.
+
+Works for both bulk RNA-seq and scRNA-seq experiments.
 """
 
 import pandas as pd
@@ -10,28 +12,51 @@ import os
 from pathlib import Path
 
 # Base directory for results
-RESULTS_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results/completed_result"
-OUTPUT_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results/completed_result"
+RESULTS_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/scrna_results/"
+OUTPUT_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/scrna_results/"
 
 def extract_experiment_info(filepath):
-    """Extract dataset and system from filepath"""
+    """Extract dataset and system from filepath (works for both bulk and scRNA)"""
     folder_name = Path(filepath).parent.name
-    parts = folder_name.split('_')
 
-    # Format: 1_GSE52778_pe_clean_parallel
-    dataset_num = parts[0]
-    dataset_id = parts[1]
-    sequencing = parts[2]
-    quality = parts[3]
-    system = '_'.join(parts[4:])
+    # Detect system config from folder name
+    if 'single_gpt' in folder_name:
+        system = 'single_gpt'
+    elif 'single_claude' in folder_name:
+        system = 'single_claude'
+    elif 'single_gemini' in folder_name:
+        system = 'single_gemini'
+    elif 'no_agent' in folder_name:
+        system = 'no_agent'
+    elif 'parallel' in folder_name:
+        # Extract role config: parallel_gp_st_cl_bl_gm_pl or parallel_default
+        if 'parallel_default' in folder_name:
+            system = 'parallel_default'
+        else:
+            # Extract the role assignment part after "parallel_"
+            system_part = folder_name.split('parallel_')[1] if 'parallel_' in folder_name else 'parallel'
+            system = f'parallel_{system_part}'
+    elif 'sequential' in folder_name:
+        # Extract role config: sequential_gp_st_cl_bl_gm_pl or sequential_default
+        if 'sequential_default' in folder_name:
+            system = 'sequential_default'
+        else:
+            # Extract the role assignment part after "sequential_"
+            system_part = folder_name.split('sequential_')[1] if 'sequential_' in folder_name else 'sequential'
+            system = f'sequential_{system_part}'
+    else:
+        system = 'unknown'
+
+    # Extract dataset name (everything before the system config)
+    dataset_name = folder_name.replace(f'_{system}', '').replace(f'{system}', '')
+
+    # Clean up leading/trailing underscores
+    dataset_name = dataset_name.strip('_')
 
     return {
-        'dataset_num': dataset_num,
-        'dataset_id': dataset_id,
-        'sequencing_type': sequencing,
-        'dataset_quality': quality,
+        'dataset_name': dataset_name,
         'system_config': system,
-        'full_dataset': f"{dataset_num}_{dataset_id}_{sequencing}_{quality}"
+        'full_dataset': dataset_name
     }
 
 def main():
@@ -40,8 +65,8 @@ def main():
     print("=" * 70)
     print()
 
-    # Find all decision metrics CSV files
-    csv_pattern = os.path.join(RESULTS_DIR, "*", "staged_analysis_agent_decisions_metrics.csv")
+    # Find all decision metrics CSV files (both bulk and scRNA)
+    csv_pattern = os.path.join(RESULTS_DIR, "*", "*_agent_decisions_metrics.csv")
     csv_files = sorted(glob.glob(csv_pattern))
 
     print(f"Found {len(csv_files)} experiment files:")
