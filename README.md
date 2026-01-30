@@ -129,7 +129,7 @@ node bin/scrna_geneexpert.js analyze data/scRNA_data/pbmc_healthy_human \
   --verbose
 ```
 
-**scRNA-seq Pipeline Flow (7 stages, 4 agent checkpoints):**
+**scRNA-seq Pipeline Flow (5 stages, 4 agent checkpoints):**
 ```
 +---------------------------------------+
 |  Input: 10x Genomics Data             |
