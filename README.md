@@ -2,7 +2,7 @@
 
 **Staged Multi-Agent Pipeline** where GPT-5.2, Claude Opus, and Gemini Pro lates collaborate at decision checkpoints throughout RNA-seq analysis.
 
-**Key Innovation:** Dual-pipeline architecture (bulk RNA-seq 4-stage, scRNA-seq 7-stage) with agent review checkpoints - agents validate each stage, detect issues early, and decide whether to proceed or adjust the approach.
+**Key Innovation:** Dual-pipeline architecture (bulk RNA-seq 4-stage, scRNA-seq 5-stage) with agent review checkpoints - agents validate each stage, detect issues early, and decide whether to proceed or adjust the approach.
 
 **Research Goal:** Multi-agent collaboration with user-in-loop tracking reduces errors 40%+ through staged validation and consensus-based decision making.
 
