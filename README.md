@@ -1,6 +1,6 @@
 # GeneXpert-BioMCP : Poly-Foundational LLM Agent Orchestration for RNA-seq Upstream Intelligence
 
-**Staged Multi-Agent Pipeline** where GPT-5.2, Claude Sonnet 4.5, and Gemini Pro collaborate at decision checkpoints throughout RNA-seq analysis.
+**Staged Multi-Agent Pipeline** where GPT-5.2, Claude Opus, and Gemini Pro lates collaborate at decision checkpoints throughout RNA-seq analysis.
 
 **Key Innovation:** Dual-pipeline architecture (bulk RNA-seq 4-stage, scRNA-seq 7-stage) with agent review checkpoints - agents validate each stage, detect issues early, and decide whether to proceed or adjust the approach.
 

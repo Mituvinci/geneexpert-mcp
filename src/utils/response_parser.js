@@ -43,6 +43,7 @@ export function convertConfidenceToScore(label) {
  * - "Recommendation: ADAPTATION"
  * - "Final Recommendation: AUTOMATION"
  * - "Decision: UNCERTAIN"
+ * - "**Decision:** APPROVE" (Claude markdown bold)
  *
  * @param {string} content - Full text response from agent
  * @returns {string|null} - Extracted decision or null if not found
@@ -50,14 +51,14 @@ export function convertConfidenceToScore(label) {
 export function extractDecision(content) {
   if (!content) return null;
 
-  // Pattern 1: "Recommendation: AUTOMATION"
-  const recommendationMatch = content.match(/(?:Final\s+)?Recommendation:\s*([A-Z_]+)/i);
+  // Pattern 1: "Recommendation: AUTOMATION" (with optional markdown bold **)
+  const recommendationMatch = content.match(/\*{0,2}(?:Final\s+)?Recommendation:\*{0,2}\s*([A-Z_]+)/i);
   if (recommendationMatch) {
     return recommendationMatch[1].toUpperCase();
   }
 
-  // Pattern 2: "Decision: ADAPTATION"
-  const decisionMatch = content.match(/(?:Final\s+)?Decision:\s*([A-Z_]+)/i);
+  // Pattern 2: "Decision: ADAPTATION" (with optional markdown bold **)
+  const decisionMatch = content.match(/\*{0,2}(?:Final\s+)?Decision:\*{0,2}\s*([A-Z_]+)/i);
   if (decisionMatch) {
     return decisionMatch[1].toUpperCase();
   }
@@ -77,6 +78,7 @@ export function extractDecision(content) {
  * - "Confidence: HIGH"
  * - "Overall Confidence: MEDIUM"
  * - "Confidence Level: LOW"
+ * - "**Confidence:** HIGH" (Claude markdown bold)
  *
  * @param {string} content - Full text response from agent
  * @returns {string|null} - Extracted confidence label or null if not found
@@ -84,8 +86,8 @@ export function extractDecision(content) {
 export function extractConfidenceLabel(content) {
   if (!content) return null;
 
-  // Pattern: "Confidence: HIGH" or "Overall Confidence: MEDIUM"
-  const confidenceMatch = content.match(/(?:Overall\s+)?Confidence(?:\s+Level)?:\s*([A-Z]+)/i);
+  // Pattern: "Confidence: HIGH" (with optional markdown bold **)
+  const confidenceMatch = content.match(/\*{0,2}(?:Overall\s+)?Confidence(?:\s+Level)?:\*{0,2}\s*([A-Z]+)/i);
   if (confidenceMatch) {
     return confidenceMatch[1].toUpperCase();
   }

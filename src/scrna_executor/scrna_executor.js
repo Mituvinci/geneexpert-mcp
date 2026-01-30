@@ -762,9 +762,21 @@ export class ScRNAExecutor {
     if (autoResolution.autoResolved) {
       // Auto-resolved!
       const decision = autoResolution.decision;
-      finalProceed = (decision === 'ACCEPT_CLUSTERING');
-      console.log(`✓ Auto-resolved (${autoResolution.method}): ${decision}`);
-      console.log(`  ${autoResolution.reasoning}`);
+
+      // CRITICAL FIX (2026-01-27): FLAG_SUSPICIOUS is a valid biological outcome
+      // (e.g., clonal cell lines like REH have low complexity - this is EXPECTED)
+      // Don't fail the pipeline - complete with warning
+      if (decision === 'FLAG_SUSPICIOUS') {
+        finalProceed = true;  // Allow pipeline to complete
+        console.log(`⚠ Auto-resolved (${autoResolution.method}): ${decision}`);
+        console.log(`  ${autoResolution.reasoning}`);
+        console.log(`  ⚠ WARNING: Agents flagged clustering concerns, but analysis will proceed`);
+        console.log(`  This may indicate: homogeneous dataset (e.g., cell line), low complexity, or cell cycle effects`);
+      } else {
+        finalProceed = (decision === 'ACCEPT_CLUSTERING');
+        console.log(`✓ Auto-resolved (${autoResolution.method}): ${decision}`);
+        console.log(`  ${autoResolution.reasoning}`);
+      }
     } else {
       // Escalate to user
       this.log(`⚠ Escalating to user: ${autoResolution.reasoning}`);
@@ -818,11 +830,28 @@ export class ScRNAExecutor {
       );
     }
 
-    this.stageResults.stage5 = { output: stage5Output, review: reviewResult, proceed: finalProceed };
+    const agentConcerns = (reviewResult.decision === 'FLAG_SUSPICIOUS');
+
+    this.stageResults.stage5 = {
+      output: stage5Output,
+      review: reviewResult,
+      proceed: finalProceed,
+      agentConcerns
+    };
 
     console.log('');
-    console.log(`Stage 5 Result: ${reviewResult.decision}`);
-    return { proceed: finalProceed, output: stage5Output, review: reviewResult };
+    if (agentConcerns) {
+      console.log(`⚠ Stage 5 Result: ${reviewResult.decision} (proceeding with warnings)`);
+    } else {
+      console.log(`Stage 5 Result: ${reviewResult.decision}`);
+    }
+
+    return {
+      proceed: finalProceed,
+      output: stage5Output,
+      review: reviewResult,
+      agentConcerns
+    };
   }
 
   /**
@@ -914,7 +943,18 @@ export class ScRNAExecutor {
         stage5Result = await this.runStage5();
 
         if (!stage5Result.proceed) {
-          throw new Error('Stage 5 rejected by agent');
+          // CRITICAL FIX (2026-01-27): Don't fail on agent concerns when auto-resolved
+          if (stage5Result.agentConcerns && this.autoResolveMode === 'auto') {
+            console.log('');
+            console.log('⚠'.repeat(60));
+            console.log('  ANALYSIS COMPLETED WITH AGENT CONCERNS');
+            console.log('  Agents flagged clustering as suspicious, but pipeline proceeded');
+            console.log('  Review cluster markers and UMAP plots manually');
+            console.log('⚠'.repeat(60));
+            break;  // Exit re-cluster loop and complete successfully
+          } else {
+            throw new Error('Stage 5 rejected by agent');
+          }
         }
 
         // Check if user requested re-clustering
@@ -985,7 +1025,12 @@ export class ScRNAExecutor {
       // Success!
       console.log('');
       console.log('#'.repeat(60));
-      console.log('  Pipeline Complete!');
+      if (stage5Result && stage5Result.agentConcerns) {
+        console.log('  Pipeline Complete (with agent concerns)');
+        console.log('  ⚠ Review Stage 5 clustering results manually');
+      } else {
+        console.log('  Pipeline Complete!');
+      }
       console.log('#'.repeat(60));
       console.log('');
       console.log('Final Outputs:');

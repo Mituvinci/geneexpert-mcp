@@ -83,7 +83,7 @@ program
 
         const outputFile = options.output || file.replace(/\.jsonl?$/, '_metrics.csv');
 
-        const csv = convertToCSV(data);
+        const csv = convertToCSV(data, file);
         fs.writeFileSync(outputFile, csv);
 
         console.log(`✓ Converted: ${path.basename(file)}`);
@@ -103,7 +103,7 @@ program.parse();
 /**
  * Convert JSON to flat CSV format
  */
-function convertToCSV(data) {
+function convertToCSV(data, file) {
   const rows = [];
 
   // CSV Headers
@@ -173,15 +173,37 @@ function convertToCSV(data) {
 
   rows.push(headers.join(','));
 
-  // Extract session-level info
+  // Extract session-level info from session_metadata.json if available
+  let metadataConfig = data.config || {};
+
+  // Try to load session metadata from same folder
+  const dataDir = path.dirname(file);
+  const metadataFile = path.join(dataDir, 'staged_analysis_session_metadata.json');
+
+  if (fs.existsSync(metadataFile)) {
+    try {
+      const metadata = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+      metadataConfig = metadata.config || metadataConfig;
+    } catch (e) {
+      // Fallback to data.config
+    }
+  }
+
+  // Format comparison as "Treatment vs Control"
+  const treatmentKeyword = metadataConfig?.treatmentKeyword || 'N/A';
+  const controlKeyword = metadataConfig?.controlKeyword || 'N/A';
+  const comparisonFormatted = (treatmentKeyword !== 'N/A' && controlKeyword !== 'N/A')
+    ? `${treatmentKeyword} vs ${controlKeyword}`
+    : (metadataConfig?.comparison || 'N/A');
+
   const sessionInfo = {
     session_id: data.session_id || 'N/A',
     dataset: extractDatasetName(data),
     system: data.system || 'unknown',
-    organism: data.config?.organism || 'N/A',
-    comparison: data.config?.comparison || 'N/A',
-    control_keyword: data.config?.controlKeyword || 'N/A',
-    treatment_keyword: data.config?.treatmentKeyword || 'N/A',
+    organism: metadataConfig?.organism || 'N/A',
+    comparison: comparisonFormatted,
+    control_keyword: controlKeyword,
+    treatment_keyword: treatmentKeyword,
     duration_seconds: data.duration_seconds || 0
   };
 

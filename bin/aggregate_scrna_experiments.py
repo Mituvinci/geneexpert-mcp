@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Aggregate all experiment decision metrics into comprehensive CSV files
+Aggregate all scRNA-seq experiment decision metrics into comprehensive CSV files
 for presentation to PI and analysis.
 
-Works for both bulk RNA-seq and scRNA-seq experiments.
+Adapted from bulk RNA-seq version for scRNA-seq (5 stages instead of 4).
 """
 
 import pandas as pd
@@ -11,13 +11,13 @@ import glob
 import os
 from pathlib import Path
 
-# Base directory for results
-RESULTS_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results/"
-OUTPUT_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results/"
-sc_or_bulk = "bulk_rna"
+# Base directory for scRNA results
+RESULTS_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/scrna_results/"
+OUTPUT_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/scrna_results/"
+sc_or_bulk = "scrna"
 
 def extract_experiment_info(filepath):
-    """Extract dataset and system from filepath (works for both bulk and scRNA)"""
+    """Extract dataset and system from filepath"""
     folder_name = Path(filepath).parent.name
 
     # Detect system config from folder name
@@ -62,11 +62,11 @@ def extract_experiment_info(filepath):
 
 def main():
     print("=" * 70)
-    print("AGGREGATING ALL EXPERIMENT DECISION METRICS")
+    print("AGGREGATING ALL scRNA-SEQ EXPERIMENT DECISION METRICS")
     print("=" * 70)
     print()
 
-    # Find all decision metrics CSV files (both bulk and scRNA)
+    # Find all decision metrics CSV files (scRNA format)
     csv_pattern = os.path.join(RESULTS_DIR, "*", "*_agent_decisions_metrics.csv")
     csv_files = sorted(glob.glob(csv_pattern))
 
@@ -93,7 +93,7 @@ def main():
 
     # Save full detailed CSV
     filename1 = sc_or_bulk + "_ALL_EXPERIMENTS_DETAILED.csv"
-    detailed_output = os.path.join(OUTPUT_DIR, filename1 )
+    detailed_output = os.path.join(OUTPUT_DIR, filename1)
     combined_df.to_csv(detailed_output, index=False)
     print(f"✓ Saved detailed data: {detailed_output}")
     print(f"  Total rows: {len(combined_df)}")
@@ -130,10 +130,18 @@ def main():
             continue
 
         # Calculate summary metrics
-        total_stages = len(df)
-        stages_passed = df['stage_status'].isin(['PASS', 'SUCCESS']).sum()
-        stages_issues = df['stage_status'].str.contains('ISSUES', na=False).sum()
-        stages_failed = df['stage_status'].isin(['FAILED', 'ABORT']).sum()
+        # Count UNIQUE stages only (not reanalysis rows)
+        unique_stages = df['stage'].nunique()
+        unique_stage_list = sorted(df['stage'].unique(), key=lambda x: (str(x).replace('A','').replace('B',''), x))
+
+        # Total rows (includes reanalysis)
+        total_rows = len(df)
+
+        # Count stages by status (per unique stage, take last occurrence)
+        df_unique = df.drop_duplicates(subset=['stage'], keep='last')
+        stages_passed = df_unique['stage_status'].isin(['PASS', 'SUCCESS']).sum()
+        stages_issues = df_unique['stage_status'].str.contains('ISSUES', na=False).sum()
+        stages_failed = df_unique['stage_status'].isin(['FAILED', 'ABORT']).sum()
 
         user_inputs_required = df['user_input_required'].sum()
 
@@ -159,7 +167,18 @@ def main():
         final_row = df.iloc[-1]
         final_stage = final_row['stage_name']
         final_status = final_row['stage_status']
-        completed_successfully = final_status in ['SUCCESS', 'PASS']
+
+        # scRNA completion: reached stage 5 (Clustering) AND it passed
+        reached_stage_5 = '5' in df['stage'].values
+        stage_5_passed = False
+        if reached_stage_5:
+            stage_5_row = df[df['stage'] == '5'].iloc[-1]
+            stage_5_passed = stage_5_row['stage_status'] in ['SUCCESS', 'PASS']
+
+        completed_successfully = reached_stage_5 and stage_5_passed
+
+        # Use unique_stages for reporting
+        total_stages = unique_stages
 
         summary_data.append({
             'Dataset': exp_info['full_dataset'],
@@ -185,7 +204,7 @@ def main():
 
     # Save summary CSV
     filename2 = sc_or_bulk + "_ALL_EXPERIMENTS_SUMMARY.csv"
-    summary_output = os.path.join(OUTPUT_DIR, filename2 )
+    summary_output = os.path.join(OUTPUT_DIR, filename2)
     summary_df.to_csv(summary_output, index=False)
     print(f"✓ Saved summary for PI: {summary_output}")
     print(f"  Total experiments: {len(summary_df)}")

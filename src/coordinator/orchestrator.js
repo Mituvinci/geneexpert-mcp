@@ -756,8 +756,8 @@ Focus on biological insight and interpretation.
 
       const content = response.content;
 
-      // Extract DE_Method
-      const deMatch = content.match(/DE_Method:\s*\[?\s*(simpleEdger|batch_effect_edger)\s*\]?/i);
+      // Extract DE_Method (handle Claude's markdown bold ** formatting)
+      const deMatch = content.match(/\*{0,2}DE_Method:\*{0,2}\s*\[?\s*(simpleEdger|batch_effect_edger)\s*\]?/i);
       if (deMatch) {
         if (deMatch[1].toLowerCase().includes('batch')) {
           batchEffectVotes++;
@@ -766,14 +766,14 @@ Focus on biological insight and interpretation.
         }
       }
 
-      // Extract Batch_Specification
-      const batchMatch = content.match(/Batch_Specification:\s*\[?\s*([^\]\n]+)\s*\]?/i);
+      // Extract Batch_Specification (handle Claude's markdown bold ** formatting)
+      const batchMatch = content.match(/\*{0,2}Batch_Specification:\*{0,2}\s*\[?\s*([^\]\n]+)\s*\]?/i);
       if (batchMatch && batchMatch[1].toLowerCase() !== 'n/a') {
         batchSpecification = batchMatch[1].trim().replace(/["']/g, '');
       }
 
-      // Extract Outlier_Action
-      const outlierMatch = content.match(/Outlier_Action:\s*\[?\s*(KEEP_ALL|REMOVE_OUTLIERS)\s*\]?/i);
+      // Extract Outlier_Action (handle Claude's markdown bold ** formatting)
+      const outlierMatch = content.match(/\*{0,2}Outlier_Action:\*{0,2}\s*\[?\s*(KEEP_ALL|REMOVE_OUTLIERS)\s*\]?/i);
       if (outlierMatch) {
         if (outlierMatch[1].toUpperCase().includes('REMOVE')) {
           removeOutlierVotes++;
@@ -782,8 +782,8 @@ Focus on biological insight and interpretation.
         }
       }
 
-      // Extract Outliers_to_Remove
-      const outliersMatch = content.match(/Outliers_to_Remove:\s*\[([^\]]+)\]/i);
+      // Extract Outliers_to_Remove (handle Claude's markdown bold ** formatting)
+      const outliersMatch = content.match(/\*{0,2}Outliers_to_Remove:\*{0,2}\s*\[([^\]]+)\]/i);
       if (outliersMatch) {
         const outlierList = outliersMatch[1].split(',').map(s => s.trim().replace(/["']/g, ''));
         outlierList.forEach(s => {
@@ -985,8 +985,8 @@ Reasoning: [Brief explanation of why these thresholds are optimal]
 
       const content = response.content;
 
-      // Extract Final_Decision
-      const decisionMatch = content.match(/Final_Decision:\s*\[?\s*(APPROVE|REQUEST_REANALYSIS)\s*\]?/i);
+      // Extract Final_Decision (handle Claude's markdown bold ** formatting)
+      const decisionMatch = content.match(/\*{0,2}Final_Decision:\*{0,2}\s*\[?\s*(APPROVE|REQUEST_REANALYSIS)\s*\]?/i);
       if (decisionMatch) {
         if (decisionMatch[1].toUpperCase().includes('APPROVE')) {
           approveVotes++;

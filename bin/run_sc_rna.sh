@@ -34,7 +34,7 @@ else
 fi
 
 echo "[2/10] Single-Agent GPT-5.2..."
-if bash bin/2_0_2_run_sing_agent_gpt_icml_experiment.sh "$DATASET" "$ORGANISM"; then
+if bash bin/2_0_2_run_sc_sing_agent_gpt_icml_experiment.sh "$DATASET" "$ORGANISM"; then
   ((SUCCESS_COUNT++))
 else
   echo "⚠️  Experiment 2 failed, continuing..."
@@ -42,7 +42,7 @@ else
 fi
 
 echo "[3/10] Single-Agent Claude..."
-if bash bin/2_0_3_run_sing_agent_claude_icml_experiment.sh "$DATASET" "$ORGANISM"; then
+if bash bin/2_0_3_run_sc_sing_agent_claude_icml_experiment.sh "$DATASET" "$ORGANISM"; then
   ((SUCCESS_COUNT++))
 else
   echo "⚠️  Experiment 3 failed, continuing..."
@@ -50,7 +50,7 @@ else
 fi
 
 echo "[4/10] Single-Agent Gemini..."
-if bash bin/2_0_4_run_sing_agent_gemini_icml_experiment.sh "$DATASET" "$ORGANISM"; then
+if bash bin/2_0_4_run_sc_sing_agent_gemini_icml_experiment.sh "$DATASET" "$ORGANISM"; then
   ((SUCCESS_COUNT++))
 else
   echo "⚠️  Experiment 4 failed, continuing..."
