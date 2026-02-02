@@ -101,6 +101,28 @@ program
 program.parse();
 
 /**
+ * Extract DE_Method from agent content (Stage 3 specific)
+ * Looks for patterns like: "DE_Method: simpleEdger" or "**DE_Method:** simpleEdger"
+ */
+function extractDEMethod(content) {
+  if (!content) return 'N/A';
+  // Handle both plain and markdown bold formats
+  const match = content.match(/\*{0,2}DE_Method:\*{0,2}\s*([a-zA-Z_]+)/i);
+  return match ? match[1] : 'N/A';
+}
+
+/**
+ * Extract Outlier_Action from agent content (Stage 3 specific)
+ * Looks for patterns like: "Outlier_Action: KEEP_ALL" or "**Outlier_Action:** KEEP_ALL"
+ */
+function extractOutlierAction(content) {
+  if (!content) return 'N/A';
+  // Handle both plain and markdown bold formats
+  const match = content.match(/\*{0,2}Outlier_Action:\*{0,2}\s*([A-Z_]+)/i);
+  return match ? match[1] : 'N/A';
+}
+
+/**
  * Convert JSON to flat CSV format
  */
 function convertToCSV(data, file) {
@@ -131,18 +153,24 @@ function convertToCSV(data, file) {
 
     // Agent responses
     'gpt5_2_decision',
+    'gpt5_2_de_method',
+    'gpt5_2_outlier_action',
     'gpt5_2_confidence',
     'gpt5_2_reasoning',
     'gpt5_2_cost_usd',
     'gpt5_2_tokens',
 
     'claude_decision',
+    'claude_de_method',
+    'claude_outlier_action',
     'claude_confidence',
     'claude_reasoning',
     'claude_cost_usd',
     'claude_tokens',
 
     'gemini_decision',
+    'gemini_de_method',
+    'gemini_outlier_action',
     'gemini_confidence',
     'gemini_reasoning',
     'gemini_cost_usd',
@@ -236,6 +264,9 @@ function convertToCSV(data, file) {
       // Agent: GPT-5.2
       const gpt = decision.agent_responses?.gpt5_2 || {};
       row.push(gpt.extracted_decision || 'N/A');
+      // Stage 3 specific: extract DE_Method and Outlier_Action
+      row.push(decision.stage === 3 ? extractDEMethod(gpt.content) : 'N/A');
+      row.push(decision.stage === 3 ? extractOutlierAction(gpt.content) : 'N/A');
       row.push(gpt.confidence_label || 'N/A');
       row.push(quote(truncate(gpt.content, 200)));
       row.push(gpt.cost_usd || 0);
@@ -244,6 +275,9 @@ function convertToCSV(data, file) {
       // Agent: Claude
       const claude = decision.agent_responses?.claude || {};
       row.push(claude.extracted_decision || 'N/A');
+      // Stage 3 specific: extract DE_Method and Outlier_Action
+      row.push(decision.stage === 3 ? extractDEMethod(claude.content) : 'N/A');
+      row.push(decision.stage === 3 ? extractOutlierAction(claude.content) : 'N/A');
       row.push(claude.confidence_label || 'N/A');
       row.push(quote(truncate(claude.content, 200)));
       row.push(claude.cost_usd || 0);
@@ -252,6 +286,9 @@ function convertToCSV(data, file) {
       // Agent: Gemini
       const gemini = decision.agent_responses?.gemini || {};
       row.push(gemini.extracted_decision || 'N/A');
+      // Stage 3 specific: extract DE_Method and Outlier_Action
+      row.push(decision.stage === 3 ? extractDEMethod(gemini.content) : 'N/A');
+      row.push(decision.stage === 3 ? extractOutlierAction(gemini.content) : 'N/A');
       row.push(gemini.confidence_label || 'N/A');
       row.push(quote(truncate(gemini.content, 200)));
       row.push(gemini.cost_usd || 0);

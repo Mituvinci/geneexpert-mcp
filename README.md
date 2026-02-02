@@ -153,6 +153,66 @@ Stage 5: Clustering + Markers → Agent Checkpoint (validation)
 
 ---
 
+## Results Generation & Visualization (Bulk RNA-seq)
+
+After running all experiments, generate evaluation metrics and publication plots:
+
+### Step 1: Convert Decision Logs to CSV
+
+```bash
+# Convert all JSON decision logs to CSV format (extracts Stage 3 individual agent decisions)
+node bin/json_to_csv.js convert --dir experiments/results/
+
+# Output: Creates *_metrics.csv for each experiment folder
+```
+
+### Step 2: Aggregate All Experiments
+
+```bash
+# Combine all CSV files into one detailed dataset
+python bin/aggregate_experiments.py \
+  experiments/results \
+  experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv
+
+# Input: All *_metrics.csv files from Step 1
+# Output: experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv
+```
+
+### Step 3: Evaluate Against Ground Truth
+
+```bash
+# Compare agent decisions to expert-curated ground truth
+node bin/evaluate_bulk_from_csv.js \
+  experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv \
+  ground_truth_supplementary/bulk_rna_ground_truth.json \
+  experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
+
+# Input: bulk_rna_ALL_EXPERIMENTS_DETAILED.csv from Step 2
+# Output: experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
+```
+
+### Step 4: Generate Publication Plots
+
+```bash
+# Per-dataset performance heatmaps
+python3 bin/generate_per_dataset_plots.py \
+  experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
+
+# Error type distribution analysis
+python3 bin/plot_error_types.py \
+  experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv \
+  bulk
+
+# Stage-wise accuracy comparison
+python3 bin/plot_stage_wise_accuracy.py \
+  experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
+
+# Input: bulk_evaluation_per_experiment.csv from Step 3
+# Output: Publication-ready figures in experiments/bulk_rna_csv_figures/
+```
+
+---
+
 ## Evaluation Metrics
 
 | Metric | Target | Formula |

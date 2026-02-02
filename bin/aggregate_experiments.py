@@ -3,18 +3,28 @@
 Aggregate all experiment decision metrics into comprehensive CSV files
 for presentation to PI and analysis.
 
-Works for both bulk RNA-seq and scRNA-seq experiments.
+Usage:
+  python bin/aggregate_experiments.py <results_dir> <output_file>
+
+Example:
+  python bin/aggregate_experiments.py experiments/results experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv
 """
 
 import pandas as pd
 import glob
 import os
+import sys
 from pathlib import Path
 
-# Base directory for results
-RESULTS_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results/"
-OUTPUT_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/results/"
-sc_or_bulk = "bulk_rna"
+# Parse command line arguments
+if len(sys.argv) < 3:
+    print("Usage: python bin/aggregate_experiments.py <results_dir> <output_file>")
+    print("Example: python bin/aggregate_experiments.py experiments/results experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv")
+    sys.exit(1)
+
+RESULTS_DIR = sys.argv[1]
+OUTPUT_FILE = sys.argv[2]
+OUTPUT_DIR = os.path.dirname(OUTPUT_FILE)
 
 def extract_experiment_info(filepath):
     """Extract dataset and system from filepath (works for both bulk and scRNA)"""
@@ -92,10 +102,8 @@ def main():
     combined_df = pd.concat(all_data, ignore_index=True)
 
     # Save full detailed CSV
-    filename1 = sc_or_bulk + "_ALL_EXPERIMENTS_DETAILED.csv"
-    detailed_output = os.path.join(OUTPUT_DIR, filename1 )
-    combined_df.to_csv(detailed_output, index=False)
-    print(f"✓ Saved detailed data: {detailed_output}")
+    combined_df.to_csv(OUTPUT_FILE, index=False)
+    print(f"✓ Saved detailed data: {OUTPUT_FILE}")
     print(f"  Total rows: {len(combined_df)}")
     print()
 

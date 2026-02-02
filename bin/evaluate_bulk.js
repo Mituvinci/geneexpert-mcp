@@ -146,18 +146,57 @@ function groupByExperiment(rows) {
 
 function extractDecisions(row) {
   // For bulk RNA: 4 stages
-  // Stage 1 & 2: Use consensus_decision or majority from gpt/claude/gemini_decision
-  // Stage 3: Use de_method
-  // Stage 4: Use consensus_decision or majority from gpt/claude/gemini_decision
+  // Stage 1 & 2: Use individual agent decisions (gpt5_2_decision, claude_decision, gemini_decision)
+  // Stage 3: Use individual agent DE method and outlier decisions
+  // Stage 4: Use individual agent decisions
 
   const stage = parseInt(row.stage);
 
   if (stage === 3) {
-    // Stage 3: DE method selection
+    // Stage 3: DE method selection and outlier action
+    // Read individual agent decisions for both DE_Method and Outlier_Action
+    const gpt_de = row.gpt5_2_de_method || 'N/A';
+    const claude_de = row.claude_de_method || 'N/A';
+    const gemini_de = row.gemini_de_method || 'N/A';
+
+    const gpt_outlier = row.gpt5_2_outlier_action || 'N/A';
+    const claude_outlier = row.claude_outlier_action || 'N/A';
+    const gemini_outlier = row.gemini_outlier_action || 'N/A';
+
+    // Calculate majority for DE method
+    const de_decisions = [gpt_de, claude_de, gemini_de].filter(d => d !== 'N/A' && d);
+    let finalDEMethod = row.de_method || 'N/A';
+    if (de_decisions.length > 0) {
+      const counts = {};
+      for (const d of de_decisions) {
+        counts[d] = (counts[d] || 0) + 1;
+      }
+      finalDEMethod = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+    }
+
+    // Calculate majority for outlier action
+    const outlier_decisions = [gpt_outlier, claude_outlier, gemini_outlier].filter(d => d !== 'N/A' && d);
+    let finalOutlierAction = row.outlier_action || 'N/A';
+    if (outlier_decisions.length > 0) {
+      const counts = {};
+      for (const d of outlier_decisions) {
+        counts[d] = (counts[d] || 0) + 1;
+      }
+      finalOutlierAction = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+    }
+
     return {
-      decision: row.de_method || 'N/A',
+      decision: finalDEMethod,
+      de_method: finalDEMethod,
+      outlier_action: finalOutlierAction,
       batch_specification: row.batch_specification || 'N/A',
-      outlier_action: row.outlier_action || 'N/A',
+      // Individual agent decisions for evaluation
+      gpt_de_method: gpt_de,
+      claude_de_method: claude_de,
+      gemini_de_method: gemini_de,
+      gpt_outlier_action: gpt_outlier,
+      claude_outlier_action: claude_outlier,
+      gemini_outlier_action: gemini_outlier,
       user_intervention: row.user_input_required === 'true' || row.user_input_required === '1'
     };
   } else {
@@ -225,6 +264,34 @@ function compareDecision(agentData, groundTruth, stageKey) {
       comparison.outlier_match = normalizeDecision(agentData.outlier_action) ===
                                  normalizeDecision(groundTruth.correct_outlier_action);
     }
+
+    // Individual agent comparisons for Stage 3
+    comparison.individual_agents = {
+      gpt: {
+        de_method: agentData.gpt_de_method || 'N/A',
+        de_method_correct: normalizeDecision(agentData.gpt_de_method) ===
+                           normalizeDecision(groundTruth.correct_de_method),
+        outlier_action: agentData.gpt_outlier_action || 'N/A',
+        outlier_correct: normalizeDecision(agentData.gpt_outlier_action) ===
+                         normalizeDecision(groundTruth.correct_outlier_action)
+      },
+      claude: {
+        de_method: agentData.claude_de_method || 'N/A',
+        de_method_correct: normalizeDecision(agentData.claude_de_method) ===
+                           normalizeDecision(groundTruth.correct_de_method),
+        outlier_action: agentData.claude_outlier_action || 'N/A',
+        outlier_correct: normalizeDecision(agentData.claude_outlier_action) ===
+                         normalizeDecision(groundTruth.correct_outlier_action)
+      },
+      gemini: {
+        de_method: agentData.gemini_de_method || 'N/A',
+        de_method_correct: normalizeDecision(agentData.gemini_de_method) ===
+                           normalizeDecision(groundTruth.correct_de_method),
+        outlier_action: agentData.gemini_outlier_action || 'N/A',
+        outlier_correct: normalizeDecision(agentData.gemini_outlier_action) ===
+                         normalizeDecision(groundTruth.correct_outlier_action)
+      }
+    };
   }
 
   return comparison;
