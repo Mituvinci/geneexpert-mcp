@@ -142,7 +142,7 @@ Stage 5: Clustering + Markers → Agent Checkpoint (validation)
 **3 Specialized Agents:**
 - **Stats Agent (GPT-5.2):** Statistical validation, threshold selection
 - **Pipeline Agent (Claude Sonnet 4.5):** Technical feasibility, best practices
-- **Biology Agent (Gemini 2.0 Flash):** Biological interpretation
+- **Biology Agent (Gemini Pro Latest):** Biological interpretation
 
 **Consensus Mechanism:**
 - Majority (2/3): Auto-proceed
@@ -218,26 +218,26 @@ node bin/evaluate_bulk_from_csv.js \
 ```bash
 # Per-dataset performance heatmaps
 # <EVALUATION_CSV> = Output from Step 3
-python3 bin/generate_per_dataset_plots.py <EVALUATION_CSV>
+python bin/generate_per_dataset_plots.py <EVALUATION_CSV>
 
 # Example:
-python3 bin/generate_per_dataset_plots.py \
+python bin/generate_per_dataset_plots.py \
   experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
 
 # Error type distribution analysis
-python3 bin/plot_error_types.py <EVALUATION_CSV> bulk <OUTPUT_PREFIX>
+python bin/plot_error_types.py <EVALUATION_CSV> bulk <OUTPUT_PREFIX>
 
 # Example:
-python3 bin/plot_error_types.py \
+python bin/plot_error_types.py \
   experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv \
   bulk \
   experiments/bulk_rna_csv_figures/bulk_error_analysis
 
 # Stage-wise accuracy comparison
-python3 bin/plot_stage_wise_accuracy.py <EVALUATION_CSV>
+python bin/plot_stage_wise_accuracy.py <EVALUATION_CSV>
 
 # Example:
-python3 bin/plot_stage_wise_accuracy.py \
+python bin/plot_stage_wise_accuracy.py \
   experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
 
 # Output: Publication-ready figures in experiments/bulk_rna_csv_figures/
@@ -319,12 +319,12 @@ node bin/evaluate_scrna.js \
 # Per-dataset performance heatmaps
 # <EVALUATION_CSV> = Output from Step 3
 # <OUTPUT_DIR> = Directory for saving plots
-python3 bin/generate_per_dataset_plots_scrna.py \
+python bin/generate_per_dataset_plots_scrna.py \
   <EVALUATION_CSV> \
   <OUTPUT_DIR>
 
 # Example:
-python3 bin/generate_per_dataset_plots_scrna.py \
+python bin/generate_per_dataset_plots_scrna.py \
   experiments/scrna_per_dataset_figure/scrna_evaluation_per_experiment.csv \
   experiments/scrna_per_dataset_figure/
 
@@ -369,12 +369,12 @@ python bin/plot_stage_wise_accuracy.py \
 
 **Per-analysis cost (varies by system):**
 - **PolyLLM-Multi-Agent (3 models):** ~$0.08-0.10 per analysis
-  - Cost = SUM(GPT-5.2 + Claude Opus 4.5 + Gemini 2.0 Flash)
+  - Cost = SUM(GPT-5.2 + Claude Opus 4.5 + Gemini Pro Latest)
 - **SingleLLM-Multi-Agent Claude:** ~$0.18 per analysis (3 calls/checkpoint × 4 checkpoints)
 - **SingleLLM-Multi-Agent GPT-5.2:** ~$0.08 per analysis (3 calls/checkpoint × 4 checkpoints)
 - **SingleLLM-Multi-Agent Gemini:** ~$0.002 per analysis (3 calls/checkpoint × 4 checkpoints)
 
-*API pricing (per 1M tokens): Claude Opus 4.5 (input: $15, output: $75), GPT-5.2 (input: $2.50, output: $10), Gemini 2.0 Flash (input: $0.075, output: $0.30). Actual costs vary by prompt length.*
+*API pricing (per 1M tokens): Claude Opus 4.5 (input: $15, output: $75), GPT-5.2 (input: $2.50, output: $10), Gemini Pro Latest (input: $0.075, output: $0.30). Actual costs vary by prompt length.*
 
 ---
 
@@ -429,7 +429,7 @@ python bin/plot_stage_wise_accuracy.py \
 
 ```bibtex
 @software{geneexpert2026,
-  title={GeneExpert: Multi-Agent LLM System for RNA-seq Analysis},
+  title={GeneXpert: PolyLLM Multi-Agent System for RNA-seq Analysis},
   author={[My Name]},
   year={2026},
   url={https://github.com/myusername/geneexpert}
