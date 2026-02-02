@@ -1,0 +1,581 @@
+{
+  "description": "Ground truth evaluation for single-cell RNA-seq staged analysis - 5 stages per dataset",
+  "created": "2026-01-27",
+  "evaluator": "First Author (PhD researcher)",
+  "total_datasets": 7,
+  "total_stage_decisions": 28,
+  "ground_truth": {
+    "1_GD428_21136_Hu_REH_Parental": {
+      "dataset_id": "1_GD428_21136_Hu_REH_Parental",
+      "dataset_name": "REH parental leukemia cell line",
+      "organism": "human",
+      "tissue": "leukemia cell line",
+      "description": "Human REH leukemia cell line, 10x Chromium Multiome, clean data with no expected batch or cell cycle effects",
+      "platform": "10x Chromium Multiome",
+      "type": "clean",
+      "accession": "GSE293316",
+      "reference": "NCBI Gene Expression Omnibus (GEO)",
+      "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE293316",
+      "expected_cell_count": 7433,
+      "has_batch_effect": false,
+      "has_cell_cycle_effect": false,
+      "stages": {
+        "1": {
+          "stage_name": "Load + QC",
+          "decision_id": "1_GD428_21136_Hu_REH_Parental_stage1_load_+_qc",
+          "correct_decision": "auto_proceed",
+          "rationale": "Stage 1 is always AUTO-PROCEED. Seurat object creation and initial QC metric calculation (nFeature, nCount, percent.mt) are deterministic operations requiring no agent review."
+        },
+        "2": {
+          "stage_name": "QC Filtering",
+          "decision_id": "1_GD428_21136_Hu_REH_Parental_stage2_qc_filtering",
+          "correct_decision": "SET_THRESHOLDS",
+          "correct_thresholds": {
+            "nFeature_min": 1000,
+            "nFeature_max": 15000,
+            "percent_mt_max": 12
+          },
+          "rationale": "REH cell line shows high median nFeature (8285) and low median percent.mt (4.26%), indicating high-quality, transcriptionally complex cells. Setting nFeature_min at 1000 removes low-quality droplets while preserving the high-complexity baseline. Upper bound of 15000 captures potential doublets without over-filtering genuine high-expressing cells. MT threshold of 12% is appropriate for cell lines with good viability. With 7433 starting cells, expect retention of 6500-7000 cells, sufficient for robust downstream clustering."
+        },
+        "4": {
+          "stage_name": "PCA + PC Selection",
+          "decision_id": "1_GD428_21136_Hu_REH_Parental_stage4_pca_+_pc_selection",
+          "correct_decision": "STOP_AND_REVIEW",
+          "correct_pc_range": {
+            "min_pc": 1,
+            "max_pc": 10
+          },
+          "rationale": "PC1 explains 68.25% of total variance, which exceeds the 50% threshold indicating potential batch effect or dominant technical artifact. This is a known issue for this clean dataset where library preparation differences may drive PC1. However, the data quality is good and proceeding with a conservative PC range (1-10) is acceptable. Agent review correctly flagged the PC1 dominance, and user decision to proceed with reduced PC range (1-10) is appropriate to minimize batch-driven clustering while capturing biological signal in remaining PCs."
+        },
+        "5": {
+          "stage_name": "Clustering + Markers",
+          "decision_id": "1_GD428_21136_Hu_REH_Parental_stage5_clustering_+_markers",
+          "correct_decision": "ACCEPT_CLUSTERING",
+          "expected_clusters": "10-15 clusters",
+          "rationale": "With 6233 cells after filtering, expect 10-15 clusters representing cell line subpopulations (cell cycle states, metabolic states, stress responses). Agent correctly identified concerns about cell cycle gene markers (HIST1H4C, CDC25B, CCNB1) and genomic coordinate features in small clusters, but these are expected artifacts in cell line data. The clustering captures biological heterogeneity within the cell line, which is the analysis goal. Cluster sizes are adequate (>20 cells minimum observed), and most clusters show distinct marker profiles."
+        },
+        "3A": {
+          "stage_name": "Cell Cycle Scoring",
+          "decision_id": "1_GD428_21136_Hu_REH_Parental_stage3A_cell_cycle_scoring",
+          "correct_decision": "SKIP_CELL_CYCLE",
+          "rationale": "Insufficient cell cycle markers detected in the dataset. Automatic decision based on marker gene availability check. Clean cell line data without strong proliferative signatures does not require cell cycle regression."
+        },
+        "3B": {
+          "stage_name": "Execute Cell Cycle Decision",
+          "decision_id": "1_GD428_21136_Hu_REH_Parental_stage3B_execute_cell_cycle_decision",
+          "correct_decision": "Skip Regression",
+          "rationale": "Stage 3B is AUTO-PROCEED, executing the decision from Stage 3A. Since 3A determined SKIP_CELL_CYCLE, no regression is performed and the pipeline proceeds directly to normalization and PCA."
+        }
+      }
+    },
+    "2_GD444_21136_Hu_Sup_Parental": {
+      "dataset_id": "2_GD444_21136_Hu_Sup_Parental",
+      "dataset_name": "SUP-B15 parental leukemia cell line",
+      "organism": "human",
+      "tissue": "leukemia cell line",
+      "description": "Human SUP-B15 leukemia cell line, 10x Chromium Multiome, clean data with minor batch effect visible in PC1",
+      "platform": "10x Chromium Multiome",
+      "type": "clean_with_minor_batch",
+      "accession": "GSE293316",
+      "reference": "NCBI Gene Expression Omnibus (GEO)",
+      "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE293316",
+      "expected_cell_count": 7728,
+      "has_batch_effect": true,
+      "batch_effect_severity": "minor",
+      "has_cell_cycle_effect": false,
+      "stages": {
+        "1": {
+          "stage_name": "Load + QC",
+          "decision_id": "2_GD444_21136_Hu_SUP_Parental_stage1_load_+_qc",
+          "correct_decision": "auto_proceed",
+          "rationale": "Stage 1 is always AUTO-PROCEED. Seurat object creation and initial QC metric calculation are deterministic operations requiring no agent review."
+        },
+        "2": {
+          "stage_name": "QC Filtering",
+          "decision_id": "2_GD444_21136_Hu_SUP_Parental_stage2_qc_filtering",
+          "correct_decision": "SET_THRESHOLDS",
+          "correct_thresholds": {
+            "nFeature_min": 1000,
+            "nFeature_max": 12000,
+            "percent_mt_max": 10
+          },
+          "rationale": "SUP-B15 cell line shows high median nFeature (5686) and very low median percent.mt (3.53%), indicating excellent cell quality. With 7728 starting cells (large dataset), moderate filtering is appropriate. Setting nFeature_min at 1000 removes low-quality droplets. Upper bound of 12000 (~2x median) captures potential doublets without over-removing legitimate high-complexity cells. MT threshold of 10% is appropriate given the low median, removing only clearly stressed or dying cells. Expect retention of 7000-7200 cells, providing robust statistical power for downstream analysis."
+        },
+        "4": {
+          "stage_name": "PCA + PC Selection",
+          "decision_id": "2_GD444_21136_Hu_SUP_Parental_stage4_pca_+_pc_selection",
+          "correct_decision": "STOP_AND_REVIEW",
+          "correct_pc_range": {
+            "min_pc": 1,
+            "max_pc": 20
+          },
+          "rationale": "PC1 explains 63.51% of total variance, exceeding the 50% threshold for concern about batch effects or technical artifacts. This is a known characteristic of this dataset where library preparation differences contribute to PC1. All three agents correctly flagged this as STOP_AND_REVIEW. Despite the batch effect concern, the data quality is good and proceeding with a standard PC range (1-20) is acceptable because: (1) PC2-PC20 still capture meaningful biological variance, (2) downstream clustering can separate batch-driven patterns from biological signals, and (3) the goal is to cluster cell line subpopulations which exist in PC2-PC20 space. User decision to proceed is appropriate for this analysis context."
+        },
+        "5": {
+          "stage_name": "Clustering + Markers",
+          "decision_id": "2_GD444_21136_Hu_SUP_Parental_stage5_clustering_+_markers",
+          "correct_decision": "FLAG_SUSPICIOUS",
+          "expected_clusters": "8-12 clusters",
+          "rationale": "With 6380 cells after filtering, expect 8-12 clusters representing cell line subpopulations. Agents correctly identified FLAG_SUSPICIOUS due to: (1) Cluster 5 showing genomic coordinates as markers (chr3:93470123-93471044) rather than gene symbols, indicating data processing error or unannotated features; (2) Multiple clusters driven by cell cycle genes (HIST1H4C, CENPE, CDCA2, E2F1) suggesting clustering is capturing cell cycle states rather than distinct cell types. This is a valid concern for biological interpretation. However, for cell line analysis, these patterns are expected artifacts. The correct agent decision is FLAG_SUSPICIOUS to alert the analyst, but proceeding with downstream analysis is acceptable if the goal is to characterize cell line heterogeneity including cell cycle-driven subpopulations."
+        },
+        "3A": {
+          "stage_name": "Cell Cycle Scoring",
+          "decision_id": "2_GD444_21136_Hu_SUP_Parental_stage3A_cell_cycle_scoring",
+          "correct_decision": "SKIP_CELL_CYCLE",
+          "rationale": "Insufficient cell cycle markers detected in the dataset. Automatic decision based on marker gene availability check. Clean cell line data shows minimal cell cycle signature and does not require regression."
+        },
+        "3B": {
+          "stage_name": "Execute Cell Cycle Decision",
+          "decision_id": "2_GD444_21136_Hu_SUP_Parental_stage3B_execute_cell_cycle_decision",
+          "correct_decision": "Skip Regression",
+          "rationale": "Stage 3B executes the decision from Stage 3A. Since 3A determined SKIP_CELL_CYCLE, no regression is performed. Pipeline proceeds to standard normalization and PCA without cell cycle correction."
+        }
+      }
+    },
+    "pbmc_healthy_human": {
+      "dataset_id": "pbmc_healthy_human",
+      "dataset_name": "PBMC healthy human",
+      "organism": "human",
+      "tissue": "PBMC (peripheral blood mononuclear cells)",
+      "description": "Healthy human PBMCs profiled using 10x Chromium technology, clean data with minor batch effect in PC1",
+      "platform": "10x Chromium",
+      "type": "clean_with_minor_batch",
+      "accession": "10x_PBMC_Healthy",
+      "reference": "10x Genomics public benchmark dataset",
+      "url": "https://www.10xgenomics.com/resources/datasets",
+      "expected_cell_count": 10119,
+      "has_batch_effect": true,
+      "batch_effect_severity": "minor",
+      "has_cell_cycle_effect": true,
+      "cell_cycle_severity": "moderate",
+      "stages": {
+        "1": {
+          "stage_name": "Load + QC",
+          "decision_id": "pbmc_healthy_human_stage1_load_+_qc",
+          "correct_decision": "auto_proceed",
+          "rationale": "Stage 1 is always AUTO-PROCEED. Seurat object creation and QC metric calculation are deterministic operations."
+        },
+        "2": {
+          "stage_name": "QC Filtering",
+          "decision_id": "pbmc_healthy_human_stage2_qc_filtering",
+          "correct_decision": "SET_THRESHOLDS",
+          "correct_thresholds": {
+            "nFeature_min": 500,
+            "nFeature_max": 6000,
+            "percent_mt_max": 10
+          },
+          "rationale": "PBMC dataset shows typical immune cell metrics: median nFeature 2159 and median percent.mt 7.07%. With 10119 cells (large dataset), standard PBMC thresholds apply. Setting nFeature_min at 500 removes empty droplets and low-quality cells. Upper bound of 6000 removes potential doublets while preserving activated immune cells which naturally express more genes. MT threshold of 10% is standard for healthy immune cells with good viability. PBMCs are metabolically stable cells justifying the strict MT filter. Expect retention of 8500-9100 cells (85-90%), providing excellent statistical power for resolving 8-10 major immune cell types (T cells, B cells, NK cells, monocytes, dendritic cells)."
+        },
+        "4": {
+          "stage_name": "PCA + PC Selection",
+          "decision_id": "pbmc_healthy_human_stage4_pca_+_pc_selection",
+          "correct_decision": "SELECT_PC_RANGE",
+          "correct_pc_range": {
+            "min_pc": 1,
+            "max_pc": 15
+          },
+          "rationale": "After cell cycle regression, PC1 explains 44% of variance, which is at the threshold of concern for potential batch effects. However, this is not extreme and likely reflects the dominant immune cell type (likely T cells) comprising the majority of PBMCs. The variance drops steeply through PC10 (cumulative 81.46%). Agent recommendations ranged from PC 1-15 (GPT, Claude STOP_AND_REVIEW) to PC 1-20 (Gemini). User selected GPT recommendation of PCs 1-15, which is appropriate for this dataset size (8250 cells post-filtering). PCs 1-15 capture 86.13% cumulative variance, sufficient for resolving major immune cell types while avoiding noise dimensions. This PC range balances capturing biological heterogeneity (multiple immune subtypes) with computational efficiency and noise avoidance."
+        },
+        "5": {
+          "stage_name": "Clustering + Markers",
+          "decision_id": "pbmc_healthy_human_stage5_clustering_+_markers",
+          "correct_decision": "ACCEPT_CLUSTERING",
+          "expected_clusters": "8-12 clusters",
+          "rationale": "With 8250 cells after filtering, expect 8-12 clusters representing major PBMC cell types: CD4+ T cells, CD8+ T cells, regulatory T cells, B cells, NK cells, classical monocytes, non-classical monocytes, and dendritic cells. After cell cycle regression, clustering should separate by cell type identity rather than proliferation state. Agents should verify: (1) Cluster sizes are adequate (>100 cells per cluster for robust marker detection), (2) Marker genes are cell-type-specific (CD3D/CD3E for T cells, CD79A/MS4A1 for B cells, NKG7/GNLY for NK cells, CD14/FCGR3A for monocytes), not cell cycle genes, (3) No multi-lineage contamination (e.g., immune + epithelial markers in same cluster), (4) Resolution parameter (typically 0.5-0.8) produces biologically interpretable granularity."
+        },
+        "3A": {
+          "stage_name": "Cell Cycle Scoring",
+          "decision_id": "pbmc_healthy_human_stage3A_cell_cycle_scoring",
+          "correct_decision": "REMOVE_CELL_CYCLE",
+          "rationale": "Strong evidence for cell cycle influence: PC1 shows correlation with S.Score (r=-0.371), exceeding the |r|>0.3 threshold. Phase distribution shows 58.7% of cells in S+G2M (highly proliferative), which is elevated for PBMCs and indicates activated/proliferating immune populations. PCA plot shows clear spatial segregation of G1 cells (right side) versus S-phase cells (left side) along PC1. All three agents correctly recommended REMOVE_CELL_CYCLE with HIGH confidence. Without regression, downstream clustering would separate cells primarily by proliferation state (cycling vs non-cycling) rather than cell type identity (T cells, B cells, NK cells, monocytes). Cell cycle regression is necessary to reveal true immune cell type diversity."
+        },
+        "3B": {
+          "stage_name": "Execute Cell Cycle Decision",
+          "decision_id": "pbmc_healthy_human_stage3B_execute_cell_cycle_decision",
+          "correct_decision": "REMOVED_CELL_CYCLE",
+          "rationale": "Stage 3B executes the decision from Stage 3A. Cell cycle regression is applied using ScaleData with vars.to.regress = c(S.Score, G2M.Score). This removes cell cycle-driven variance from the scaled data matrix, allowing downstream PCA and clustering to focus on cell type identity rather than proliferative state."
+        }
+      }
+    },
+    "10-k-brain-cells_healthy_mouse": {
+      "dataset_id": "10-k-brain-cells_healthy_mouse",
+      "dataset_name": "10k Brain Cells from E18 Mouse",
+      "organism": "mouse",
+      "tissue": "brain (embryonic day 18)",
+      "description": "Embryonic day 18 mouse brain cells profiled using 10x Chromium v3 chemistry, clean data with minor batch effect and moderate cell cycle activity",
+      "platform": "10x Chromium v3",
+      "type": "clean_with_minor_batch",
+      "accession": "10x_Mouse_Brain_E18",
+      "reference": "10x Genomics public benchmark dataset",
+      "url": "https://www.10xgenomics.com/resources/datasets",
+      "expected_cell_count": 11648,
+      "has_batch_effect": true,
+      "batch_effect_severity": "minor",
+      "has_cell_cycle_effect": true,
+      "cell_cycle_severity": "moderate",
+      "stages": {
+        "1": {
+          "stage_name": "Load + QC",
+          "decision_id": "10-k-brain-cells_healthy_mouse_stage1_load_+_qc",
+          "correct_decision": "auto_proceed",
+          "rationale": "Stage 1 is always AUTO-PROCEED. Seurat object creation and QC metric calculation are deterministic."
+        },
+        "2": {
+          "stage_name": "QC Filtering",
+          "decision_id": "10-k-brain-cells_healthy_mouse_stage2_qc_filtering",
+          "correct_decision": "SET_THRESHOLDS",
+          "correct_thresholds": {
+            "nFeature_min": 500,
+            "nFeature_max": 8000,
+            "percent_mt_max": 10
+          },
+          "rationale": "Mouse brain dataset shows median nFeature 2709 and median percent.mt 0.00% (technical artifact - likely incorrect mitochondrial gene pattern used). With 11648 cells (large dataset), standard brain tissue thresholds apply. Setting nFeature_min at 500 removes empty droplets while staying well below median. Upper bound of 8000 (~3x median) captures potential doublets without over-filtering transcriptionally complex neurons that legitimately express 6000-8000 genes. MT threshold of 10% is conservative but acceptable; brain tissue typically tolerates 15-20% due to high neuronal metabolic activity, but the reported 0% median suggests MT calculation needs verification. Expect retention of 10500-11000 cells (>90%), providing excellent power for resolving 10-15 brain cell types including diverse neuronal subtypes, astrocytes, oligodendrocytes, microglia, and oligodendrocyte precursor cells."
+        },
+        "4": {
+          "stage_name": "PCA + PC Selection",
+          "decision_id": "10-k-brain-cells_healthy_mouse_stage4_pca_+_pc_selection",
+          "correct_decision": "SELECT_PC_RANGE",
+          "correct_pc_range": {
+            "min_pc": 1,
+            "max_pc": 18
+          },
+          "rationale": "After cell cycle regression, PC1 explains 21.12% of variance (within normal range, not indicative of batch effects). Variance curve shows clear diminishing returns elbow around PC 15-18, with individual variance staying above 1% through PC18 (1.03%) then dropping below 1% at PC19 (0.98%). Agent recommendations ranged from PC 1-18 (GPT, conservative for data quality) to PC 1-25 (Claude, accommodating large dataset) to PC 1-20 (Gemini, standard default). User selected GPT recommendation of PCs 1-18, which is appropriate and conservative. Cumulative variance at PC18 is 81.40%, meeting the 80-90% target. For mouse brain with expected 10-15 cell types, PC 1-18 captures major cell types (PCs 1-5), neuronal subtypes (PCs 6-12), and rare populations (PCs 13-18) without extending into noise dimensions."
+        },
+        "5": {
+          "stage_name": "Clustering + Markers",
+          "decision_id": "10-k-brain-cells_healthy_mouse_stage5_clustering_+_markers",
+          "correct_decision": "ACCEPT_CLUSTERING",
+          "expected_clusters": "12-18 clusters",
+          "rationale": "With 11298 cells after filtering, expect 12-18 clusters representing diverse brain cell populations. Mouse E18 brain should contain: multiple excitatory neuron subtypes (Nefl, Nefm), inhibitory interneurons (Sst, Lhx6, Gad1), neuroblasts (Eomes, Neurog2), astrocytes (Aldoc, Aqp4), oligodendrocyte precursor cells (Pdgfra, Olig2), microglia (C3ar1, Cx3cr1), and potentially ependymal cells. Agent correctly identified 14 clusters with good size distribution (smallest cluster 63 cells, largest 2043 cells). Biology agent raised valid concern about missing mature oligodendrocytes (Mbp, Mog) and endothelial cells (Pecam1, Cdh5), which may reflect tissue dissociation bias. Cluster 9 defined by cell cycle markers (Pclaf, Spc25) represents proliferating cells, which is expected in embryonic brain despite regression - some cell cycle signal persists in highly proliferating progenitors. Overall clustering quality is good: distinct marker profiles, no multi-lineage contamination, adequate cluster sizes. Decision: ACCEPT_CLUSTERING with acknowledgment of biological sampling limitations."
+        },
+        "3A": {
+          "stage_name": "Cell Cycle Scoring",
+          "decision_id": "10-k-brain-cells_healthy_mouse_stage3A_cell_cycle_scoring",
+          "correct_decision": "REMOVE_CELL_CYCLE",
+          "rationale": "Strong evidence for cell cycle influence in embryonic brain tissue: PC1 shows strong negative correlations with both S.Score (r=-0.429) and G2M.Score (r=-0.578), both exceeding the |r|>0.3 threshold. Phase distribution shows 23.9% of cells in S+G2M, which is expected for developing brain tissue with active neurogenesis. PCA plot shows clear spatial separation with G2M cells (blue) concentrated on left and G1 cells (red) on right of PC1. All three agents correctly recommended REMOVE_CELL_CYCLE with HIGH confidence. Embryonic brain contains proliferating neural progenitors, and without regression, clustering would separate cycling neuroblasts from differentiated neurons rather than distinguishing true cell type identities (excitatory neurons, inhibitory neurons, radial glia, astrocytes, OPCs). Cell cycle regression is necessary to reveal cell type diversity independent of proliferative state."
+        },
+        "3B": {
+          "stage_name": "Execute Cell Cycle Decision",
+          "decision_id": "10-k-brain-cells_healthy_mouse_stage3B_execute_cell_cycle_decision",
+          "correct_decision": "REMOVED_CELL_CYCLE",
+          "rationale": "Stage 3B executes the decision from Stage 3A. Cell cycle regression is applied to remove proliferation-driven variance, allowing downstream analysis to focus on neuronal subtype identity and glial cell diversity rather than developmental stage or proliferative status."
+        }
+      }
+    },
+    "GSE75748": {
+      "dataset_id": "GSE75748",
+      "dataset_name": "Human embryonic stem cells (hESC / hPSC)",
+      "organism": "human",
+      "tissue": "embryonic stem cells",
+      "description": "Human embryonic stem cells across progenitor states and differentiation trajectory, Smart-seq2 platform with strong cell cycle activity",
+      "platform": "Smart-seq2",
+      "type": "cell_cycle_challenge",
+      "accession": "GSE75748",
+      "reference": "NCBI Gene Expression Omnibus (GEO)",
+      "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75748",
+      "expected_cell_count": 1018,
+      "has_batch_effect": false,
+      "has_cell_cycle_effect": true,
+      "cell_cycle_severity": "strong",
+      "stages": {
+        "1": {
+          "stage_name": "Load + QC",
+          "decision_id": "GSE75748_stage1_load_+_qc",
+          "correct_decision": "auto_proceed",
+          "rationale": "Stage 1 is always AUTO-PROCEED. Seurat object creation and QC metric calculation are deterministic."
+        },
+        "2": {
+          "stage_name": "QC Filtering",
+          "decision_id": "GSE75748_stage2_qc_filtering",
+          "correct_decision": "SET_THRESHOLDS",
+          "correct_thresholds": {
+            "nFeature_min": 2500,
+            "nFeature_max": 15000,
+            "percent_mt_max": 10
+          },
+          "rationale": "Smart-seq2 data shows extremely high median nFeature (9733) and nCount (4.4M), far exceeding typical 10x data. This reflects full-length RNA sequencing with deep coverage characteristic of Smart-seq2 protocol. With only 1018 cells (small dataset), conservative filtering is essential to preserve statistical power. Setting nFeature_min at 2500 removes severely degraded cells while accommodating the high-complexity baseline. Upper bound of 15000 captures potential doublets without over-filtering genuine high-complexity stem cells. Median percent.mt of 4.91% is excellent; 10% threshold is appropriate. Expected retention: 900-950 cells (>90%), sufficient for identifying 5-10 stem cell states along differentiation trajectory. Standard 10x thresholds (200-5000) would incorrectly filter ALL cells in this Smart-seq2 dataset."
+        },
+        "4": {
+          "stage_name": "PCA + PC Selection",
+          "decision_id": "GSE75748_stage4_pca_+_pc_selection",
+          "correct_decision": "SELECT_PC_RANGE",
+          "correct_pc_range": {
+            "min_pc": 1,
+            "max_pc": 30
+          },
+          "rationale": "After cell cycle regression for small Smart-seq2 dataset (930 cells), variance curve is relatively flat without sharp elbow. PC1 explains only 22.11% (within normal range). Variance remains above 1% through PC18 (1.03%) then drops below 1% at PC19. Agent recommendations ranged from PC 1-15 (Claude, conservative for small dataset) to PC 1-30 (GPT and Gemini, capturing more variance). User selected GPT recommendation of PCs 1-30. Cumulative variance at PC20 is 76.61%, reaching 85.10% at PC30. For stem cell differentiation trajectory analysis with expected 5-10 states along developmental continuum, using more PCs (1-30) is appropriate to capture subtle differentiation signatures and rare progenitor populations. The gradual variance decline suggests distributed biological signal rather than noise, justifying the extended PC range despite small cell count."
+        },
+        "5": {
+          "stage_name": "Clustering + Markers",
+          "decision_id": "GSE75748_stage5_clustering_+_markers",
+          "correct_decision": "ACCEPT_CLUSTERING",
+          "expected_clusters": "5-10 clusters",
+          "rationale": "With 930 cells after filtering, expect 5-10 clusters representing stem cell states along differentiation trajectory: pluripotent ESCs (expressing POU5F1/NANOG/SOX2), early progenitors, and committed lineages (endoderm, mesoderm, ectoderm markers). Agent analysis showed 7 clusters with good size distribution (66-212 cells per cluster, all above 50-cell threshold). Agents reached consensus to ACCEPT_CLUSTERING with varying confidence levels. Biology agent identified tissue as human placenta based on markers (PSG5, PAPPA2 for trophoblasts; CDH5 for endothelial; GYPB for erythroid), suggesting the dataset captures developmental cell types. Cluster 3 showing MYH2 (skeletal muscle marker) was correctly flagged as potential maternal contamination rather than clustering failure. After cell cycle regression, clustering successfully separated cell types rather than cell cycle phases. Marker profiles show distinct lineages without multi-lineage contamination. Decision: ACCEPT_CLUSTERING - the workflow correctly identified biologically meaningful cell populations independent of proliferation state."
+        },
+        "3A": {
+          "stage_name": "Cell Cycle Scoring",
+          "decision_id": "GSE75748_stage3A_cell_cycle_scoring",
+          "correct_decision": "REMOVE_CELL_CYCLE",
+          "rationale": "Very strong evidence for cell cycle dominance: PC1 shows strong negative correlations with both S.Score (r=-0.631) and G2M.Score (r=-0.531), both far exceeding the |r|>0.3 threshold. Phase distribution is extremely proliferative: S+G2M = 62.1%, which is characteristic of actively dividing stem cell populations. PCA plot shows clear separation with G1 cells concentrated on one side and S/G2M cells on the opposite side of PC1, creating a distinct cell cycle gradient. All three agents correctly recommended REMOVE_CELL_CYCLE with HIGH confidence. Human ESCs are known for high proliferative capacity, and the goal of this analysis is to identify differentiation states (pluripotent, early progenitors, committed lineages) rather than cell cycle phases. Without regression, clustering would separate G1 vs S/G2M rather than revealing differentiation trajectory. Cell cycle regression is critical for interpretable stem cell analysis."
+        },
+        "3B": {
+          "stage_name": "Execute Cell Cycle Decision",
+          "decision_id": "GSE75748_stage3B_execute_cell_cycle_decision",
+          "correct_decision": "REMOVED_CELL_CYCLE",
+          "rationale": "Stage 3B executes the decision from Stage 3A. Cell cycle regression removes proliferation-driven variance, allowing downstream PCA and clustering to capture differentiation state and lineage commitment rather than cell cycle phase."
+        }
+      }
+    },
+    "GSE146773": {
+      "dataset_id": "GSE146773",
+      "dataset_name": "U-2 OS FUCCI cell cycle dataset",
+      "organism": "human",
+      "tissue": "osteosarcoma cell line (U-2 OS)",
+      "description": "Human U-2 OS cells expressing FUCCI reporters providing direct cell cycle phase ground truth, extremely high proliferative activity",
+      "platform": "10x Chromium",
+      "type": "cell_cycle_ground_truth",
+      "accession": "GSE146773",
+      "reference": "NCBI Gene Expression Omnibus (GEO)",
+      "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE146773",
+      "expected_cell_count": 1146,
+      "has_batch_effect": false,
+      "has_cell_cycle_effect": true,
+      "cell_cycle_severity": "extreme",
+      "stages": {
+        "1": {
+          "stage_name": "Load + QC",
+          "decision_id": "GSE146773_stage1_load_+_qc",
+          "correct_decision": "auto_proceed",
+          "rationale": "Stage 1 is always AUTO-PROCEED. Seurat object creation and QC metric calculation are deterministic."
+        },
+        "2": {
+          "stage_name": "QC Filtering",
+          "decision_id": "GSE146773_stage2_qc_filtering",
+          "correct_decision": "SET_THRESHOLDS",
+          "correct_thresholds": {
+            "nFeature_min": 2500,
+            "nFeature_max": 18000,
+            "percent_mt_max": 30
+          },
+          "rationale": "FUCCI-labeled cancer cell line shows very high median nFeature (10152) and extremely high nCount (452949), indicating deep sequencing or full-length protocol. Median percent.mt of 20.66% is elevated but not extreme for metabolically active cancer cells. With only 1146 cells (small dataset), lenient thresholds are necessary to preserve statistical power. Setting nFeature_min at 2500 removes severely degraded cells while accommodating the high-complexity baseline typical of cancer cells. Upper bound of 18000 allows for natural variation in proliferating cancer cells while removing extreme outliers. MT threshold of 30% is appropriately permissive for cancer cell lines which show higher mitochondrial content due to metabolic activity and Warburg effect. Expected retention: 750-900 cells, sufficient for identifying 3-5 cell cycle phases and potential cancer subclones."
+        },
+        "4": {
+          "stage_name": "PCA + PC Selection",
+          "decision_id": "GSE146773_stage4_pca_+_pc_selection",
+          "correct_decision": "SELECT_PC_RANGE",
+          "correct_pc_range": {
+            "min_pc": 1,
+            "max_pc": 30
+          },
+          "rationale": "After cell cycle regression for small cancer cell line dataset (1125 cells), variance curve is relatively flat. PC1 explains only 10.28% (within normal range, not indicative of batch effects). Variance remains above 1% through at least PC30 based on gradual decline pattern. Agent recommendations ranged from PC 1-15 (Claude, conservative for small dataset) to PC 1-30 (GPT and Gemini, capturing more variance). User selected GPT recommendation of PCs 1-30. Cumulative variance at PC20 is 57.89%, reaching 73.58% at PC30. For cancer cell line analysis expecting 3-6 subclones or metabolic states, using more PCs (1-30) is appropriate despite small cell count because: (1) flat variance curve suggests distributed signal rather than noise, (2) cancer cells show high transcriptional heterogeneity requiring more PCs to capture, (3) the goal is to detect subtle subclonal differences that may reside in higher PCs."
+        },
+        "5": {
+          "stage_name": "Clustering + Markers",
+          "decision_id": "GSE146773_stage5_clustering_+_markers",
+          "correct_decision": "FLAG_SUSPICIOUS",
+          "expected_clusters": "3-6 clusters",
+          "rationale": "With 1125 cells after filtering, expect 3-6 clusters representing cancer cell subclones or metabolic states. Agent analysis showed 4 clusters with reasonable size distribution (144-429 cells per cluster). However, agents correctly identified serious concerns: Cluster 1 defined by histone genes (HIST1H2BE, HIST2H3C) indicating the cluster is driven by S-phase/replication rather than stable cell identity. This means cell cycle regression was insufficient or the signal is so strong it persists despite regression. Biology agent correctly flagged this as a cell cycle artifact rather than distinct cell type. The FUCCI reporter ground truth could be used to validate whether clustering correlates with FUCCI labels (which would indicate failed regression) or separates cells independently of cycle phase (successful regression). Agent recommendation: FLAG_SUSPICIOUS is correct - the histone-dominated cluster indicates persistent cell cycle confounding that compromises biological interpretation. However, for cancer cell line analysis, proceeding is acceptable if the goal is to characterize all sources of heterogeneity including partial cell cycle effects."
+        },
+        "3A": {
+          "stage_name": "Cell Cycle Scoring",
+          "decision_id": "GSE146773_stage3A_cell_cycle_scoring",
+          "correct_decision": "REMOVE_CELL_CYCLE",
+          "rationale": "Extremely strong evidence for cell cycle dominance in FUCCI reporter cell line: PC1 shows very strong positive correlation with G2M.Score (r=+0.750), far exceeding the |r|>0.3 threshold. S.Score correlation is weaker (r=0.199) but the G2M signal alone is sufficient. Phase distribution is extremely proliferative: S+G2M = 81.8% (S=41.6%, G2M=40.2%), with only 18.2% in G1. This is expected for actively cycling cancer cell line. PCA plot shows clear spatial separation with G2M cells (blue) forming distinct cluster. All three agents correctly recommended REMOVE_CELL_CYCLE with HIGH confidence. The FUCCI reporter system labels cells by cell cycle phase, making this dataset a ground truth validation test for cell cycle regression effectiveness. Without regression, clustering would perfectly recapitulate FUCCI labels (G1/S/G2M phases) rather than identifying cancer subclones or metabolic states. Cell cycle regression is essential to unmask biological heterogeneity beyond proliferation."
+        },
+        "3B": {
+          "stage_name": "Execute Cell Cycle Decision",
+          "decision_id": "GSE146773_stage3B_execute_cell_cycle_decision",
+          "correct_decision": "REMOVED_CELL_CYCLE",
+          "rationale": "Stage 3B executes the decision from Stage 3A. Cell cycle regression is critical for this FUCCI dataset to remove the extremely strong cell cycle signal (PC1-G2M correlation 0.750) and allow detection of biological variation independent of proliferation state."
+        }
+      }
+    },
+    "3_GSE64016_H1andFUCCI_normalized_EC_original": {
+      "dataset_id": "3_GSE64016_H1andFUCCI_normalized_EC_original",
+      "dataset_name": "H1 human embryonic stem cells with FUCCI reporter",
+      "organism": "human",
+      "tissue": "human embryonic stem cells (H1)",
+      "description": "H1 human embryonic stem cells profiled with FUCCI cell cycle reporter, pre-normalized data with moderate cell cycle signal",
+      "platform": "Smart-seq",
+      "type": "cell_cycle_ground_truth",
+      "accession": "GSE64016",
+      "reference": "NCBI Gene Expression Omnibus (GEO)",
+      "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE64016",
+      "expected_cell_count": 460,
+      "has_batch_effect": false,
+      "has_cell_cycle_effect": true,
+      "cell_cycle_severity": "moderate",
+      "stages": {
+        "1": {
+          "stage_name": "Load + QC",
+          "decision_id": "3_GSE64016_H1andFUCCI_normalized_EC_original_stage1_load_+_qc",
+          "correct_decision": "auto_proceed",
+          "rationale": "Stage 1 is always AUTO-PROCEED. Seurat object creation and QC metric calculation are deterministic."
+        },
+        "2": {
+          "stage_name": "QC Filtering",
+          "decision_id": "3_GSE64016_H1andFUCCI_normalized_EC_original_stage2_qc_filtering",
+          "correct_decision": "SET_THRESHOLDS",
+          "correct_thresholds": {
+            "nFeature_min": 2000,
+            "nFeature_max": 15000,
+            "percent_mt_max": 20
+          },
+          "rationale": "Pre-normalized Smart-seq data from H1 ESCs shows extremely high median nFeature (10116) and nCount (3.3M), characteristic of full-length sequencing. Median percent.mt of 0.00% is technical artifact suggesting MT genes were filtered or use incorrect pattern. With only 460 cells (very small dataset), extremely conservative filtering is essential. Setting nFeature_min at 2000 removes only severely degraded cells while preserving the high-complexity stem cell baseline. Upper bound of 15000 is permissive to avoid over-filtering legitimate high-expression states in pluripotent stem cells. MT threshold of 20% is lenient but necessary given uncertainty about MT calculation. Expected retention: 440-450 cells (>95%), critical for maintaining statistical power in this very small dataset. The goal is to identify 3-4 stem cell states (pluripotent, early differentiation) along with FUCCI cell cycle phases."
+        },
+        "4": {
+          "stage_name": "PCA + PC Selection",
+          "decision_id": "3_GSE64016_H1andFUCCI_normalized_EC_original_stage4_pca_+_pc_selection",
+          "correct_decision": "SELECT_PC_RANGE",
+          "correct_pc_range": {
+            "min_pc": 1,
+            "max_pc": 30
+          },
+          "rationale": "For very small Smart-seq dataset (460 cells) without cell cycle regression, variance curve is extremely flat with no clear elbow. PC1 explains only 4.45% (very low, indicating no batch effect or dominant technical artifact). This flatness suggests: (1) high biological complexity distributed across many PCs, (2) limited statistical power due to small sample size, or (3) pre-normalization has dampened variance structure. Agent recommendations ranged from PC 1-15 (Claude, conservative for small dataset) to PC 1-30 (GPT and Gemini, capturing distributed variance). Gemini correctly flagged STOP_AND_REVIEW concern about low cumulative variance (48% at PC20, 67% at PC30). User selected GPT recommendation of PCs 1-30. For stem cell analysis expecting 3-4 pluripotent states plus differentiation trajectories, using PC 1-30 is necessary to capture subtle signals despite small cell count. The flat variance distribution is expected for small Smart-seq datasets and does not indicate data quality problems."
+        },
+        "5": {
+          "stage_name": "Clustering + Markers",
+          "decision_id": "3_GSE64016_H1andFUCCI_normalized_EC_original_stage5_clustering_+_markers",
+          "correct_decision": "FLAG_SUSPICIOUS",
+          "expected_clusters": "3-5 clusters",
+          "rationale": "With 460 cells after filtering, expect 3-5 clusters representing H1 ESC states: pluripotent (POU5F1/NANOG/SOX2), early differentiation lineages, and potentially cell cycle phases since regression was NOT applied. Agent analysis showed 3 clusters with adequate sizes (213, 135, 112 cells). Agents disagreed: GPT identified FLAG_SUSPICIOUS (HIGH confidence) noting histone-dominated Cluster 0 (HIST1H1E, HIST1H1B, HIST1H1A) indicating cell cycle confounding and lack of canonical lineage markers; Claude recommended ACCEPT_CLUSTERING (MEDIUM confidence) noting technically valid workflow but acknowledging biological concerns about histone markers; Gemini recommended ACCEPT_CLUSTERING (MEDIUM confidence) focusing on cluster size adequacy. The CORRECT decision is FLAG_SUSPICIOUS because: (1) Cluster 0 defined by histone genes represents S-phase rather than cell identity, (2) no canonical stem cell markers visible in top markers for any cluster, (3) absence of cell cycle regression (due to UNCERTAIN decision in Stage 3A) led to cycle-driven clustering, (4) FUCCI ground truth could validate whether clusters match cycle phases. This is a case study showing why borderline cell cycle signals (correlation 0.262) should still be regressed in highly proliferative samples."
+        },
+        "3A": {
+          "stage_name": "Cell Cycle Scoring",
+          "decision_id": "3_GSE64016_H1andFUCCI_normalized_EC_original_stage3A_cell_cycle_scoring",
+          "correct_decision": "REMOVE_CELL_CYCLE",
+          "rationale": "Moderate-to-strong evidence for cell cycle influence in FUCCI-labeled H1 ESCs: PC1 shows moderate correlation with G2M.Score (r=0.262), approaching but not exceeding the 0.3 threshold. S.Score correlation is weak (r=-0.112). Phase distribution is extremely proliferative: S+G2M = 86.5% (S=34.1%, G2M=52.4%), which is very high even for stem cells. Agent decisions were mixed: GPT recommended REMOVE_CELL_CYCLE (MEDIUM confidence) citing the high proliferative fraction and moderate correlation, Claude recommended REMOVE_CELL_CYCLE (MEDIUM confidence) noting visual phase separation despite borderline correlation, Gemini recommended UNCERTAIN (HIGH confidence) noting correlation is below 0.3 threshold. Consensus: UNCERTAIN, leading to no regression. However, the CORRECT decision is REMOVE_CELL_CYCLE because: (1) visual PCA shows directional bias with G2M cells clustering separately, (2) 86.5% proliferation fraction means cell cycle will dominate downstream clustering regardless of correlation threshold, (3) FUCCI reporter confirms cell cycle is a major biological variable that should be regressed to reveal stem cell states independent of cycle phase."
+        },
+        "3B": {
+          "stage_name": "Execute Cell Cycle Decision",
+          "decision_id": "3_GSE64016_H1andFUCCI_normalized_EC_original_stage3B_execute_cell_cycle_decision",
+          "correct_decision": "REMOVED_CELL_CYCLE",
+          "rationale": "Should see the cell cycle removed plot."
+        }
+      }
+    }
+  },
+  "evaluation_criteria": {
+    "stage1": {
+      "decision_type": "auto_proceed",
+      "description": "Stage 1 is always AUTO-PROCEED. Seurat object creation and QC metric calculation (nFeature, nCount, percent.mt) are deterministic operations requiring no agent review."
+    },
+    "stage2": {
+      "decision_type": "agent_checkpoint",
+      "decisions": {
+        "SET_THRESHOLDS": "Agents set custom QC thresholds based on dataset characteristics (organism, tissue type, platform, median metrics)",
+        "USE_DEFAULT_THRESHOLDS": "Standard Seurat thresholds (nFeature 200-5000, MT 10-15%) appropriate for typical 10x PBMC-like data"
+      },
+      "correctness_criteria": {
+        "biological_appropriateness": "Thresholds should match tissue type expectations (brain tolerates higher MT%, immune cells strict MT%, stem cells high nFeature)",
+        "statistical_power": "Must retain sufficient cells for downstream clustering (>500 cells minimum, >1000 optimal)",
+        "platform_awareness": "Smart-seq2 requires much higher nFeature thresholds (5000-15000) than 10x (500-6000)",
+        "doublet_removal": "nFeature_max should be set to capture doublets (typically 2-3x median nFeature)"
+      }
+    },
+    "stage3A": {
+      "decision_type": "agent_checkpoint",
+      "decisions": {
+        "SKIP_CELL_CYCLE": "Insufficient cell cycle markers detected OR minimal cell cycle signal (PC1 correlation <0.3, low S+G2M%)",
+        "REMOVE_CELL_CYCLE": "Strong cell cycle signal (PC1 correlation >0.3 OR visual phase separation OR high S+G2M% >60%)",
+        "UNCERTAIN": "Borderline case (correlation 0.2-0.3, moderate S+G2M% 40-60%)"
+      },
+      "correctness_criteria": {
+        "correlation_threshold": "Absolute PC1 correlation with S.Score or G2M.Score > 0.3 warrants removal",
+        "visual_separation": "Clear spatial segregation of cell cycle phases in PCA plot indicates need for regression",
+        "proliferation_fraction": "S+G2M > 60% suggests cell cycle will dominate clustering regardless of correlation",
+        "tissue_context": "Stem cells, cancer cells, embryonic tissues expected to have high proliferation"
+      }
+    },
+    "stage3B": {
+      "decision_type": "auto_proceed",
+      "description": "Stage 3B automatically executes the decision from Stage 3A. If 3A determined REMOVE_CELL_CYCLE, regression is applied using ScaleData(vars.to.regress). If SKIP_CELL_CYCLE, no regression is performed."
+    },
+    "stage4": {
+      "decision_type": "agent_checkpoint",
+      "decisions": {
+        "USE_DEFAULT": "Standard PC range 1-20 appropriate for dataset",
+        "SELECT_PC_RANGE": "Custom PC range based on elbow plot, cumulative variance (target 80-90%), and dataset size",
+        "STOP_AND_REVIEW": "PC1 dominance >50% indicates potential batch effect or technical artifact requiring investigation"
+      },
+      "correctness_criteria": {
+        "pc1_dominance": "PC1 >50% variance is red flag for batch effects, but may proceed with caution if data quality is good",
+        "elbow_detection": "PC range should extend to where individual variance drops below 1% or cumulative reaches 80-90%",
+        "dataset_size": "Small datasets (<1000 cells) benefit from fewer PCs (1-15), large datasets (>10000 cells) can use more PCs (1-25)",
+        "variance_distribution": "Flat variance curve suggests distributed signal, justifying more PCs; sharp elbow justifies fewer PCs"
+      }
+    },
+    "stage5": {
+      "decision_type": "agent_checkpoint",
+      "decisions": {
+        "ACCEPT_CLUSTERING": "Clusters are biologically meaningful, markers are cell-type-specific, cluster sizes adequate, no major technical artifacts",
+        "ADJUST_RESOLUTION": "Too many/few clusters, recommend increasing or decreasing resolution parameter",
+        "FLAG_SUSPICIOUS": "Clustering driven by cell cycle genes OR genomic coordinates as markers OR missing expected cell types OR multi-lineage contamination"
+      },
+      "correctness_criteria": {
+        "cluster_sizes": "All clusters >50 cells for adequate DE power, ideally >100 cells",
+        "marker_specificity": "Top markers should be canonical cell type genes (CD3D for T cells, MS4A1 for B cells), not cell cycle genes (MKI67, TOP2A, HIST genes)",
+        "lineage_purity": "No multi-lineage contamination (e.g., immune + epithelial markers in same cluster)",
+        "expected_cell_types": "Tissue-appropriate cell types present (PBMCs: T/B/NK/monocytes/DC; brain: neurons/glia/OPCs; stem cells: pluripotent/progenitors)"
+      }
+    }
+  },
+  "tissue_specific_expectations": {
+    "PBMC": {
+      "expected_cell_types": "CD4+ T cells, CD8+ T cells, regulatory T cells, B cells, NK cells, classical monocytes, non-classical monocytes, dendritic cells",
+      "expected_clusters": "8-12 clusters",
+      "qc_thresholds": {
+        "nFeature_min": 500,
+        "nFeature_max": 6000,
+        "percent_mt_max": 10
+      },
+      "rationale": "Blood cells have moderate complexity and strict MT% (healthy cells should not be dying)"
+    },
+    "brain": {
+      "expected_cell_types": "Excitatory neurons, inhibitory neurons, astrocytes, oligodendrocytes, OPCs, microglia, endothelial cells",
+      "expected_clusters": "10-18 clusters",
+      "qc_thresholds": {
+        "nFeature_min": 500,
+        "nFeature_max": 8000,
+        "percent_mt_max": 15
+      },
+      "rationale": "Brain neurons have high complexity, permissive MT% (metabolically active tissue)"
+    },
+    "cell_line": {
+      "expected_cell_types": "Subclones, cell cycle states, stress responses, metabolic states",
+      "expected_clusters": "5-12 clusters",
+      "qc_thresholds": {
+        "nFeature_min": 1000,
+        "nFeature_max": 12000,
+        "percent_mt_max": 15
+      },
+      "rationale": "Cell lines show moderate complexity and variable MT% depending on culture conditions"
+    },
+    "stem_cells": {
+      "expected_cell_types": "Pluripotent, early progenitors, differentiation trajectory lineages",
+      "expected_clusters": "5-10 clusters",
+      "qc_thresholds": {
+        "nFeature_min": 2000,
+        "nFeature_max": 15000,
+        "percent_mt_max": 20
+      },
+      "rationale": "Stem cells have very high complexity and permissive MT% (metabolically active)"
+    }
+  },
+  "notes": [
+    "This ground truth was created by analyzing actual pipeline outputs from 7 single-cell RNA-seq datasets",
+    "Stage 1 is always AUTO-PROCEED (no agent decisions) - only QC metric calculation",
+    "Stage 3B is AUTO-PROCEED - executes decision from Stage 3A deterministically",
+    "Stages 2, 3A, 4, and 5 have agent checkpoints requiring consensus decisions",
+    "Cell cycle regression is CRITICAL for datasets with strong proliferative signatures (S+G2M >60% or PC1 correlation >0.3)",
+    "PC1 dominance >50% indicates batch effects but does not always require stopping - can proceed with caution",
+    "Clean data (REH, SUP) shows minor batch effects in PC1 but acceptable data quality for analysis",
+    "Smart-seq2 data requires much higher nFeature thresholds than 10x due to full-length sequencing",
+    "FUCCI reporter datasets (GSE146773, GSE64016) are ground truth tests for cell cycle regression effectiveness",
+    "Clustering driven by histone genes (HIST1H4C, TOP2A, MKI67) indicates failed or insufficient cell cycle regression",
+    "Genomic coordinates as markers (chr3:93470123-93471044) indicate data processing errors or unannotated features",
+    "Expected cluster counts scale with cell count: sqrt(n_cells)/10 provides rough estimate"
+  ],
+  "updated": "2026-01-27",
+  "total_decisions": 42
+}

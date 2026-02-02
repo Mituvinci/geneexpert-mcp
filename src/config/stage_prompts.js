@@ -36,12 +36,12 @@ Assess the statistical validity of the input data quality metrics.
 4. Flag any samples with unusually low/high read counts
 
 ## Decision Criteria
-- PASS: All samples have adequate read counts (>5M), no systematic quality issues
+- PASS_ALL: All samples have adequate read counts (>5M), no systematic quality issues
 - PASS_WITH_WARNING: Minor issues that won't affect downstream analysis
 - FAIL: Critical issues that will compromise the analysis (e.g., <1M reads, corruption)
 
 ## Output Format (REQUIRED - follow exactly)
-Decision: [PASS / PASS_WITH_WARNING / FAIL]
+Decision: [PASS_ALL / PASS_WITH_WARNING / FAIL]
 Confidence: [HIGH / MEDIUM / LOW]
 Reasoning: [2-3 sentences explaining your statistical assessment]
 Concerns: [List any statistical concerns, or "None"]`,
@@ -62,12 +62,12 @@ Assess technical feasibility of proceeding with the RNA-seq pipeline.
 4. Check for truncated files or format errors
 
 ## Decision Criteria
-- PASS: All files valid, paired reads match, no technical issues
+- PASS_ALL: All files valid, paired reads match, no technical issues
 - PASS_WITH_WARNING: Minor warnings (e.g., adapter content) that won't cause failures
 - FAIL: File corruption, mismatched paired reads, or format errors
 
 ## Output Format (REQUIRED - follow exactly)
-Decision: [PASS / PASS_WITH_WARNING / FAIL]
+Decision: [PASS_ALL / PASS_WITH_WARNING / FAIL]
 Confidence: [HIGH / MEDIUM / LOW]
 Reasoning: [2-3 sentences explaining your technical assessment]
 Technical_Risks: [List any risks, or "None"]`,
@@ -91,12 +91,12 @@ Assess biological plausibility of the sequencing data.
 4. Flag any biologically suspicious patterns (e.g., one replicate very different)
 
 ## Decision Criteria
-- PASS: Read depth appropriate, replicates consistent, GC content normal
+- PASS_ALL: Read depth appropriate, replicates consistent, GC content normal
 - PASS_WITH_WARNING: Borderline read depth or minor inconsistencies
 - FAIL: Insufficient reads for meaningful DE analysis, or clear biological issues
 
 ## Output Format (REQUIRED - follow exactly)
-Decision: [PASS / PASS_WITH_WARNING / FAIL]
+Decision: [PASS_ALL / PASS_WITH_WARNING / FAIL]
 Confidence: [HIGH / MEDIUM / LOW]
 Reasoning: [2-3 sentences explaining your biological assessment]
 Biological_Concerns: [List any concerns, or "None"]`

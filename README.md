@@ -284,7 +284,7 @@ Sleep-deprived group:
 - **Platform:** 10x Chromium (10,194 cells)
 - **Category:** Clean single-cell
 - **Cell cycle labels:** 2,431 cells (1,963 G1, 127 S, 341 G2M) consensus labeled
-- **URL:** https://www.10xgenomics.com/resources/datasets
+- **URL:** https://www.10xgenomics.com/datasets/pbm-cs-from-a-healthy-donor-whole-transcriptome-analysis-3-1-standard-4-0-0
 
 ---
 
@@ -294,7 +294,7 @@ Sleep-deprived group:
 - **Platform:** 10x Chromium v3 chemistry (11,843 cells)
 - **Category:** Clean single-cell
 - **Cell cycle labels:** 5,524 cells (3,830 G1, 1,116 S, 578 G2M) consensus labeled
-- **URL:** https://www.10xgenomics.com/resources/datasets
+- **URL:** https://www.10xgenomics.com/datasets/10-k-brain-cells-from-an-e-18-mouse-v-3-chemistry-3-standard-3-0-0
 
 ---
 
@@ -538,9 +538,9 @@ If you use this system in your research, please cite:
 ```bibtex
 @software{geneexpert2026,
   title={GeneExpert: Poly-Foundational LLM Multi-Agent System for RNA-seq Analysis},
-  author={[Your Name]},
+  author={[Anonymous]},
   year={2026},
-  url={https://github.com/[your-username]/geneexpert-mcp}
+  url={https://anonymous.4open.science/r/geneexpert-mcp-77F0/README.md}
 }
 ```
 
@@ -554,6 +554,6 @@ MIT
 
 ## Links
 
-- **GitHub:** https://github.com/[your-username]/geneexpert-mcp
+- **GitHub:** https://anonymous.4open.science/r/geneexpert-mcp-77F0/README.md
 - **Status:** Production-ready (140 experiment pipeline complete)
 - **Experiments:** 10 systems × 14 datasets = 140 total analyses

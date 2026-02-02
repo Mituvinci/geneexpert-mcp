@@ -1,0 +1,561 @@
+{
+  "description": "Ground truth evaluation for bulk RNA-seq staged analysis",
+  "created": "2026-01-22",
+  "updated": "2026-01-26",
+  "evaluator": "First Authors , PhD Student (Works in a Bioinformatics Lab)",
+  "total_datasets": 7,
+  "total_decisions": 28,
+  "ground_truth": {
+    "1_GSE52778_pe_clean": {
+      "dataset_name": "GSE52778",
+      "organism": "human",
+      "description": "Clean paired-end dataset, dexamethasone treatment",
+      "type": "clean",
+	  "sample_subset": {
+		  "reference_accession": "GSE52778",
+		  "reference_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE52778",
+		  "organism": "human",
+		  "library_type": "paired-end",
+		  "tissue": "cell line",
+		  "groups": {
+			  "untreated": {
+				"GSM1275862": "N61311_untreated_1",
+				"GSM1275866": "N052611_untreated_2",
+				"GSM1275870": "N080611_untreated_3",
+				"GSM1275874": "N061011_untreated_4"
+			  },
+			  "Dex": {
+				"GSM1275863": "N61311_Dex_1",
+				"GSM1275867": "N052611_Dex_2",
+				"GSM1275871": "N080611_Dex_3",
+				"GSM1275875": "N061011_Dex_4"
+			  }
+		  },
+		  "renamed_labels": {
+			"sample_label_dictionary": {
+			  "A1": "N61311_untreated_1",
+			  "A2": "N052611_untreated_2",
+			  "A3": "N080611_untreated_3",
+			  "A4": "N061011_untreated_4",
+			  "B1": "N61311_Dex_1",
+			  "B2": "N052611_Dex_2",
+			  "B3": "N080611_Dex_3",
+			  "B4": "N061011_Dex_4"
+			},
+
+			"groups_by_label": {
+			  "untreated": ["A1", "A2", "A3", "A4"],
+			  "Dex": ["B1", "B2", "B3", "B4"]
+			}
+		  }
+		},
+
+      "decisions": {
+          "1_GSE52778_pe_clean_stage1_fastq_validation": {
+			"correct_decision": "PASS_ALL",
+			"rationale": "Based on deterministic Stage-1 outputs, all FASTQ files passed structural validation with no INVALID_FASTQ or read-pair mismatch flags. FastQC reports were manually reviewed across all samples and showed acceptable per-base quality, GC content, and sequence length distributions, with no critical failures that would prevent alignment. Read depth was sufficient and consistent across samples. Therefore, proceeding to Stage 2 (alignment) is justified.",
+			"confidence": "HIGH"
+		  },
+		  "1_GSE52778_pe_clean_stage2_alignment_qc": {
+			"correct_decision": "PASS_ALL",
+			"rationale": "Based on deterministic Stage-2 alignment outputs, all samples passed alignment QC with no WARN, FAIL, or SEVERE_FAIL flags. The alignment QC report explicitly indicates “ALL SAMPLES PASS,” and the pipeline exit code was 0, indicating acceptable mapping quality across all samples. Therefore, proceeding to Stage 3 (quantification and PCA-based QC) is justified.",
+			"confidence": "HIGH"
+		  },
+        "1_GSE52778_pe_clean_stage3_qc_assessment": {
+          "correct_decision": "simpleEdger",
+          "correct_batch_specification": "N/A",
+		  "batch_effect_detected": false,
+          "correct_outlier_action": "KEEP_ALL",
+		  "rationale": "PCA shows clear separation by biological condition with coherent clustering within each group. Although minor within-group variation is present (e.g., GSM1275871_N080611_Dex (B3)), no sample is isolated or deviates sufficiently to justify outlier removal. No batch-driven structure is observed. Proceeding to Stage 4 is justified.",
+          "confidence": "HIGH"
+        },
+        "1_GSE52778_pe_clean_stage4_de_analysis": {
+          "correct_decision": "APPROVE",
+          "rationale": "Differential expression results were approved because statistical thresholds (FDR < 0.05) were applied correctly, fold changes were stable and interpretable, and MA plots showed coherent signal without technical artifacts. The analysis respected the paired two-group design identified during QC and produced consistent approval outcomes across different system architectures. This evaluation was performed on a representative subset of samples and was intended to assess pipeline behavior rather than reproduce the full original GSE52778 study. Sample subset used: A balanced subset of eight samples from GSE52778 was selected for pipeline evaluation, consisting of four untreated controls and four dexamethasone-treated samples. Untreated: GSM1275862 (N61311), GSM1275866 (N052611), GSM1275870 (N080611), GSM1275874 (N061011) Dexamethasone-treated: GSM1275863 (N61311), GSM1275867 (N052611), GSM1275871 (N080611), GSM1275875 (N061011)",
+          "confidence": "HIGH"
+        }
+      }
+    },
+    "2_GSE114845_se_clean": {
+      "dataset_name": "GSE114845",
+      "organism": "mouse",
+      "description": "Clean single-end dataset, sleep deprivation",
+      "type": "clean",
+	  "sample_subset": {
+		  "reference_accession": "GSE114845",
+		  "reference_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE114845",
+		  "organism": "mouse",
+		  "library_type": "single-end",
+		  "tissue": "cortex",
+		  "groups": {
+			  "control": {
+				"GSM3151467": "05_Cortex_Control_R1_001",
+				"GSM3151469": "100_Cortex_Control_R1_001",
+				"GSM3151471": "101_Cortex_Control_R1_001",
+				"GSM3151473": "103_Cortex_Control_R1_001",
+				"GSM3151475": "29_Cortex_Control_R1_001"
+			  },
+			  "sleep_deprived": {
+				"GSM3151468": "05_Cortex_SleepDeprived_R1_001",
+				"GSM3151470": "100_Cortex_SleepDeprived_R1_001",
+				"GSM3151472": "101_Cortex_SleepDeprived_R1_001",
+				"GSM3151474": "103_Cortex_SleepDeprived_R1_001",
+				"GSM3151476": "29_Cortex_SleepDeprived_R1_001"
+			  }
+		  },
+		    "renamed_labels": {
+			  "sample_label_dictionary": {
+					"A1": "05_Cortex_Control_R1_001",
+					"A2": "100_Cortex_Control_R1_001",
+					"A3": "101_Cortex_Control_R1_001",
+					"A4": "103_Cortex_Control_R1_001",
+					"A5": "29_Cortex_Control_R1_001",
+					"B1": "05_Cortex_SleepDeprived_R1_001",
+					"B2": "100_Cortex_SleepDeprived_R1_001",
+					"B3": "101_Cortex_SleepDeprived_R1_001",
+					"B4": "103_Cortex_SleepDeprived_R1_001",
+					"B5": "29_Cortex_SleepDeprived_R1_001"
+				  },
+				"groups_by_label": {
+				  "Control": ["A1", "A2", "A3", "A4", "A5"],
+				  "SleepDeprived": ["B1", "B2", "B3", "B4", "B5"]
+				}
+			  }
+		},
+      "decisions": {
+        "2_GSE114845_se_clean_stage1_fastq_validation": {
+		  "correct_decision": "PASS_ALL",
+		  "rationale": "Based on deterministic Stage-1 outputs, all FASTQ files passed structural validation with no invalid formatting or integrity errors. FastQC summaries were manually reviewed and showed acceptable sequencing quality for single-end mouse RNA-seq data, with no critical failures that would prevent alignment. Read depth was sufficient and consistent across samples (approximately 37.5 million reads per sample on average). Therefore, proceeding to Stage 2 (alignment and alignment QC) is justified.",
+		  "confidence": "HIGH"
+		},
+		"2_GSE114845_se_clean_stage2_alignment_qc": {
+		  "correct_decision": "PASS_ALL",
+		  "rationale": "Based on deterministic Stage-2 alignment outputs, all single-end samples were successfully aligned to the mouse reference genome (mm10), producing BAM files for all 10 samples. Alignment QC screening reported no WARN, FAIL, or SEVERE_FAIL flags, and the pipeline exit code was 0. The alignment QC report explicitly indicates that all samples passed quality thresholds, with no evidence of mapping failure or technical artifacts. Therefore, proceeding to Stage 3 (quantification and PCA-based QC assessment) is justified.",
+		  "confidence": "HIGH"
+		}
+		,
+        "2_GSE114845_se_clean_stage3_qc_assessment": {
+          "correct_decision": "simpleEdger",
+          "correct_batch_specification": "N/A",
+		  "batch_effect_detected": false,
+          "correct_outlier_action": "KEEP_ALL",
+		  "rationale": "PCA shows clear separation between control and sleep-deprived samples, with coherent clustering within each condition and no sample exhibiting isolation or abnormal deviation from its group. The dominant structure reflects biological condition rather than technical or batch-driven effects. No outliers are indicated, and proceeding with a simple differential expression model is justified.",
+          "confidence": "HIGH"
+        },
+        "2_GSE114845_se_clean_stage4_de_analysis": {
+          "correct_decision": "APPROVE",
+		  "rationale": "Differential expression results were approved because statistical thresholds (FDR < 0.05, |logFC| > 0.585, logCPM > 0) were applied consistently and produced a balanced set of up- and down-regulated genes. The analysis compared control versus sleep-deprived samples using a paired two-group design identified during QC. MA plots showed coherent signal without technical artifacts or low-expression inflation, and fold-change distributions were stable and biologically plausible. This evaluation was performed on a representative subset of the GSE114845 dataset, consisting of five control and five sleep-deprived cortex samples, and was intended to assess pipeline behavior and decision consistency rather than reproduce the full original study.",
+          "confidence": "HIGH"
+        }
+      }
+    },
+    "3_GSE113754_pe_clean": {
+      "dataset_name": "GSE113754",
+      "organism": "mouse",
+      "description": "Clean paired-end dataset, sleep deprivation (wildtype)",
+      "type": "clean",
+	  "sample_subset": {
+		  "reference_accession": "GSE113754",
+		  "reference_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE113754",
+		  "library_type": "paired-end",
+		  "organism": "mouse",
+		  "tissue": "cortex",
+		  "groups": {
+			  "control": {
+				"GSM3118997": "WT_Homecage_Control_rep1",
+				"GSM3118998": "WT_Homecage_Control_rep2",
+				"GSM3118999": "WT_Homecage_Control_rep3",
+				"GSM3119000": "WT_Homecage_Control_rep4",
+				"GSM3119001": "WT_Homecage_Control_rep5"
+			  },
+			  "sleep_deprived": {
+				"GSM3119007": "WT_SleepDeprived_rep1",
+				"GSM3119008": "WT_SleepDeprived_rep2",
+				"GSM3119009": "WT_SleepDeprived_rep3",
+				"GSM3119010": "WT_SleepDeprived_rep4",
+				"GSM3119011": "WT_SleepDeprived_rep5"
+			  }
+		  },
+		    "renamed_labels": {
+				 "sample_label_dictionary": {
+					"A1": "WT_Homecage_Control_rep1",
+					"A2": "WT_Homecage_Control_rep2",
+					"A3": "WT_Homecage_Control_rep3",
+					"A4": "WT_Homecage_Control_rep4",
+					"A5": "WT_Homecage_Control_rep5",
+					"B1": "WT_SleepDeprived_rep1",
+					"B2": "WT_SleepDeprived_rep2",
+					"B3": "WT_SleepDeprived_rep3",
+					"B4": "WT_SleepDeprived_rep4",
+					"B5": "WT_SleepDeprived_rep5"
+				  },
+				"groups_by_label": {
+				  "Control": ["A1", "A2", "A3", "A4", "A5"],
+				  "SleepDeprived": ["B1", "B2", "B3", "B4", "B5"]
+				}
+			  }
+		},
+
+      "decisions": {
+        "3_GSE113754_pe_clean_stage1_fastq_validation": {
+          "correct_decision": "PASS_ALL",
+          "rationale": "Based on deterministic Stage-1 outputs, all paired-end FASTQ files passed structural validation with no invalid formatting, read-pair mismatches, or integrity errors. FastQC summaries were manually reviewed and showed acceptable sequencing quality across all samples, with no critical failures that would prevent alignment. Read depth was high and consistent across samples (approximately 49.7 million reads per sample on average). Therefore, proceeding to Stage 2 (alignment and alignment QC) is justified.",
+          "confidence": "HIGH"
+        },
+        "3_GSE113754_pe_clean_stage2_alignment_qc": {
+          "correct_decision": "PASS_ALL",
+          "rationale": "Based on deterministic Stage-2 alignment outputs, all paired-end samples were successfully aligned to the mouse reference genome (mm10), producing BAM files for all samples. Alignment QC screening reported no WARN, FAIL, or SEVERE_FAIL flags, and the pipeline exit code was 0. The alignment QC report explicitly indicates that all samples passed quality thresholds, with no evidence of mapping failure or technical artifacts. Therefore, proceeding to Stage 3 (quantification and PCA-based QC assessment) is justified.",
+          "confidence": "HIGH"
+        },
+        "3_GSE113754_pe_clean_stage3_qc_assessment": {
+          "correct_decision": "simpleEdger",
+		  "batch_effect_detected": false,
+          "correct_batch_specification": "N/A",
+          "correct_outlier_action": "KEEP_ALL",
+          "rationale": "PCA shows separation driven by biological condition (control vs sleep-deprived) with no evidence of technical clustering across conditions. Within-group dispersion is consistent with biological variability in cortex samples and does not indicate batch structure.",
+          "confidence": "MEDIUM"
+        },
+        "3_GSE113754_pe_clean_stage4_de_analysis": {
+          "correct_decision": "APPROVE",
+          "rationale": "Differential expression analysis applied appropriate statistical thresholds (logCPM > 0, |logFC| > 0.585, FDR < 0.05). MA plot shows coherent signal without technical artifacts, balanced up- and down-regulation, and stable behavior across expression levels.",
+          "confidence": "HIGH"
+        }
+      }
+    },
+	"4_GSE141496_batch_effect": {
+      "dataset_name": "GSE141496",
+      "organism": "human",
+      "description": "",
+      "type": "batch_effect",
+	  "sample_subset": {
+		  "reference_accession": "GSE141496",
+		  "reference_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE141496",
+		  "library_type": "paired-end",
+		  "organism": "human",
+		  "tissue": "HeLa cell line",
+		  "groups": {
+			 "Control": {
+				"GSM4204829": "Control_24h_post_HU_0.25m_rep1",
+				"GSM4204830": "Control_24h_post_HU_0.25m_rep2",
+				"GSM4204833": "Control_rep1",
+				"GSM4204834": "Control_rep2"
+			  },
+			  "KD": {
+				"GSM4204839": "TAB182_KD_24h_post_HU_0.25m_rep1",
+				"GSM4204840": "TAB182_KD_24h_post_HU_0.25m_rep2",
+				"GSM4204841": "TAB182_KD_rep1",
+				"GSM4204842": "TAB182_KD_rep2"
+			  }
+		  },
+		"renamed_labels": {
+		 "sample_label_dictionary": {
+			"A1": "Control_24h_post_HU_0.25m_rep1",
+			"A2": "Control_24h_post_HU_0.25m_rep2",
+			"A3": "Control_rep1",
+			"A4": "Control_rep2",
+			"B1": "TAB182_KD_24h_post_HU_0.25m_rep1",
+			"B2": "TAB182_KD_24h_post_HU_0.25m_rep2",
+			"B3": "TAB182_KD_rep1",
+			"B4": "TAB182_KD_rep2"
+		  },
+			"groups_by_label": {
+			  "Control": ["A1", "A2", "A3", "A4"],
+			  "KD": ["B1", "B2", "B3", "B4"]
+			}
+		  }
+		},
+      "decisions": {
+        "4_GSE141496_batch_effect_stage1_fastq_validation": {
+          "correct_decision": "PASS_ALL",
+          "rationale": "Based on deterministic Stage-1 outputs, all FASTQ files passed structural validation with no invalid formatting or integrity errors reported. FastQC summaries and read-count reports indicate acceptable sequencing quality and sufficient read depth across the 16 samples (approximately 44.8 million reads per sample on average). Therefore, proceeding to Stage 2 (alignment and alignment QC) is justified.",
+          "confidence": "HIGH"
+        },
+        "4_GSE141496_batch_effect_stage2_alignment_qc": {
+          "correct_decision": "PASS_ALL",
+          "rationale": "Based on deterministic Stage-2 alignment outputs, all samples were successfully aligned to the human reference genome (hg38), producing BAM files for all inputs. Alignment QC screening reported no WARN, FAIL, or SEVERE_FAIL flags, and the pipeline exit code was 0. The alignment QC report explicitly indicates that all samples passed quality thresholds, with no evidence of alignment failure or technical artifacts. Therefore, proceeding to Stage 3 (quantification and PCA-based QC assessment) is justified.",
+          "confidence": "HIGH"
+        },
+        "4_GSE141496_batch_effect_stage3_qc_assessment": {
+          "correct_decision": "batch_effect_edger",
+          "correct_batch_specification": "1,1,2,2,1,1,2,2",
+          "correct_outlier_action": "KEEP_ALL",
+          "rationale": "PCA reveals that samples do not cluster by biological condition, with both control and KD samples split across the dominant principal component and latent clusters containing mixed conditions. This pattern indicates that the primary source of variance is not biological. In addition, GSE141496 is a multi-factor RNA-seq dataset by experimental design, incorporating multiple treatments, timepoints, and sequencing lanes, which introduces inherent batch and confounding structure. Taken together, both data-driven QC evidence and experimental design considerations support the use of batch-aware differential expression modeling. No individual samples exhibited sufficient deviation to justify removal.",          
+		  "confidence": "HIGH"
+          
+        },
+        "4_GSE141496_batch_effect_stage4_de_analysis": {
+          "correct_decision": "REQUEST_REANALYSIS",
+		  "rationale": "Both simpleEdgerscript and Bathc effect edger script will fail.The batch-effect edgeR script uses a fixed-effects statistical model that is performing aggressive data cleaning. Because the technical batch noise in these samples is significantly stronger than the biological signal, the script's math is unable to separate the two. Consequently, the script is accidentally filtering out the biological knockdown effect along with the technical noise, leading to the observed loss of all significant differential expression results.",
+		   "confidence": "HIGH"
+        }
+      }
+    },
+    "5_GSE47774_batch_effect": {
+      "dataset_name": "GSE47774",
+      "organism": "human",
+      "description": "Batch effect dataset, multi-site SEQC comparison",
+      "type": "batch_effect",
+	  "sample_subset": {
+		"reference_accession": "GSE47774",
+		"reference_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE47774",
+		"library_type": "paired-end",
+		"organism": "human",
+		"tissue": "HeLa cell line",
+		"groups": {
+			  "AC": {
+				"GSM1156797": "Batch_BGI_A_L01_AC",
+				"GSM1156799": "Batch_BGI_A_L02_AC",
+				"GSM1156801": "Batch_BGI_A_L03_AC",
+				"GSM1156803": "Batch_BGI_A_L04_AC",
+				"GSM1156813": "Batch_BGI_A2_L01_AC",
+				"GSM1156815": "Batch_BGI_A2_L02_AC",
+				"GSM1156817": "Batch_BGI_A2_L03_AC",
+				"GSM1156819": "Batch_BGI_A2_L04_AC",
+				"GSM1156829": "Batch_BGI_A3_L01_AC",
+				"GSM1156833": "Batch_BGI_A3_L03_AC",
+				"GSM1156835": "Batch_BGI_A3_L04_AC"
+			  },
+			  "BC": {
+				"GSM1156798": "Batch_BGI_A_L01_BC",
+				"GSM1156800": "Batch_BGI_A_L02_BC",
+				"GSM1156802": "Batch_BGI_A_L03_BC",
+				"GSM1156804": "Batch_BGI_A_L04_BC",
+				"GSM1156814": "Batch_BGI_A2_L01_BC",
+				"GSM1156816": "Batch_BGI_A2_L02_BC",
+				"GSM1156818": "Batch_BGI_A2_L03_BC",
+				"GSM1156820": "Batch_BGI_A2_L04_BC",
+				"GSM1156830": "Batch_BGI_A3_L01_BC",
+				"GSM1156834": "Batch_BGI_A3_L03_BC",
+				"GSM1156836": "Batch_BGI_A3_L04_BC"
+			  }
+		},
+		  "renamed_labels": {
+			"sample_label_dictionary": {
+				"A1": "Batch_BGI_A_L01_AC",
+				"A2": "Batch_BGI_A_L02_AC",
+				"A3": "Batch_BGI_A_L03_AC",
+				"A4": "Batch_BGI_A_L04_AC",
+				"A5": "Batch_BGI_A2_L01_AC",
+				"A6": "Batch_BGI_A2_L02_AC",
+				"A7": "Batch_BGI_A2_L03_AC",
+				"A8": "Batch_BGI_A2_L04_AC",
+				"A9": "Batch_BGI_A3_L01_AC",
+				"A10": "Batch_BGI_A3_L03_AC",
+				"A11": "Batch_BGI_A3_L04_AC",
+				"B1": "Batch_BGI_A_L01_BC",
+				"B2": "Batch_BGI_A_L02_BC",
+				"B3": "Batch_BGI_A_L03_BC",
+				"B4": "Batch_BGI_A_L04_BC",
+				"B5": "Batch_BGI_A2_L01_BC",
+				"B6": "Batch_BGI_A2_L02_BC",
+				"B7": "Batch_BGI_A2_L03_BC",
+				"B8": "Batch_BGI_A2_L04_BC",
+				"B9": "Batch_BGI_A3_L01_BC",
+				"B10": "Batch_BGI_A3_L03_BC",
+				"B11": "Batch_BGI_A3_L04_BC"
+			  },
+			"groups_by_label": {
+			  "ac": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11"],
+			  "bc": ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "B10", "B11"]
+			}
+		  }
+	  },
+      "decisions": {
+        "5_GSE47774_batch_effect_stage1_fastq_validation": {
+          "correct_decision": "PASS_WITH_WARNING",
+          "rationale": "All FASTQ files passed integrity and format validation with consistent read counts across samples. Minor warnings were issued due to expected variability in sequencing depth and the presence of multiple batches, lanes, and sites inherent to the SEQC multi-site experimental design. These factors do not indicate data corruption and are appropriately handled in downstream QC and batch-effect assessment stages.",
+          "confidence": "MEDIUM"
+        },
+        "5_GSE47774_batch_effect_stage2_alignment_qc": {
+          "correct_decision": "PASS_ALL",
+          "rationale": "All samples successfully aligned to hg38 with complete BAM generation and no alignment-QC failures (exit code = 0; expected BAM count observed). No technical issues were detected at the alignment stage.",
+          "confidence": "HIGH"
+        },
+        "5_GSE47774_batch_effect_stage3_qc_assessment": {
+          "correct_decision": "batch_effect_edger",
+          "correct_batch_specification": "1,1,1,1,2,2,2,2,3,3,3,1,1,1,1,2,2,2,2,3,3,3",
+		  "batch_effect_detected": true,
+          "correct_outlier_action": "KEEP_ALL",
+          "rationale": "Given that GSE47774 was explicitly designed by the SEQC/MAQC-III consortium to assess cross-site, cross-platform, and lane effects, such dispersion is expected and reflects structured batch variation rather than sample-level artifacts. Therefore, all samples were retained and batch effects were modeled explicitly rather than treated as outliers.",
+          "confidence": "HIGH"
+        },
+        "5_GSE47774_batch_effect_stage4_de_analysis": {
+          "correct_decision": "REQUEST_REANALYSIS",
+          "rationale": "Initial differential expression analysis did not yield biologically meaningful results due to inconsistencies in batch specification during model construction. Given the known multi-site SEQC design of GSE47774, batch effects must be modeled explicitly rather than inferred automatically. A reanalysis was therefore requested using a corrected, predefined batch structure consistent with the experimental design to ensure valid estimation of biological effects.",
+          "confidence": "HIGH"
+        }
+      }
+    },
+    "6_GSE193658_Lab_data": {
+      "dataset_name": "GSE193658",
+      "organism": "human",
+      "description": "In-house lab dataset, published",
+      "type": "in_house",
+	  "sample_subset": {
+		  "reference_accession": "GSE193658",
+		  "reference_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE193658",
+		  "rna_subseries_accession": "GSE193656",
+		  "library_type": "RNA-seq",
+		  "cell_line": "MM1S",
+		  "groups": {
+			  "mono": {
+				"GSM5815699": "RNA_MM1S_MONO1",
+				"GSM5815700": "RNA_MM1S_MONO2",
+				"GSM5815701": "RNA_MM1S_MONO3"
+			  },
+			  "tsw": {
+				"GSM5815702": "RNA_MM1S_TSW1",
+				"GSM5815703": "RNA_MM1S_TSW2",
+				"GSM5815704": "RNA_MM1S_TSW3"
+			  }
+		  },
+		    "renamed_labels": {
+				"sample_label_dictionary": {
+					"A1": "RNA_MM1S_MONO1",
+					"A2": "RNA_MM1S_MONO2",
+					"A3": "RNA_MM1S_MONO3",
+					"B1": "RNA_MM1S_TSW1",
+					"B2": "RNA_MM1S_TSW2",
+					"B3": "RNA_MM1S_TSW3"
+				  },
+				"groups_by_label": {
+				  "mono": ["A1", "A2", "A3"],
+				  "tsw": ["B1", "B2", "B3"]
+				}
+			  }
+		},
+		
+      "decisions": {
+        "6_GSE193658_Lab_data_stage1_fastq_validation": {
+          "correct_decision": "PASS_WITH_WARNING",
+          "rationale": "All FASTQ files passed format and integrity validation with no evidence of file corruption or truncation. Read counts are consistent across the selected subset of samples and fall within the expected range for in-house RNA-seq experiments. Although sequencing depth is moderate, it is sufficient for downstream gene-level analysis and does not indicate technical failure.",
+          "confidence": "MEDIUM",
+          "notes": ""
+        },
+        "6_GSE193658_Lab_data_stage2_alignment_qc": {
+          "correct_decision": "PASS_ALL",
+          "rationale": "",
+          "confidence": "MEDIUM",
+          "notes": "Alignment QC identified no FAIL or SEVERE_FAIL samples. Five samples were flagged with WARN due to borderline properly paired read percentages and mildly elevated unexpected fragment length rates. Overall mapping rates remained high (>80%) across all samples. These warnings are consistent with library-level variability and do not indicate contamination or reference mismatch. Therefore, alignment results were accepted with caution, and downstream analyses were allowed to proceed."
+        },
+        "6_GSE193658_Lab_data_stage3_qc_assessment": {
+          "correct_decision": "simpleEdger",
+          "correct_batch_specification": "auto",
+          "correct_outlier_action": "KEEP_ALL",
+          "rationale": "Mono samples show higher within-group variance than TSW, but there is no clear evidence of discrete technical subclusters or sample-specific artifacts. With n=3 per group, labeling this as batch effect is not justified from PCA alone. We retain all samples and proceed with standard two-group DE; batch modeling is only applied when batch structure is supported by metadata or consistent multi-metric QC evidence.",
+          "confidence": "LOW"
+        },
+        "6_GSE193658_Lab_data_stage4_de_analysis": {
+          "correct_decision": "APPROVE",
+          "rationale": "Differential expression analysis was approved because the results satisfy the predefined statistical and effect-size criteria (FDR < 0.05, |logFC| > 0.585, logCPM > 0) and exhibit a symmetric and stable MA-plot structure, indicating balanced transcriptional changes rather than global technical bias. The distribution of significant genes is consistent with expectations observed in manual exploratory analyses of this experimental subset, where treatment-induced transcriptional responses produce comparable magnitudes of up- and down-regulation under the same thresholds.This decision is based on a defined subset of the GSE193658 dataset (MM1S MONO1–3 vs MM1S TSW1–3) selected to validate pipeline behavior rather than to reproduce the full study.",
+          "confidence": "LOW"
+        }
+      }
+    },
+    "7_GSE114845_se_clean_CONTAM70_with_E.coli_GSE48151": {
+      "dataset_name": "GSE114845_CONTAM70",
+      "organism": "mouse",
+      "description": "GSE114845 (mouse data ) was contaminated with 70% E. coli synthetic using GSM1170025 LB(OD=0.87) and tool (seqkit)",
+      "type": "contamination",
+	  	  "sample_subset": {
+		  "reference_accession": "GSE114845",
+		  "reference_accession_2": "GSE48151",
+		  "reference_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE114845",
+		  "reference_url_2":"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE48151",
+		  "organism": "mouse",
+		  "library_type": "single-end",
+		  "tissue": "cortex",
+		  "groups": {
+			  "control": {
+				"GSM3151467": "05_Cortex_Control_R1_001",
+				"GSM3151469": "100_Cortex_Control_R1_001",
+				"GSM3151471": "101_Cortex_Control_R1_001",
+				"GSM3151473": "103_Cortex_Control_R1_001",
+				"GSM3151475": "29_Cortex_Control_R1_001"
+			  },
+			  "sleep_deprived": {
+				"GSM3151468": "05_Cortex_SleepDeprived_R1_001",
+				"GSM3151470": "100_Cortex_SleepDeprived_R1_001",
+				"GSM3151472": "101_Cortex_SleepDeprived_R1_001",
+				"GSM3151474": "103_Cortex_SleepDeprived_R1_001",
+				"GSM3151476": "29_Cortex_SleepDeprived_R1_001"
+			  }
+		  },
+		    "renamed_labels": {
+			  "sample_label_dictionary": {
+					"A1": "05_Cortex_Control_R1_001",
+					"A2": "100_Cortex_Control_R1_001",
+					"A3": "101_Cortex_Control_R1_001",
+					"A4": "103_Cortex_Control_R1_001",
+					"A5": "29_Cortex_Control_R1_001",
+					"B1": "05_Cortex_SleepDeprived_R1_001",
+					"B2": "100_Cortex_SleepDeprived_R1_001",
+					"B3": "101_Cortex_SleepDeprived_R1_001",
+					"B4": "103_Cortex_SleepDeprived_R1_001",
+					"B5": "29_Cortex_SleepDeprived_R1_001"
+				  },
+				"groups_by_label": {
+				  "Control": ["A1", "A2", "A3", "A4", "A5"],
+				  "SleepDeprived": ["B1", "B2", "B3", "B4", "B5"]
+				}
+			  }
+		},
+      "decisions": {
+        "7_GSE114845_se_clean_CONTAM70_with_E.coli_GSE48151_stage1_fastq_validation": {
+          "correct_decision": "PASS_WITH_WARNING",
+          "rationale": "FASTQ validation completed successfully for all 10 samples. Files were readable, structurally valid, and produced complete FastQC summaries and read-count reports. Stage 1 assesses technical integrity only and does not evaluate biological content or reference compatibility.",
+          "confidence": "HIGH"
+         
+        },
+        "7_GSE114845_se_clean_CONTAM70_with_E.coli_GSE48151_stage2_alignment_qc": {
+          "correct_decision": "ABORT",
+          "rationale": "All samples were flagged as SEVERE_FAIL due to a critically low mapping rate (approximately 25–27%) when aligned to the mouse reference genome. This global and consistent alignment failure across all samples is expected and directly attributable to the intentional synthetic contamination of the dataset, in which 70% of reads were replaced with E. coli sequences (GSE48151) using seqkit. Because the majority of reads originate from a non-target organism, reliable transcript quantification and downstream analyses are not biologically meaningful. Therefore, the correct pipeline action is to abort processing at the alignment QC stage and mark subsequent stages as not applicable.",
+          "confidence": "HIGH",
+          "notes": ""
+        },
+        "7_GSE114845_se_clean_CONTAM70_with_E.coli_GSE48151_stage3_qc_assessment": {
+          "correct_decision": "ABORTED",
+          "rationale": "Stage aborted due to severe contamination detected in Stage 2. Cannot proceed to QC assessment when alignment failed.",
+          "confidence": "HIGH"
+
+        },
+        "7_GSE114845_se_clean_CONTAM70_with_E.coli_GSE48151_stage4_de_analysis": {
+          "correct_decision": "ABORTED",
+          "rationale": "Stage aborted due to severe contamination detected in Stage 2. Cannot proceed to DE analysis when alignment failed.",
+          "confidence": "HIGH"
+        }
+      }
+    }
+    
+  },
+  "evaluation_criteria": {
+    "stage1": {
+      "PASS": "All files technically valid (mod4_ok, paired counts match), no critical issues",
+      "PASS_WITH_WARNING": "Files valid but FastQC shows quality issues that won't prevent pipeline execution",
+      "FAIL": "File corruption, read count mismatch, or critical integrity issues"
+    },
+    "stage2": {
+      "PASS_ALL": "All samples ≥80% mapping rate, no statistical outliers (>2 SD below mean)",
+      "REMOVE_SAMPLES": "One or more samples <70% mapping OR statistical outliers that would confound DE analysis"
+    },
+    "stage3": {
+      "DE_Method": {
+        "simpleEdger": "No batch effects visible in PCA, clean separation by condition",
+        "batch_effect_edger": "Clear batch structure in PCA (samples cluster by batch, not condition)"
+      },
+      "Batch_Specification": {
+        "auto": "Batch pattern can be auto-detected from sample names",
+        "paired": "Paired/blocked design (samples processed in pairs)",
+        "explicit": "Complex batch structure requiring manual specification"
+      },
+      "Outlier_Action": {
+        "KEEP_ALL": "No clear outliers OR small sample size makes removal risky",
+        "REMOVE_OUTLIERS": "Clear visual outliers far from group clusters AND n is large enough to afford removal"
+      }
+    },
+    "stage4": {
+      "APPROVE": "Reasonable number of DEGs (>50), logFC ranges make biological sense, FDR distribution appropriate",
+      "REQUEST_REANALYSIS": "0 DEGs OR suspiciously low/high DEG count OR FDR distribution suggests analysis problem"
+    }
+  }
+}

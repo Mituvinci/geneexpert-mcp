@@ -3,6 +3,15 @@
  *
  * Single source of truth for all valid decisions at each stage.
  * All parsing/matching/logging MUST use these exact strings.
+ *
+ * ===== scRNA-seq Decision Ranges (aligned with ground truth) =====
+ * Stage 1 (Load + QC): auto_proceed (no agent checkpoint)
+ * Stage 2 (QC Filtering): SET_THRESHOLDS | USE_DEFAULT_THRESHOLDS | INSUFFICIENT_DATA
+ * Stage 3 (Normalization + HVG): auto_proceed (no agent checkpoint)
+ * Stage 3A (Cell Cycle Scoring): REMOVE_CELL_CYCLE | SKIP_CELL_CYCLE | UNCERTAIN
+ * Stage 3B (Execute Cell Cycle): Skip Regression | REMOVED_CELL_CYCLE (auto-proceed based on 3A)
+ * Stage 4 (PCA + PC Selection): USE_DEFAULT | SELECT_PC_RANGE | STOP_AND_REVIEW
+ * Stage 5 (Clustering + Markers): ACCEPT_CLUSTERING | ADJUST_RESOLUTION | FLAG_SUSPICIOUS
  */
 
 export const DECISION_VOCABULARY = {
@@ -55,6 +64,14 @@ export const DECISION_VOCABULARY = {
 
   // ===== scRNA-seq Stages =====
 
+  // scRNA Stage 1: Load + QC (always auto-proceed, no agent checkpoint)
+  scrna_stage1: {
+    canonical: ['auto_proceed'],
+    synonyms: {
+      auto_proceed: ['auto_proceed', 'auto proceed', 'automatic', 'no review', 'skip checkpoint']
+    }
+  },
+
   // scRNA Stage 2: QC Filtering
   scrna_stage2: {
     canonical: ['PROCEED', 'PROCEED_WITH_WARNING', 'STOP_AND_REVIEW'],
@@ -72,6 +89,33 @@ export const DECISION_VOCABULARY = {
       SET_THRESHOLDS: ['set_thresholds', 'set thresholds', 'custom thresholds', 'recommend thresholds', 'adaptive'],
       USE_DEFAULT_THRESHOLDS: ['use_default', 'default thresholds', 'standard', 'typical'],
       INSUFFICIENT_DATA: ['insufficient', 'too few cells', 'abort', 'stop', 'reject']
+    }
+  },
+
+  // scRNA Stage 3: Normalization + HVG (always auto-proceed, no agent checkpoint - deterministic)
+  scrna_stage3: {
+    canonical: ['auto_proceed'],
+    synonyms: {
+      auto_proceed: ['auto_proceed', 'auto proceed', 'automatic', 'no review', 'skip checkpoint', 'deterministic']
+    }
+  },
+
+  // scRNA Stage 3A: Cell Cycle Scoring (agent checkpoint)
+  scrna_stage3A: {
+    canonical: ['REMOVE_CELL_CYCLE', 'SKIP_CELL_CYCLE', 'UNCERTAIN'],
+    synonyms: {
+      REMOVE_CELL_CYCLE: ['remove_cell_cycle', 'remove cell cycle', 'regress', 'regress cell cycle', 'apply regression', 'remove'],
+      SKIP_CELL_CYCLE: ['skip_cell_cycle', 'skip cell cycle', 'skip regression', 'no regression', 'skip', 'no removal'],
+      UNCERTAIN: ['uncertain', 'unclear', 'borderline', 'unsure', 'escalate', 'user decision']
+    }
+  },
+
+  // scRNA Stage 3B: Execute Cell Cycle Decision (auto-proceed based on Stage 3A)
+  scrna_stage3B: {
+    canonical: ['Skip Regression', 'REMOVED_CELL_CYCLE'],
+    synonyms: {
+      'Skip Regression': ['skip regression', 'skip_regression', 'skipped', 'no regression', 'regression skipped'],
+      REMOVED_CELL_CYCLE: ['removed_cell_cycle', 'removed cell cycle', 'regression applied', 'cell cycle removed', 'regressed']
     }
   },
 
