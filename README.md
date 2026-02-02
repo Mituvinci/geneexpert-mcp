@@ -251,14 +251,6 @@ python3 bin/plot_stage_wise_accuracy.py \
 
 After running all scRNA-seq experiments, generate evaluation metrics and publication plots:
 
-**scRNA-seq Decision Reference (for evaluation):**
-- **Stage 1:** `auto_proceed` (automated)
-- **Stage 2 (QC Filtering):** `SET_THRESHOLDS` / `USE_DEFAULT_THRESHOLDS` / `INSUFFICIENT_DATA`
-- **Stage 3A (Cell Cycle):** `REMOVE_CELL_CYCLE` / `SKIP_CELL_CYCLE` / `UNCERTAIN`
-- **Stage 3B:** Auto-executes Stage 3A decision
-- **Stage 4 (PCA Selection):** `USE_DEFAULT` / `SELECT_PC_RANGE` / `STOP_AND_REVIEW`
-- **Stage 5 (Clustering):** `ACCEPT_CLUSTERING` / `ADJUST_RESOLUTION` / `FLAG_SUSPICIOUS`
-
 *See `src/config/scrna_stage_prompts.js` for detailed output format specifications.*
 
 ### Step 1: Convert JSONL Logs to CSV
@@ -273,12 +265,6 @@ node bin/json_to_csv_scrna.js convert --dir experiments/scrna_results/
 
 # Output: Creates *_metrics.csv for each experiment folder
 ```
-
-**What this does:** Extracts scRNA-specific fields from logs:
-- **Stage 2:** QC thresholds (`nFeature_min`, `nFeature_max`, `percent_mt_max`) from each agent
-- **Stage 3A:** Cell cycle decision (`REMOVE_CELL_CYCLE` / `SKIP_CELL_CYCLE`) from each agent
-- **Stage 4:** PC range (`min_pc`, `max_pc`) from each agent
-- **Stage 5:** Clustering decision (`ACCEPT_CLUSTERING`, etc.) from each agent
 
 ### Step 2: Aggregate All Experiments
 
@@ -439,9 +425,9 @@ python bin/plot_stage_wise_accuracy.py \
 ```bibtex
 @software{geneexpert2026,
   title={GeneExpert: Multi-Agent LLM System for RNA-seq Analysis},
-  author={[Your Name]},
+  author={[My Name]},
   year={2026},
-  url={https://github.com/yourusername/geneexpert}
+  url={https://github.com/myusername/geneexpert}
 }
 ```
 
