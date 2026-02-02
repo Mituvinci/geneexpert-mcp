@@ -4,17 +4,22 @@ Aggregate all scRNA-seq experiment decision metrics into comprehensive CSV files
 for presentation to PI and analysis.
 
 Adapted from bulk RNA-seq version for scRNA-seq (5 stages instead of 4).
+
+Usage:
+  python bin/aggregate_scrna_experiments.py <input_dir> <output_file>
+
+Example:
+  python bin/aggregate_scrna_experiments.py \
+    experiments/scrna_results \
+    experiments/scrna_results/scrna_ALL_EXPERIMENTS_DETAILED.csv
 """
 
 import pandas as pd
 import glob
 import os
+import sys
+import argparse
 from pathlib import Path
-
-# Base directory for scRNA results
-RESULTS_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/scrna_results/"
-OUTPUT_DIR = "/users/ha00014/Halimas_projects/multi_llm_mcp/experiments/scrna_results/"
-sc_or_bulk = "scrna"
 
 def extract_experiment_info(filepath):
     """Extract dataset and system from filepath"""
@@ -60,14 +65,17 @@ def extract_experiment_info(filepath):
         'full_dataset': dataset_name
     }
 
-def main():
+def main(results_dir, output_file):
     print("=" * 70)
     print("AGGREGATING ALL scRNA-SEQ EXPERIMENT DECISION METRICS")
     print("=" * 70)
     print()
+    print(f"Input directory: {results_dir}")
+    print(f"Output file: {output_file}")
+    print()
 
     # Find all decision metrics CSV files (scRNA format)
-    csv_pattern = os.path.join(RESULTS_DIR, "*", "*_agent_decisions_metrics.csv")
+    csv_pattern = os.path.join(results_dir, "*", "*_agent_decisions_metrics.csv")
     csv_files = sorted(glob.glob(csv_pattern))
 
     print(f"Found {len(csv_files)} experiment files:")
@@ -92,8 +100,7 @@ def main():
     combined_df = pd.concat(all_data, ignore_index=True)
 
     # Save full detailed CSV
-    filename1 = sc_or_bulk + "_ALL_EXPERIMENTS_DETAILED.csv"
-    detailed_output = os.path.join(OUTPUT_DIR, filename1)
+    detailed_output = output_file
     combined_df.to_csv(detailed_output, index=False)
     print(f"✓ Saved detailed data: {detailed_output}")
     print(f"  Total rows: {len(combined_df)}")
@@ -202,9 +209,9 @@ def main():
 
     summary_df = pd.DataFrame(summary_data)
 
-    # Save summary CSV
-    filename2 = sc_or_bulk + "_ALL_EXPERIMENTS_SUMMARY.csv"
-    summary_output = os.path.join(OUTPUT_DIR, filename2)
+    # Save summary CSV (in same directory as detailed output)
+    output_dir = os.path.dirname(detailed_output)
+    summary_output = os.path.join(output_dir, "scrna_ALL_EXPERIMENTS_SUMMARY.csv")
     summary_df.to_csv(summary_output, index=False)
     print(f"✓ Saved summary for PI: {summary_output}")
     print(f"  Total experiments: {len(summary_df)}")
@@ -278,4 +285,31 @@ def main():
     print("=" * 70)
 
 if __name__ == "__main__":
-    main()
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description='Aggregate scRNA-seq experiment decision metrics into comprehensive CSV files',
+        epilog='Example: python bin/aggregate_scrna_experiments.py experiments/scrna_results experiments/scrna_results/scrna_ALL_EXPERIMENTS_DETAILED.csv'
+    )
+    parser.add_argument(
+        'input_dir',
+        help='Input directory containing experiment folders with *_agent_decisions_metrics.csv files'
+    )
+    parser.add_argument(
+        'output_file',
+        help='Output CSV file path for detailed results (e.g., scrna_ALL_EXPERIMENTS_DETAILED.csv)'
+    )
+
+    args = parser.parse_args()
+
+    # Validate input directory exists
+    if not os.path.exists(args.input_dir):
+        print(f"❌ Error: Input directory not found: {args.input_dir}")
+        sys.exit(1)
+
+    # Create output directory if it doesn't exist
+    output_dir = os.path.dirname(args.output_file)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"✓ Created output directory: {output_dir}")
+
+    main(args.input_dir, args.output_file)

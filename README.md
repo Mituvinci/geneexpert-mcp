@@ -155,60 +155,220 @@ Stage 5: Clustering + Markers → Agent Checkpoint (validation)
 
 ## Results Generation & Visualization (Bulk RNA-seq)
 
-After running all experiments, generate evaluation metrics and publication plots:
+After running all bulk RNA-seq experiments, generate evaluation metrics and publication plots:
 
 ### Step 1: Convert Decision Logs to CSV
 
 ```bash
-# Convert all JSON decision logs to CSV format (extracts Stage 3 individual agent decisions)
-node bin/json_to_csv.js convert --dir experiments/results/
+# Convert all JSON decision logs to CSV format
+# <EXPERIMENT_DIR> = Directory containing all experiment result folders (e.g., experiments/results/)
+node bin/json_to_csv_bulk_rna.js convert --dir <EXPERIMENT_DIR>
+
+# Example:
+node bin/json_to_csv_bulk_rna.js convert --dir experiments/results/
 
 # Output: Creates *_metrics.csv for each experiment folder
 ```
+
+**What this does:** Extracts individual agent decisions (DE method, outlier action) from Stage 3 logs.
 
 ### Step 2: Aggregate All Experiments
 
 ```bash
 # Combine all CSV files into one detailed dataset
-python bin/aggregate_experiments.py \
+# <EXPERIMENT_DIR> = Directory with experiment folders containing *_metrics.csv files
+# <OUTPUT_CSV> = Path for combined CSV file
+python bin/aggregate_experiments_bulk_rna.py \
+  <EXPERIMENT_DIR> \
+  <OUTPUT_CSV>
+
+# Example:
+python bin/aggregate_experiments_bulk_rna.py \
   experiments/results \
   experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv
 
-# Input: All *_metrics.csv files from Step 1
-# Output: experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv
+# Output: bulk_rna_ALL_EXPERIMENTS_DETAILED.csv + bulk_rna_ALL_EXPERIMENTS_SUMMARY.csv
 ```
+
+**What this does:** Aggregates all individual CSV files into comprehensive dataset for evaluation.
 
 ### Step 3: Evaluate Against Ground Truth
 
 ```bash
-# Compare agent decisions to expert-curated ground truth
+# Compare agent decisions (majority vote of 3 agents) to expert-curated ground truth
+# <AGGREGATED_CSV> = Output from Step 2
+# <GROUND_TRUTH_JSON> = Expert-curated correct decisions
+# <OUTPUT_EVALUATION_CSV> = Path for evaluation results
+node bin/evaluate_bulk_from_csv.js \
+  <AGGREGATED_CSV> \
+  <GROUND_TRUTH_JSON> \
+  <OUTPUT_EVALUATION_CSV>
+
+# Example:
 node bin/evaluate_bulk_from_csv.js \
   experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv \
   ground_truth_supplementary/bulk_rna_ground_truth.json \
   experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
 
-# Input: bulk_rna_ALL_EXPERIMENTS_DETAILED.csv from Step 2
-# Output: experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
+# Output: CSV with match/mismatch, error types, accuracy per experiment
 ```
+
+**What this does:** Compares consensus decision (majority of 3 agents) against ground truth for each stage.
 
 ### Step 4: Generate Publication Plots
 
 ```bash
 # Per-dataset performance heatmaps
+# <EVALUATION_CSV> = Output from Step 3
+python3 bin/generate_per_dataset_plots.py <EVALUATION_CSV>
+
+# Example:
 python3 bin/generate_per_dataset_plots.py \
   experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
 
 # Error type distribution analysis
+python3 bin/plot_error_types.py <EVALUATION_CSV> bulk <OUTPUT_PREFIX>
+
+# Example:
 python3 bin/plot_error_types.py \
   experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv \
-  bulk
+  bulk \
+  experiments/bulk_rna_csv_figures/bulk_error_analysis
 
 # Stage-wise accuracy comparison
+python3 bin/plot_stage_wise_accuracy.py <EVALUATION_CSV>
+
+# Example:
 python3 bin/plot_stage_wise_accuracy.py \
   experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
 
-# Input: bulk_evaluation_per_experiment.csv from Step 3
 # Output: Publication-ready figures in experiments/bulk_rna_csv_figures/
+```
+
+---
+
+## Results Generation & Visualization (scRNA-seq)
+
+After running all scRNA-seq experiments, generate evaluation metrics and publication plots:
+
+**scRNA-seq Decision Reference (for evaluation):**
+- **Stage 1:** `auto_proceed` (automated)
+- **Stage 2 (QC Filtering):** `SET_THRESHOLDS` / `USE_DEFAULT_THRESHOLDS` / `INSUFFICIENT_DATA`
+- **Stage 3A (Cell Cycle):** `REMOVE_CELL_CYCLE` / `SKIP_CELL_CYCLE` / `UNCERTAIN`
+- **Stage 3B:** Auto-executes Stage 3A decision
+- **Stage 4 (PCA Selection):** `USE_DEFAULT` / `SELECT_PC_RANGE` / `STOP_AND_REVIEW`
+- **Stage 5 (Clustering):** `ACCEPT_CLUSTERING` / `ADJUST_RESOLUTION` / `FLAG_SUSPICIOUS`
+
+*See `src/config/scrna_stage_prompts.js` for detailed output format specifications.*
+
+### Step 1: Convert JSONL Logs to CSV
+
+```bash
+# Convert all JSONL decision logs to CSV format (scRNA uses JSONL, not JSON)
+# <EXPERIMENT_DIR> = Directory containing all scRNA experiment result folders
+node bin/json_to_csv_scrna.js convert --dir <EXPERIMENT_DIR>
+
+# Example:
+node bin/json_to_csv_scrna.js convert --dir experiments/scrna_results/
+
+# Output: Creates *_metrics.csv for each experiment folder
+```
+
+**What this does:** Extracts scRNA-specific fields from logs:
+- **Stage 2:** QC thresholds (`nFeature_min`, `nFeature_max`, `percent_mt_max`) from each agent
+- **Stage 3A:** Cell cycle decision (`REMOVE_CELL_CYCLE` / `SKIP_CELL_CYCLE`) from each agent
+- **Stage 4:** PC range (`min_pc`, `max_pc`) from each agent
+- **Stage 5:** Clustering decision (`ACCEPT_CLUSTERING`, etc.) from each agent
+
+### Step 2: Aggregate All Experiments
+
+```bash
+# Combine all CSV files into one detailed dataset
+# <EXPERIMENT_DIR> = Directory with scRNA experiment folders containing *_metrics.csv files
+# <OUTPUT_CSV> = Path for combined CSV file
+python bin/aggregate_scrna_experiments.py \
+  <EXPERIMENT_DIR> \
+  <OUTPUT_CSV>
+
+# Example:
+python bin/aggregate_scrna_experiments.py \
+  experiments/scrna_results \
+  experiments/scrna_results/scrna_ALL_EXPERIMENTS_DETAILED.csv
+
+# Output: scrna_ALL_EXPERIMENTS_DETAILED.csv + scrna_ALL_EXPERIMENTS_SUMMARY.csv
+```
+
+**What this does:** Aggregates all individual scRNA CSV files into comprehensive dataset for evaluation.
+
+### Step 3: Evaluate Against Ground Truth
+
+```bash
+# Compare agent decisions (majority vote of 3 agents) to expert-curated ground truth
+# <AGGREGATED_CSV> = Output from Step 2
+# <GROUND_TRUTH_JSON> = Expert-curated correct decisions for scRNA
+# <OUTPUT_EVALUATION_CSV> = Path for evaluation results
+node bin/evaluate_scrna.js \
+  <AGGREGATED_CSV> \
+  <GROUND_TRUTH_JSON> \
+  <OUTPUT_EVALUATION_CSV>
+
+# Example:
+node bin/evaluate_scrna.js \
+  experiments/scrna_results/scrna_ALL_EXPERIMENTS_DETAILED.csv \
+  ground_truth_supplementary/scrna_ground_truth.json \
+  experiments/scrna_per_dataset_figure/scrna_evaluation_per_experiment.csv
+
+# Output: CSV with match/mismatch, error types, accuracy per experiment
+```
+
+**What this does:**
+- Extracts **individual agent decisions** (gpt5_2_decision, claude_decision, gemini_decision) from CSV
+- Calculates **consensus decision** for comparison with ground truth:
+  - **Stage 2 & 4:** AVERAGE of numeric values (thresholds, PC counts)
+  - **Stage 3A & 5:** MAJORITY VOTE (2/3 agents must agree on categorical decisions)
+- Compares final consensus against expert-curated ground truth
+- Outputs per-experiment accuracy, error types, and match/mismatch details
+
+### Step 4: Generate Publication Plots
+
+```bash
+# Per-dataset performance heatmaps
+# <EVALUATION_CSV> = Output from Step 3
+# <OUTPUT_DIR> = Directory for saving plots
+python3 bin/generate_per_dataset_plots_scrna.py \
+  <EVALUATION_CSV> \
+  <OUTPUT_DIR>
+
+# Example:
+python3 bin/generate_per_dataset_plots_scrna.py \
+  experiments/scrna_per_dataset_figure/scrna_evaluation_per_experiment.csv \
+  experiments/scrna_per_dataset_figure/
+
+# Error type distribution analysis
+python bin/plot_error_types.py \
+  <EVALUATION_CSV> \
+  scrna \
+  <OUTPUT_PREFIX>
+
+# Example:
+python bin/plot_error_types.py \
+  experiments/scrna_per_dataset_figure/scrna_evaluation_per_experiment.csv \
+  scrna \
+  experiments/scrna_per_dataset_figure/scrna_error_analysis
+
+# Stage-wise accuracy comparison
+python bin/plot_stage_wise_accuracy.py \
+  <EVALUATION_CSV> \
+  scrna \
+  <OUTPUT_PREFIX>
+
+# Example:
+python bin/plot_stage_wise_accuracy.py \
+  experiments/scrna_per_dataset_figure/scrna_evaluation_per_experiment.csv \
+  scrna \
+  experiments/scrna_per_dataset_figure/scrna_stage_analysis
+
+# Output: Publication-ready figures in experiments/scrna_per_dataset_figure/
 ```
 
 ---
