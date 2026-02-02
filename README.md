@@ -374,7 +374,7 @@ python bin/plot_stage_wise_accuracy.py \
 - **SingleLLM-Multi-Agent GPT-5.2:** ~$0.08 per analysis (3 calls/checkpoint × 4 checkpoints)
 - **SingleLLM-Multi-Agent Gemini:** ~$0.002 per analysis (3 calls/checkpoint × 4 checkpoints)
 
-*API pricing (per 1M tokens): Claude Opus 4.5 (input: $15, output: $75), GPT-5.2 (input: $2.50, output: $10), Gemini Pro Latest (input: $0.075, output: $0.30). Actual costs vary by prompt length.*
+*API pricing (per 1M tokens): Claude Opus 4.5 (input: $5, output: $25), GPT-5.2 (input: $1.75, output: $14), Gemini 3 Pro (input: $1.25, output: $10). Actual costs vary by prompt length.*
 
 ---
 
