@@ -11,8 +11,8 @@ import fs from 'fs';
 const execAsync = promisify(exec);
 
 // Script paths from environment or defaults
-const SCRIPTS_PATH = process.env.SCRIPTS_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/scripts';
-const CUSTOM_SCRIPTS_PATH = process.env.CUSTOM_SCRIPTS_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/scripts';
+const SCRIPTS_PATH = process.env.SCRIPTS_PATH || './bio_informatics/scripts';
+const CUSTOM_SCRIPTS_PATH = process.env.CUSTOM_SCRIPTS_PATH || './bio_informatics/scripts';
 
 /**
  * Execute a script and return the result

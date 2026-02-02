@@ -16,7 +16,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const SCRIPTS_PATH = process.env.SCRIPTS_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/scripts';
+const SCRIPTS_PATH = process.env.SCRIPTS_PATH || './bio_informatics/scripts';
 
 export function generateStage5Script(stage4Output, pcSelection, config, outputPath) {
   console.log('[scRNA Stage 5] Generating clustering script...');

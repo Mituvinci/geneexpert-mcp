@@ -24,7 +24,7 @@ import path from 'path';
  * @returns {Object} - { scriptPath, scriptContent }
  */
 export function generateStage3Script(dataInfo, config, outputPath, stage2Result = {}) {
-  const scriptsPath = process.env.SCRIPTS_PATH || '/users/ha00014/bin';
+  const scriptsPath = process.env.SCRIPTS_PATH || './bio_informatics/scripts';
   const condaEnv = process.env.CONDA_ENV || 'rnaseq';
 
   // Determine organism annotation file

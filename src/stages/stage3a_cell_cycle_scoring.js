@@ -30,7 +30,7 @@ import path from 'path';
  * @returns {Object} - { scriptPath, scriptContent }
  */
 export function generateStage3aScript(dataInfo, config, outputPath) {
-  const scriptsPath = process.env.SCRIPTS_PATH || '/users/ha00014/bin';
+  const scriptsPath = process.env.SCRIPTS_PATH || './bio_informatics/scripts';
   const condaEnv = process.env.CONDA_ENV || 'singlecell';
 
   // Paths

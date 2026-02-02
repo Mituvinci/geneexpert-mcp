@@ -13,9 +13,9 @@ import { extractStructuredRecommendations } from '../coordinator/consensus.js';
 
 dotenv.config();
 
-const SCRIPTS_PATH = process.env.SCRIPTS_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/scripts';
+const SCRIPTS_PATH = process.env.SCRIPTS_PATH || './bio_informatics/scripts';
 const CONDA_ENV = process.env.CONDA_ENV || 'pytorch';
-const INDEX_PATH = process.env.INDEX_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/reference_data/index';
+const INDEX_PATH = process.env.INDEX_PATH || './bio_informatics/reference_data/index';
 
 /**
  * Actual script filenames (many don't have .sh extension!)

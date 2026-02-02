@@ -17,7 +17,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const SCRIPTS_PATH = process.env.SCRIPTS_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/scripts';
+const SCRIPTS_PATH = process.env.SCRIPTS_PATH || './bio_informatics/scripts';
 
 export function generateStage3BScript(stage3AOutput, agentDecision, config, outputPath) {
   console.log('[scRNA Stage 3B] Generating cell cycle regression/skip script...');

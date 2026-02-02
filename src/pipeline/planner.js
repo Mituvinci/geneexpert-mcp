@@ -8,7 +8,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Get scripts path from environment or use default
-const SCRIPTS_PATH = process.env.SCRIPTS_PATH || '/users/ha00014/Halimas_projects/multi_llm_mcp/bio_informatics/scripts';
+const SCRIPTS_PATH = process.env.SCRIPTS_PATH || './bio_informatics/scripts';
 
 /**
  * Plan pipeline steps based on detected data
