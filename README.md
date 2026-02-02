@@ -368,12 +368,11 @@ python bin/plot_stage_wise_accuracy.py \
 | **Inter-Agent Agreement** | >0.7 | Cohen's κ |
 
 **Per-analysis cost (varies by system):**
-- **Multi-Agent (3 models):** ~$0.08-0.10 per analysis
+- **PolyLLM-Multi-Agent (3 models):** ~$0.08-0.10 per analysis
   - Cost = SUM(GPT-5.2 + Claude Opus 4.5 + Gemini 2.0 Flash)
-  - Claude is most expensive (~$0.015/checkpoint), Gemini is cheapest (~$0.0002/checkpoint)
-- **Single-Agent Claude:** ~$0.18 per analysis (3 calls/checkpoint × 4 checkpoints)
-- **Single-Agent GPT-5.2:** ~$0.08 per analysis (3 calls/checkpoint × 4 checkpoints)
-- **Single-Agent Gemini:** ~$0.002 per analysis (3 calls/checkpoint × 4 checkpoints)
+- **SingleLLM-Multi-Agent Claude:** ~$0.18 per analysis (3 calls/checkpoint × 4 checkpoints)
+- **SingleLLM-Multi-Agent GPT-5.2:** ~$0.08 per analysis (3 calls/checkpoint × 4 checkpoints)
+- **SingleLLM-Multi-Agent Gemini:** ~$0.002 per analysis (3 calls/checkpoint × 4 checkpoints)
 
 *API pricing (per 1M tokens): Claude Opus 4.5 (input: $15, output: $75), GPT-5.2 (input: $2.50, output: $10), Gemini 2.0 Flash (input: $0.075, output: $0.30). Actual costs vary by prompt length.*
 
