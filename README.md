@@ -79,8 +79,6 @@ node bin/evaluate_bulk.js
 # scRNA-seq evaluation
 node bin/evaluate_scrna.js
 
-# Statistical significance testing
-python bin/run_ttest.py
 ```
 
 ---
@@ -161,11 +159,11 @@ After running all bulk RNA-seq experiments, generate evaluation metrics and publ
 
 ```bash
 # Convert all JSON decision logs to CSV format
-# <EXPERIMENT_DIR> = Directory containing all experiment result folders (e.g., experiments/results/)
+# <EXPERIMENT_DIR> = Directory containing all experiment result folders (e.g., experiments/bulk_rna_results/)
 node bin/json_to_csv_bulk_rna.js convert --dir <EXPERIMENT_DIR>
 
 # Example:
-node bin/json_to_csv_bulk_rna.js convert --dir experiments/results/
+node bin/json_to_csv_bulk_rna.js convert --dir experiments/bulk_rna_results/
 
 # Output: Creates *_metrics.csv for each experiment folder
 ```
@@ -184,8 +182,8 @@ python bin/aggregate_experiments_bulk_rna.py \
 
 # Example:
 python bin/aggregate_experiments_bulk_rna.py \
-  experiments/results \
-  experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv
+  experiments/bulk_rna_results\
+  experiments/bulk_rna_results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv
 
 # Output: bulk_rna_ALL_EXPERIMENTS_DETAILED.csv + bulk_rna_ALL_EXPERIMENTS_SUMMARY.csv
 ```
@@ -206,7 +204,7 @@ node bin/evaluate_bulk_from_csv.js \
 
 # Example:
 node bin/evaluate_bulk_from_csv.js \
-  experiments/results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv \
+  experiments/bulk_rna_results/bulk_rna_ALL_EXPERIMENTS_DETAILED.csv \
   ground_truth_supplementary/bulk_rna_ground_truth.json \
   experiments/bulk_rna_csv_figures/bulk_evaluation_per_experiment.csv
 
@@ -402,7 +400,7 @@ python bin/plot_stage_wise_accuracy.py \
 │   └── reference_data/                  # Genome annotations
 │
 └── experiments/                         # Results storage
-    ├── results/                         # Bulk RNA-seq outputs
+    ├── bulk_rna_results/                         # Bulk RNA-seq outputs
     └── scrna_results/                   # scRNA-seq outputs
 ```
 
