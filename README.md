@@ -110,7 +110,7 @@ Reference genome indices and annotations (~11 GB total) are hosted separately du
 
 [Google Drive: Reference Data (mm10 + hg38)](https://drive.google.com/drive/folders/1d_BKGRNMKUU1SL250oU3u572-prlZEXS?usp=sharing)
 
-Place the downloaded contents into `bio_informatics/reference_data/`. The pipeline uses only the following files:
+Place the downloaded `reference_data` folder inside `bio_informatics/`. The pipeline uses only the following files:
 
 - `index/mm10.*` — Mouse genome index, Stage 2 alignment (~5 GB)
 - `index/hg38.*` — Human genome index, Stage 2 alignment (~6 GB)
