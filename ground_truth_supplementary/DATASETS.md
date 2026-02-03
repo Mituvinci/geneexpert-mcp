@@ -8,6 +8,60 @@ For a concise overview, see the main [README.md](../README.md).
 
 ---
 
+### Data Preparation (Bulk RNA-seq)
+
+Each dataset in `data/download_new_bulk_RNA_Data/` has its own download and rename scripts. Run them in order from anywhere in the repo:
+
+```bash
+# Step 1: Download FASTQs from NCBI SRA
+bash data/download_new_bulk_RNA_Data/1_GSE52778_pe_clean/1_GSE52778_download.sh
+
+# Step 2: Rename to pipeline format (label-only, no GSM ID)
+bash data/download_new_bulk_RNA_Data/1_GSE52778_pe_clean/1_GSE52778_rename.sh
+```
+
+After rename, the dataset folder contains:
+
+```
+1_GSE52778_pe_clean/
+├── gsm_map_GSE52778.tsv
+├── 1_GSE52778_download.sh
+├── 1_GSE52778_rename.sh
+│
+├── N61311_untreated_R1_001.fastq.gz      # Control (4 samples x 2 reads = 8 files)
+├── N61311_untreated_R2_001.fastq.gz
+├── N052611_untreated_R1_001.fastq.gz
+├── N052611_untreated_R2_001.fastq.gz
+├── N080611_untreated_R1_001.fastq.gz
+├── N080611_untreated_R2_001.fastq.gz
+├── N061011_untreated_R1_001.fastq.gz
+├── N061011_untreated_R2_001.fastq.gz
+│
+├── N61311_Dex_R1_001.fastq.gz            # Treatment (4 samples x 2 reads = 8 files)
+├── N61311_Dex_R2_001.fastq.gz
+├── N052611_Dex_R1_001.fastq.gz
+├── N052611_Dex_R2_001.fastq.gz
+├── N080611_Dex_R1_001.fastq.gz
+├── N080611_Dex_R2_001.fastq.gz
+├── N061011_Dex_R1_001.fastq.gz
+└── N061011_Dex_R2_001.fastq.gz
+```
+
+The pipeline identifies groups by keyword: `--control-keyword "untreated"` matches control files, `--treatment-keyword "Dex"` matches treatment files. All datasets follow the same two-step download-then-rename pattern:
+
+| Dataset folder | Type | Organism | Control keyword | Treatment keyword |
+|----------------|------|----------|-----------------|-------------------|
+| `1_GSE52778_pe_clean` | Paired-end | human | `untreated` | `Dex` |
+| `2_GSE114845_se_clean` | Single-end | mouse | `Control` | `SleepDeprived` |
+| `3_GSE113754_pe_clean` | Paired-end | mouse | `Control` | `SleepDeprived` |
+| `4_GSE141496_batch_effect` | Paired-end | human | `Control` | `TAB182_KD` |
+| `5_GSE47774_batch_effect` | Paired-end | human | `AC` | `BC` |
+| `6_GSE193658_Lab_data` | Paired-end | human | `MONO` | `TSW` |
+| `E.coli_GSE48151` | Single-end | — | — | — |
+
+Note: `E.coli_GSE48151` is the contamination source used to generate the `7_GSE114845_CONTAM70` dataset — it is not run as a standalone analysis.
+
+
 ## Evaluation Datasets
 
 The system is evaluated on **14 RNA-seq datasets** (7 bulk + 7 single-cell) covering clean signals, batch effects, contamination, and cell cycle challenges.
