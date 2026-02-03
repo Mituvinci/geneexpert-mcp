@@ -384,7 +384,7 @@ python bin/plot_stage_wise_accuracy.py \
 ├── bin/                                 # CLI tools & experiment scripts
 │   ├── geneexpert.js                    # Bulk RNA-seq entry point
 │   ├── scrna_geneexpert.js              # scRNA-seq entry point
-│   ├── evaluate_bulk.js                 # Bulk evaluation
+│   ├──evaluate_bulk_from_csv.js                 # Bulk evaluation
 │   ├── evaluate_scrna.js                # scRNA evaluation
 │   └── [50+ experiment runner scripts]
 │

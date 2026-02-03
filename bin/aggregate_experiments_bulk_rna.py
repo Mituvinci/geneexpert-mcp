@@ -192,7 +192,7 @@ def main():
     summary_df = pd.DataFrame(summary_data)
 
     # Save summary CSV
-    filename2 = sc_or_bulk + "_ALL_EXPERIMENTS_SUMMARY.csv"
+    filename2 = "bulk_rna" + "_ALL_EXPERIMENTS_SUMMARY.csv"
     summary_output = os.path.join(OUTPUT_DIR, filename2 )
     summary_df.to_csv(summary_output, index=False)
     print(f"✓ Saved summary for PI: {summary_output}")
@@ -260,7 +260,7 @@ def main():
 
     print("=" * 70)
     print("FILES GENERATED:")
-    print(f"  1. {detailed_output}")
+    print(f"  1. {OUTPUT_FILE}")
     print(f"     → Full data with all agent decisions, reasoning, costs")
     print(f"  2. {summary_output}")
     print(f"     → High-level summary for PI presentation")
