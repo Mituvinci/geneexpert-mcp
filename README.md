@@ -52,11 +52,13 @@ conda install -c bioconda seqkit
 ### Run Analysis
 
 **Bulk RNA-seq** (`bin/geneexpert.js`):
+*your dataset folder should have fatsq.gz files e.g. N61311_untreated_R1_001.fastq.gz ..etc*
+*Check  [`ground_truth_supplementary/DATASETS.md`] how to download with the provided download scripts of each bulk RNA dataset and rename them. and scRNA dataset can be directly download from the provided links*
 
 ```bash
 # --- Parallel (default): 3 agents vote independently ---
-node bin/geneexpert.js analyze data/your_dataset \                #your dataset folder should have either fatsq files e.g. N61311_untreated_R1_001.fastq.gz ..etc
-  --staged --organism mouse \                                     #Check  [`ground_truth_supplementary/DATASETS.md`] how to download with the provided download script of each bulk RNA dataset and rename them.
+node bin/geneexpert.js analyze data/your_dataset \                
+  --staged --organism mouse \                                     
   --control-keyword "cont" --treatment-keyword "ips" \
   --output results/your_output
 
