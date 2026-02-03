@@ -11,11 +11,43 @@ Staged multi-agent pipeline with GPT-5.2, Claude Sonnet 4.5, and Gemini 2.0 Flas
 ### Installation
 
 ```bash
-# Requirements: Node v18.20.8, Python 3.10.19, R 4.3.3, Seurat v5.0.0
+git clone <repo_url>
+cd geneexpert
 npm install
 cp .env.example .env
 nano .env  # Add OpenAI, Anthropic, Google API keys
 ```
+
+**Bioinformatics dependencies (install via conda):**
+
+```bash
+# Core tools
+conda install -c bioconda -c conda-forge \
+  fastqc subread samtools sra-tools poppler
+
+# R packages — bulk RNA-seq
+Rscript -e 'if(!require("BiocManager",quietly=TRUE)) install.packages("BiocManager",repos="https://cloud.r-project.org")'
+Rscript -e 'BiocManager::install(c("Rsubread","edgeR","Rsamtools"))'
+Rscript -e 'install.packages(c("ggplot2","openxlsx"),repos="https://cloud.r-project.org")'
+
+# R packages — scRNA-seq
+Rscript -e 'BiocManager::install("Seurat")'
+
+# Optional: seqkit — only needed to generate E. coli contamination datasets
+conda install -c bioconda seqkit
+```
+
+| Tool | Stage | Purpose |
+|------|-------|---------|
+| `fastqc` | Bulk 1 | Read quality control |
+| `subread` | Bulk 2 | Genome alignment (`subread-align`) |
+| `samtools` | Bulk 2 | BAM file processing |
+| `Rsubread` | Bulk 3 | Gene counting (featureCounts) |
+| `edgeR` | Bulk 4 | Differential expression |
+| `sra-tools` | Download | `fasterq-dump` from NCBI SRA |
+| `Seurat` | scRNA 1-5 | Single-cell analysis |
+| `poppler` | Bulk 4 | PDF plot to image conversion |
+| `seqkit` | Optional | E. coli contamination simulation (`7_GSE114845_CONTAM70`) |
 
 ### Run Analysis
 
@@ -76,6 +108,59 @@ node bin/scrna_geneexpert.js analyze data/scRNA_data/your_dataset \
   --organism human \
   --force-automation
 ```
+
+### Data Preparation (Bulk RNA-seq)
+
+Each dataset in `data/download_new_bulk_RNA_Data/` has its own download and rename scripts. Run them in order from anywhere in the repo:
+
+```bash
+# Step 1: Download FASTQs from NCBI SRA
+bash data/download_new_bulk_RNA_Data/1_GSE52778_pe_clean/1_GSE52778_download.sh
+
+# Step 2: Rename to pipeline format (label-only, no GSM ID)
+bash data/download_new_bulk_RNA_Data/1_GSE52778_pe_clean/1_GSE52778_rename.sh
+```
+
+After rename, the dataset folder contains:
+
+```
+1_GSE52778_pe_clean/
+├── gsm_map_GSE52778.tsv
+├── 1_GSE52778_download.sh
+├── 1_GSE52778_rename.sh
+│
+├── N61311_untreated_R1_001.fastq.gz      # Control (4 samples x 2 reads = 8 files)
+├── N61311_untreated_R2_001.fastq.gz
+├── N052611_untreated_R1_001.fastq.gz
+├── N052611_untreated_R2_001.fastq.gz
+├── N080611_untreated_R1_001.fastq.gz
+├── N080611_untreated_R2_001.fastq.gz
+├── N061011_untreated_R1_001.fastq.gz
+├── N061011_untreated_R2_001.fastq.gz
+│
+├── N61311_Dex_R1_001.fastq.gz            # Treatment (4 samples x 2 reads = 8 files)
+├── N61311_Dex_R2_001.fastq.gz
+├── N052611_Dex_R1_001.fastq.gz
+├── N052611_Dex_R2_001.fastq.gz
+├── N080611_Dex_R1_001.fastq.gz
+├── N080611_Dex_R2_001.fastq.gz
+├── N061011_Dex_R1_001.fastq.gz
+└── N061011_Dex_R2_001.fastq.gz
+```
+
+The pipeline identifies groups by keyword: `--control-keyword "untreated"` matches control files, `--treatment-keyword "Dex"` matches treatment files. All datasets follow the same two-step download-then-rename pattern:
+
+| Dataset folder | Type | Organism | Control keyword | Treatment keyword |
+|----------------|------|----------|-----------------|-------------------|
+| `1_GSE52778_pe_clean` | Paired-end | human | `untreated` | `Dex` |
+| `2_GSE114845_se_clean` | Single-end | mouse | `Control` | `SleepDeprived` |
+| `3_GSE113754_pe_clean` | Paired-end | mouse | `Control` | `SleepDeprived` |
+| `4_GSE141496_batch_effect` | Paired-end | human | `Control` | `TAB182_KD` |
+| `5_GSE47774_batch_effect` | Paired-end | human | `AC` | `BC` |
+| `6_GSE193658_Lab_data` | Paired-end | human | `MONO` | `TSW` |
+| `E.coli_GSE48151` | Single-end | — | — | — |
+
+Note: `E.coli_GSE48151` is the contamination source used to generate the `7_GSE114845_CONTAM70` dataset — it is not run as a standalone analysis.
 
 ---
 
@@ -154,7 +239,8 @@ Each ground truth file contains:
 
 **Run all 10 systems on one dataset:**
 ```bash
-# Bulk RNA-seq (args: dataset_name organism control_keyword treatment_keyword)
+# Bulk RNA-seq (dataset folder must contain renamed fastq files — see Data Preparation above)
+# Args: dataset_folder_name  organism  control_keyword  treatment_keyword
 bash bin/run_bulk_rna.sh 1_GSE52778_pe_clean human untreated Dex
 
 # scRNA-seq (args: dataset_name organism)
