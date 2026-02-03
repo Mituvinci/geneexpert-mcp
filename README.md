@@ -19,18 +19,62 @@ nano .env  # Add OpenAI, Anthropic, Google API keys
 
 ### Run Analysis
 
-**Bulk RNA-seq:**
+**Bulk RNA-seq** (`bin/geneexpert.js`):
+
 ```bash
+# --- Parallel (default): 3 agents vote independently ---
 node bin/geneexpert.js analyze data/your_dataset \
   --staged --organism mouse \
-  --control-keyword "control" --treatment-keyword "treatment" \
-  --output results/output_folder
+  --control-keyword "cont" --treatment-keyword "ips" \
+  --output results/your_output
+
+# --- Sequential Chain: GPT-5.2 -> Gemini -> Claude, each sees prior responses ---
+node bin/geneexpert.js analyze data/your_dataset \
+  --staged --sequential-chain \
+  --organism mouse \
+  --control-keyword "cont" --treatment-keyword "ips" \
+  --output results/your_output_sequential
+
+# --- Single-LLM: GPT-5.2 called 3x with different roles (also: claude, gemini) ---
+node bin/geneexpert.js analyze data/your_dataset \
+  --staged --single-agent gpt5.2 \
+  --organism mouse \
+  --control-keyword "cont" --treatment-keyword "ips" \
+  --output results/your_output_single_gpt
+
+# --- No-Agent: template-based decisions only, no LLM calls ---
+node bin/geneexpert.js analyze data/your_dataset \
+  --staged --force-automation \
+  --organism mouse \
+  --control-keyword "cont" --treatment-keyword "ips" \
+  --output results/your_output_no_agent
 ```
 
-**Single-cell RNA-seq:**
+**Single-cell RNA-seq** (`bin/scrna_geneexpert.js`):
+
 ```bash
+# --- Parallel (default): 3 agents vote independently ---
 node bin/scrna_geneexpert.js analyze data/scRNA_data/your_dataset \
-  --output results/scRNA_output --organism human
+  --output results/scRNA_output \
+  --organism human
+
+# --- Sequential Chain: GPT-5.2 -> Gemini -> Claude, each sees prior responses ---
+node bin/scrna_geneexpert.js analyze data/scRNA_data/your_dataset \
+  --output results/scRNA_output_sequential \
+  --organism human \
+  --sequential-chain
+
+# --- Single-LLM: GPT-5.2 called 3x with different roles (also: claude, gemini) ---
+node bin/scrna_geneexpert.js analyze data/scRNA_data/your_dataset \
+  --output results/scRNA_output_single_gpt \
+  --organism human \
+  --single-agent gpt5.2
+
+# --- No-Agent: template-based decisions only, no LLM calls ---
+node bin/scrna_geneexpert.js analyze data/scRNA_data/your_dataset \
+  --output results/scRNA_output_no_agent \
+  --organism human \
+  --force-automation
 ```
 
 ---
@@ -60,6 +104,22 @@ We evaluate on **14 RNA-seq datasets** (7 bulk + 7 single-cell):
 
 **Detailed dataset descriptions** with GEO accessions and sample mappings: [`ground_truth_supplementary/DATASETS.md`](ground_truth_supplementary/DATASETS.md)
 
+### Reference Data
+
+Reference genome indices and annotations (~11 GB total) are hosted separately due to size:
+
+[Google Drive: Reference Data (mm10 + hg38)](https://drive.google.com/drive/folders/1d_BKGRNMKUU1SL250oU3u572-prlZEXS?usp=sharing)
+
+Place the downloaded contents into `bio_informatics/reference_data/`. The pipeline uses only the following files:
+
+- `index/mm10.*` — Mouse genome index, Stage 2 alignment (~5 GB)
+- `index/hg38.*` — Human genome index, Stage 2 alignment (~6 GB)
+- `shared/badIDS.txt` — Gene ID filter list, Stage 3 (~353 KB)
+- `shared/mm10_entrzID_GS.txt` — Mouse gene symbol mapping, Stage 3 (~365 KB)
+- `shared/hg38_entrzID_GS.txt` — Human gene symbol mapping, Stage 3 (~1.5 MB)
+
+Note: The GTF files and raw FASTA files in this directory are not used by the pipeline. `featureCounts` uses Rsubread built-in annotations.
+
 ### Ground Truth & Evaluation
 
 **Ground truth decisions** for all datasets are in:
@@ -71,15 +131,6 @@ Each ground truth file contains:
 - Rationale for expert-curated decisions
 - Tissue-specific expectations and thresholds
 
-**Run evaluation:**
-```bash
-# Bulk RNA-seq evaluation
-node bin/evaluate_bulk.js
-
-# scRNA-seq evaluation
-node bin/evaluate_scrna.js
-
-```
 
 ---
 
@@ -101,13 +152,13 @@ node bin/evaluate_scrna.js
 9. Single-LLM (GPT only, 3x with different roles)
 10. Single-LLM (Gemini only, 3x with different roles)
 
-**Run all systems:**
+**Run all 10 systems on one dataset:**
 ```bash
-# Bulk RNA-seq
-bash bin/run_bulk_rna.sh data/your_dataset
+# Bulk RNA-seq (args: dataset_name organism control_keyword treatment_keyword)
+bash bin/run_bulk_rna.sh 1_GSE52778_pe_clean human untreated Dex
 
-# scRNA-seq
-bash bin/run_sc_rna.sh data/scRNA_data/your_dataset
+# scRNA-seq (args: dataset_name organism)
+bash bin/run_sc_rna.sh pbmc_healthy_human human
 ```
 
 **Total experiments:** 10 systems × 14 datasets = **140 analyses**
